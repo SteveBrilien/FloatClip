@@ -1,0 +1,42 @@
+{
+  "floatclip_debug": {
+    "type": "build",
+    "project": "floatclip",
+    "cwd": ".",
+    "command": ["scripts/build-orangepi.sh", ":app:assembleDebug"],
+    "artifact": "app/build/outputs/apk/debug/app-debug.apk",
+    "artifact_mime": "application/vnd.android.package-archive",
+    "artifact_required": true,
+    "timeout_seconds": 7200,
+    "memory_max": "8G",
+    "required_capabilities": ["jdk17"],
+    "environment": {
+      "JAVA_HOME": "/home/orangepi/.local/opt/openjdk-17",
+      "ANDROID_HOME": "/home/codex/workspace/.toolchains/android-sdk",
+      "ANDROID_SDK_ROOT": "/home/codex/workspace/.toolchains/android-sdk",
+      "AAPT2_OVERRIDE": "/home/codex/workspace/.toolchains/android-sdk/build-tools/35.0.1/aapt2",
+      "GRADLE_USER_HOME": "/home/codex/workspace/.toolchains/gradle-home",
+      "JAVA_TOOL_OPTIONS": "-Djavax.net.ssl.trustStore=/home/codex/workspace/.toolchains/java-cacerts -Djavax.net.ssl.trustStorePassword=changeit"
+    }
+  },
+  "floatclip_lint": {
+    "type": "build",
+    "project": "floatclip",
+    "cwd": ".",
+    "command": ["scripts/build-orangepi.sh", ":app:lintDebug"],
+    "artifact": "app/build/reports/lint-results-debug.html",
+    "artifact_mime": "text/html",
+    "artifact_required": false,
+    "timeout_seconds": 3600,
+    "memory_max": "6G",
+    "required_capabilities": ["jdk17"],
+    "environment": {
+      "JAVA_HOME": "/home/orangepi/.local/opt/openjdk-17",
+      "ANDROID_HOME": "/home/codex/workspace/.toolchains/android-sdk",
+      "ANDROID_SDK_ROOT": "/home/codex/workspace/.toolchains/android-sdk",
+      "AAPT2_OVERRIDE": "/home/codex/workspace/.toolchains/android-sdk/build-tools/35.0.1/aapt2",
+      "GRADLE_USER_HOME": "/home/codex/workspace/.toolchains/gradle-home",
+      "JAVA_TOOL_OPTIONS": "-Djavax.net.ssl.trustStore=/home/codex/workspace/.toolchains/java-cacerts -Djavax.net.ssl.trustStorePassword=changeit"
+    }
+  }
+}

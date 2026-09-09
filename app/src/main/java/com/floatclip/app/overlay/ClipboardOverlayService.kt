@@ -6,6 +6,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -17,8 +18,10 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -49,6 +52,7 @@ class ClipboardOverlayService : Service() {
 
     private var bubbleView: View? = null
     private var panelView: View? = null
+    private var panelSurfaceView: View? = null
     private var listContainer: LinearLayout? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
     private var panelParams: WindowManager.LayoutParams? = null
@@ -81,6 +85,7 @@ class ClipboardOverlayService : Service() {
         panelView?.let { runCatching { windowManager.removeView(it) } }
         bubbleView = null
         panelView = null
+        panelSurfaceView = null
         listContainer = null
         showBubble()
         if (reopenPanel) expandPanel()
@@ -92,17 +97,19 @@ class ClipboardOverlayService : Service() {
         panelView?.let { runCatching { windowManager.removeView(it) } }
         bubbleView = null
         panelView = null
+        panelSurfaceView = null
         super.onDestroy()
     }
 
     private fun showBubble() {
         panelView?.let { runCatching { windowManager.removeView(it) } }
         panelView = null
+        panelSurfaceView = null
         listContainer = null
 
-        val palette = themeProvider.palette()
         val screen = screenSize()
-        val size = dp(48)
+        val sizeDp = overlayPreferences.bubbleSizeDp()
+        val size = dp(sizeDp)
         val previous = bubbleParams
         val initialX = if (overlayPreferences.bubbleOnRight()) max(0, screen.x - size) else 0
         val params = WindowManager.LayoutParams(
@@ -119,13 +126,12 @@ class ClipboardOverlayService : Service() {
         }
         bubbleParams = params
 
-        val bubble = TextView(this).apply {
-            text = "▤"
-            textSize = 19f
-            gravity = Gravity.CENTER
-            setTextColor(palette.primaryText)
-            background = roundedBackground(palette.bubbleBackground, palette.bubbleCornerRadiusDp)
-            elevation = dp(palette.elevationDp.toInt()).toFloat()
+        val bubble = ImageView(this).apply {
+            setImageResource(R.drawable.ic_copy_paste)
+            imageTintList = ColorStateList.valueOf(Color.rgb(20, 20, 22))
+            setPadding(dp(13), dp(13), dp(13), dp(13))
+            background = circleBackground(Color.argb(224, 255, 255, 255))
+            elevation = dp(10).toFloat()
             contentDescription = "打开 FloatClip"
             setOnClickListener { expandPanel() }
         }
@@ -189,20 +195,19 @@ class ClipboardOverlayService : Service() {
 
         val palette = themeProvider.palette()
         val screen = screenSize()
-        val panelWidth = min(dp(352), screen.x - dp(20))
-        val panelX = if (oldBubbleParams.x < screen.x / 2) {
-            dp(10)
-        } else {
-            max(dp(10), screen.x - panelWidth - dp(10))
-        }
-        val panelY = oldBubbleParams.y.coerceIn(dp(24), max(dp(24), screen.y - dp(430)))
+        val panelWidth = min(dp(overlayPreferences.panelWidthDp()), screen.x - dp(20))
+        val panelHeight = min(dp(overlayPreferences.panelHeightDp()), screen.y - dp(48))
+        val defaultX = if (oldBubbleParams.x < screen.x / 2) dp(10) else max(dp(10), screen.x - panelWidth - dp(10))
+        val defaultY = oldBubbleParams.y.coerceIn(dp(24), max(dp(24), screen.y - panelHeight - dp(24)))
+        val panelX = overlayPreferences.panelX(defaultX).coerceIn(dp(8), max(dp(8), screen.x - panelWidth - dp(8)))
+        val panelY = overlayPreferences.panelY(defaultY).coerceIn(dp(16), max(dp(16), screen.y - panelHeight - dp(16)))
+
         val params = if (panelPinnedMode) {
             WindowManager.LayoutParams(
                 panelWidth,
-                WindowManager.LayoutParams.WRAP_CONTENT,
+                panelHeight,
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT,
             ).apply {
                 gravity = Gravity.START or Gravity.TOP
@@ -224,76 +229,95 @@ class ClipboardOverlayService : Service() {
         }
         panelParams = params
 
+        val panelAlpha = (255f * overlayPreferences.panelAlphaPercent() / 100f).toInt().coerceIn(0, 255)
         val panel = FrameLayout(this).apply {
             isFocusableInTouchMode = true
             isClickable = true
-            background = roundedBackground(palette.panelBackground, palette.panelCornerRadiusDp)
-            elevation = dp(palette.elevationDp.toInt()).toFloat()
-            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = roundedBackground(withAlpha(palette.panelBackground, panelAlpha), palette.panelCornerRadiusDp, true)
+            elevation = dp(14).toFloat()
+            setPadding(dp(8), dp(8), dp(8), dp(8))
             setOnClickListener { }
         }
+        panelSurfaceView = panel
 
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         panel.addView(
             content,
-            FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT),
+            FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT),
         )
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(2), 0, dp(2), 0)
         }
+        header.addView(
+            passiveIcon(R.drawable.ic_drag, "拖动面板"),
+            LinearLayout.LayoutParams(dp(34), dp(40)),
+        )
         val title = TextView(this).apply {
             text = "剪贴板"
             textSize = 17f
             setTextColor(palette.primaryText)
-            setPadding(dp(4), 0, 0, 0)
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
-        header.addView(title, LinearLayout.LayoutParams(0, dp(40), 1f))
+        header.addView(title, LinearLayout.LayoutParams(0, dp(42), 1f))
 
-        val fixedToggle = iconTextButton(if (panelPinnedMode) "● 固定" else "○ 固定") {
-            panelPinnedMode = !panelPinnedMode
-            collapseAndReopenPanel()
-        }
-        header.addView(fixedToggle, LinearLayout.LayoutParams(dp(72), dp(36)))
-
-        val close = iconTextButton("⌄") { collapsePanel() }.apply {
-            textSize = 20f
-            contentDescription = "收回"
-        }
-        header.addView(close, LinearLayout.LayoutParams(dp(38), dp(36)))
+        header.addView(
+            iconButton(
+                R.drawable.ic_pin,
+                if (panelPinnedMode) "退出固定模式" else "固定模式",
+                if (panelPinnedMode) Color.rgb(55, 100, 245) else palette.primaryText,
+            ) {
+                panelPinnedMode = !panelPinnedMode
+                collapseAndReopenPanel()
+            },
+            LinearLayout.LayoutParams(dp(40), dp(40)),
+        )
+        header.addView(
+            iconButton(R.drawable.ic_chevron_down, "收回", palette.primaryText) { collapsePanel() },
+            LinearLayout.LayoutParams(dp(40), dp(40)),
+        )
         content.addView(header)
+
+        installPanelDrag(header, panel, params, panelWidth, panelHeight)
 
         val categoryHint = TextView(this).apply {
             text = if (PasteAccessibilityService.isConnected()) {
-                "打开即同步当前剪贴板 · 点击条目直接粘贴"
+                "自动同步 · 点击即粘贴 · 拖住顶部移动"
             } else {
-                "打开即同步当前剪贴板 · 点击条目复制"
+                "自动同步 · 点击即复制 · 拖住顶部移动"
             }
             textSize = 11.5f
             setTextColor(palette.secondaryText)
-            setPadding(dp(4), 0, dp(4), dp(7))
+            setPadding(dp(6), 0, dp(6), dp(6))
         }
         content.addView(categoryHint)
 
-        val scroll = ScrollView(this)
-        listContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        listContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(1), 0, dp(4))
+        }
         scroll.addView(
             listContainer,
-            FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT),
+            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
         )
-        content.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(320)))
+        content.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+
         val root: View = if (panelPinnedMode) {
             panel
         } else {
             FrameLayout(this).apply {
-                setBackgroundColor(Color.TRANSPARENT)
+                setBackgroundColor(Color.argb(10, 0, 0, 0))
                 isClickable = true
                 setOnClickListener { collapsePanel() }
                 addView(
                     panel,
-                    FrameLayout.LayoutParams(panelWidth, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
+                    FrameLayout.LayoutParams(panelWidth, panelHeight).apply {
                         leftMargin = panelX
                         topMargin = panelY
                     },
@@ -301,11 +325,78 @@ class ClipboardOverlayService : Service() {
             }
         }
 
-
         panelView = root
         windowManager.addView(root, params)
         renderEntries()
         handler.postDelayed({ captureCurrentClipboardWithTemporaryFocus(showFeedback = false) }, 80L)
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun installPanelDrag(
+        dragTarget: View,
+        panel: View,
+        windowParams: WindowManager.LayoutParams,
+        panelWidth: Int,
+        panelHeight: Int,
+    ) {
+        var downX = 0f
+        var downY = 0f
+        var startX = 0
+        var startY = 0
+        var moved = false
+
+        dragTarget.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    downY = event.rawY
+                    if (panelPinnedMode) {
+                        startX = windowParams.x
+                        startY = windowParams.y
+                    } else {
+                        val lp = panel.layoutParams as FrameLayout.LayoutParams
+                        startX = lp.leftMargin
+                        startY = lp.topMargin
+                    }
+                    moved = false
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downX
+                    val dy = event.rawY - downY
+                    if (abs(dx) > dp(3) || abs(dy) > dp(3)) moved = true
+                    val screen = screenSize()
+                    val nextX = (startX + dx.toInt()).coerceIn(dp(8), max(dp(8), screen.x - panelWidth - dp(8)))
+                    val nextY = (startY + dy.toInt()).coerceIn(dp(16), max(dp(16), screen.y - panelHeight - dp(16)))
+                    if (panelPinnedMode) {
+                        windowParams.x = nextX
+                        windowParams.y = nextY
+                        panelView?.let { runCatching { windowManager.updateViewLayout(it, windowParams) } }
+                    } else {
+                        val lp = panel.layoutParams as FrameLayout.LayoutParams
+                        lp.leftMargin = nextX
+                        lp.topMargin = nextY
+                        panel.layoutParams = lp
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val currentX: Int
+                    val currentY: Int
+                    if (panelPinnedMode) {
+                        currentX = windowParams.x
+                        currentY = windowParams.y
+                    } else {
+                        val lp = panel.layoutParams as FrameLayout.LayoutParams
+                        currentX = lp.leftMargin
+                        currentY = lp.topMargin
+                    }
+                    if (moved) overlayPreferences.savePanelPosition(currentX, currentY)
+                    true
+                }
+                else -> false
+            }
+        }
     }
 
     private fun renderEntries() {
@@ -316,9 +407,10 @@ class ClipboardOverlayService : Service() {
         if (items.isEmpty()) {
             container.addView(TextView(this).apply {
                 text = getString(R.string.empty_history_hint)
-                textSize = 15f
-                setTextColor(palette.primaryText)
-                setPadding(dp(10), dp(24), dp(10), dp(24))
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setTextColor(palette.secondaryText)
+                setPadding(dp(10), dp(28), dp(10), dp(28))
             })
             return
         }
@@ -327,56 +419,58 @@ class ClipboardOverlayService : Service() {
 
     private fun createClipRow(entry: ClipEntry): View {
         val palette = themeProvider.palette()
+        val alpha = (255f * overlayPreferences.panelAlphaPercent() / 100f).toInt().coerceIn(0, 255)
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(9), dp(8), dp(5), dp(8))
-            background = roundedBackground(palette.rowBackground, palette.rowCornerRadiusDp)
+            setPadding(dp(9), dp(8), dp(4), dp(8))
+            background = roundedBackground(withAlpha(palette.rowBackground, min(250, alpha + 18)), palette.rowCornerRadiusDp)
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(4), 0, dp(4), 0)
+            setPadding(dp(3), 0, dp(4), 0)
             setOnClickListener { pasteEntry(entry) }
         }
         body.addView(TextView(this).apply {
             text = entry.text
-            maxLines = 2
+            maxLines = 3
             textSize = 14.5f
             setTextColor(palette.primaryText)
         })
-        val category = TextView(this).apply {
+        body.addView(TextView(this).apply {
             text = entry.category
-            textSize = 12f
+            textSize = 11.5f
             setTextColor(palette.secondaryText)
             setPadding(0, dp(4), 0, 0)
             setOnClickListener { cycleCategory(entry) }
-        }
-        body.addView(category)
+        })
         row.addView(body, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
         row.addView(
-            iconTextButton(if (entry.pinned) "★" else "☆") {
+            iconButton(
+                R.drawable.ic_pin,
+                if (entry.pinned) "取消置顶" else "置顶",
+                if (entry.pinned) Color.rgb(55, 100, 245) else palette.secondaryText,
+            ) {
                 store.togglePinned(entry.id)
                 renderEntries()
             },
-            LinearLayout.LayoutParams(dp(40), dp(40)),
+            LinearLayout.LayoutParams(dp(38), dp(38)),
         )
-
         row.addView(
-            iconTextButton("×") {
+            iconButton(R.drawable.ic_delete, "删除", palette.secondaryText) {
                 store.delete(entry.id)
                 renderEntries()
-            }.apply { contentDescription = "删除" },
-            LinearLayout.LayoutParams(dp(40), dp(40)),
+            },
+            LinearLayout.LayoutParams(dp(38), dp(38)),
         )
 
-        val lp = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-        )
-        lp.setMargins(0, dp(4), 0, dp(4))
-        row.layoutParams = lp
-        return row
+        return row.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { setMargins(0, dp(3), 0, dp(3)) }
+        }
     }
 
     private fun cycleCategory(entry: ClipEntry) {
@@ -391,7 +485,7 @@ class ClipboardOverlayService : Service() {
         val pasted = AccessibilityPasteBridge.pasteText(entry.text)
         if (!pasted) {
             clipboard.writeText(entry.text)
-            Toast.makeText(this, "已复制；启用一键粘贴服务后可直接粘贴", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "已复制；启用一键粘贴后可直接粘贴", Toast.LENGTH_SHORT).show()
         }
         if (!panelPinnedMode) collapsePanel()
     }
@@ -419,28 +513,32 @@ class ClipboardOverlayService : Service() {
     private fun collapseAndReopenPanel() {
         panelView?.let { runCatching { windowManager.removeView(it) } }
         panelView = null
+        panelSurfaceView = null
         listContainer = null
         showBubble()
         handler.postDelayed({ expandPanel() }, 40L)
     }
 
-    private fun iconTextButton(label: String, action: () -> Unit): TextView {
-        val palette = themeProvider.palette()
-        return TextView(this).apply {
-            text = label
-            textSize = 13f
-            gravity = Gravity.CENTER
-            setTextColor(palette.primaryText)
-            background = roundedBackground(palette.rowBackground, 12f)
-            setPadding(dp(4), 0, dp(4), 0)
-            setOnClickListener { action() }
-        }
+    private fun passiveIcon(drawableRes: Int, description: String): ImageView = ImageView(this).apply {
+        setImageResource(drawableRes)
+        imageTintList = ColorStateList.valueOf(themeProvider.palette().secondaryText)
+        setPadding(dp(8), dp(8), dp(8), dp(8))
+        contentDescription = description
+    }
+
+    private fun iconButton(drawableRes: Int, description: String, tint: Int, action: () -> Unit): ImageView = ImageView(this).apply {
+        setImageResource(drawableRes)
+        imageTintList = ColorStateList.valueOf(tint)
+        setPadding(dp(10), dp(10), dp(10), dp(10))
+        background = roundedBackground(withAlpha(themeProvider.palette().rowBackground, 170), 12f)
+        contentDescription = description
+        setOnClickListener { action() }
     }
 
     private fun collapsePanel() {
-        val panel = panelView
-        if (panel != null) runCatching { windowManager.removeView(panel) }
+        panelView?.let { runCatching { windowManager.removeView(it) } }
         panelView = null
+        panelSurfaceView = null
         listContainer = null
         showBubble()
     }
@@ -451,16 +549,30 @@ class ClipboardOverlayService : Service() {
             NotificationChannel(CHANNEL_ID, "FloatClip 悬浮服务", NotificationManager.IMPORTANCE_LOW),
         )
         return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_edit)
+            .setSmallIcon(R.drawable.ic_copy_paste)
             .setContentTitle("FloatClip 正在运行")
             .setContentText("点击悬浮球打开剪贴板")
             .setOngoing(true)
             .build()
     }
 
-    private fun roundedBackground(color: Int, radiusDp: Float): GradientDrawable = GradientDrawable().apply {
+    private fun withAlpha(color: Int, alpha: Int): Int = Color.argb(
+        alpha.coerceIn(0, 255),
+        Color.red(color),
+        Color.green(color),
+        Color.blue(color),
+    )
+
+    private fun circleBackground(color: Int): GradientDrawable = GradientDrawable().apply {
+        shape = GradientDrawable.OVAL
+        setColor(color)
+        setStroke(dp(1), Color.argb(32, 0, 0, 0))
+    }
+
+    private fun roundedBackground(color: Int, radiusDp: Float, border: Boolean = false): GradientDrawable = GradientDrawable().apply {
         setColor(color)
         cornerRadius = radiusDp * resources.displayMetrics.density
+        if (border) setStroke(dp(1), Color.argb(34, 0, 0, 0))
     }
 
     @Suppress("DEPRECATION")

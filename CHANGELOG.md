@@ -4,6 +4,20 @@ All notable FloatClip development changes are recorded here.
 
 ## 2026-09-09
 
+### 0.3.0 native-style UI / movable panel
+- Raised app version to `0.3.0` (`versionCode=3`).
+- Replaced the launcher artwork with a white-background, flat black copy/paste icon.
+- Replaced the text-glyph floating bubble with a circular semi-transparent white bubble and black vector copy/paste icon.
+- Added a unified monochrome Fluent-like icon set for overlay drag, pin/fixed mode, collapse and delete actions.
+- Added persisted in-app sliders for panel opacity (45–100%), panel width (280–420dp), panel height (300–620dp) and bubble size (42–64dp), plus a reset-to-default action.
+- Added free dragging of the expanded panel from its header with persisted x/y position and screen-bound clamping.
+- Preserved safe normal-mode scrim behavior while fixed mode remains non-modal for repeated paste operations.
+- Flattened the main settings UI by removing card elevation and using subtle outlined surfaces.
+- Updated empty-history messaging for automatic clipboard synchronization.
+- Pre-commit debug: `task-floatclip_debug-ec6d3df36d6f4afdb7d2` — **BUILD SUCCESSFUL** — Artifact `artifact-3eae05648825475c9cc11a1ae321b2a0`.
+- Pre-commit lint: `task-floatclip_lint-47ed77f737ef48b494f3` — **BUILD SUCCESSFUL** — Artifact `artifact-3e654c73500746979df0d232d7fbf161`.
+
+
 ### UI and runtime iteration
 - Reworked the floating overlay toward a denser OriginOS-style interaction model: 48dp bubble, compact panel, tighter action controls and reduced default Android button styling.
 - Reworked `MainActivity` from a developer/test panel into a compact card-style settings/status page.

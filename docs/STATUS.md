@@ -2,6 +2,31 @@
 
 Last updated: 2026-09-09
 
+
+## 0.3.0 native-style UI iteration
+
+This iteration upgrades FloatClip to `versionName=0.3.0` / `versionCode=3` and moves the visual/interaction system closer to an OriginOS-native utility:
+
+- launcher icon changed to a white background with a flat black copy/paste glyph;
+- floating bubble changed to a true circular, semi-transparent white control with a black copy/paste icon;
+- overlay actions use a consistent monochrome Fluent-like vector icon set for drag, pin/fixed mode, collapse and delete;
+- expanded panel opacity is configurable from 45% to 100%;
+- panel width is configurable from 280dp to 420dp;
+- panel height is configurable from 300dp to 620dp;
+- floating bubble size is configurable from 42dp to 64dp;
+- expanded panel can be dragged freely by its header and persists its x/y position;
+- normal mode keeps the full-screen scrim so outside taps collapse without touch-through;
+- fixed mode remains panel-only / non-modal for repeated paste workflows;
+- MainActivity uses flatter outlined cards and exposes the appearance controls directly in-app;
+- automatic system-clipboard synchronization remains active when the panel opens.
+
+Pre-commit validation for this iteration:
+
+- debug job `task-floatclip_debug-ec6d3df36d6f4afdb7d2` — **BUILD SUCCESSFUL** — Artifact `artifact-3eae05648825475c9cc11a1ae321b2a0`;
+- lint job `task-floatclip_lint-47ed77f737ef48b494f3` — **BUILD SUCCESSFUL** — Artifact `artifact-3e654c73500746979df0d232d7fbf161`.
+
+The release artifact must be rebuilt once more from the clean commit created after these changes.
+
 ## Current phase
 
 FloatClip is now in the **manual-device acceptance candidate** stage. The standalone overlay, ROM-locked OriginOS bridge, automatic clipboard synchronization, UI refresh, signature migration, debug build and lint gates are complete. The remaining device work is to install the latest candidate on the vivo again and re-run the final interaction checks for the new scrim/fixed-mode behavior.

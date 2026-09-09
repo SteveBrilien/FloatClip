@@ -17,6 +17,14 @@ for required in "$java_home/bin/java" "$project_root/gradlew" "$android_sdk/plat
   [[ -e "$required" ]] || { echo "[build] missing required component: $required" >&2; exit 69; }
 done
 
+# AGP probes platform-tools package metadata even though assembling the APK does not
+# invoke adb. Reuse the workspace-local arm64 platform-tools package when available
+# so Gradle does not stall trying to resolve Google's x86_64 package remotely.
+portable_platform_tools="$project_root/.toolchains/adb-arm64/root/usr/lib/android-sdk/platform-tools"
+if [[ ! -e "$android_sdk/platform-tools" && -f "$portable_platform_tools/source.properties" ]]; then
+  ln -s "$portable_platform_tools" "$android_sdk/platform-tools"
+fi
+
 printf 'sdk.dir=%s\n' "$android_sdk" > "$project_root/local.properties"
 
 if [[ $# -eq 0 ]]; then

@@ -2,6 +2,14 @@
 
 Last updated: 2026-09-09
 
+## 0.5.0 interaction/security release candidate
+
+0.5.0 is the current source candidate. It incorporates the September 9 device-feedback pass: velocity-sensitive floating-ball physics, continuous panel transitions, in-place fixed-mode switching, border/header dragging, swipe/double-tap/long-press row gestures, functional category filtering/assignment, no overlay focus grab, encrypted local storage, portable encrypted backup, and a user-configured HTTPS sync endpoint placeholder.
+
+Security/storage invariants are documented in `SECURITY.md`; interaction invariants and the device acceptance checklist are documented in `docs/INTERACTION_0.5.0.md`. Public tracked files are scanned for private deployment hostname patterns before release.
+
+Current release gates are being rerun after warning cleanup. Final source commit, clean-build job, Artifact SHA-256, signing certificate and GitHub Release verification are appended here after publication.
+
 ## 0.4.0 GitHub release published
 
 FloatClip 0.4.0 is now published from the public repository `SteveBrilien/FloatClip`. The release path was verified end-to-end after correcting an important signing issue in the first GitHub-hosted asset.
@@ -93,7 +101,7 @@ The user has chosen the normal delivery flow going forward: publish the APK and 
 - OriginOS Ocean
 - Build fingerprint: `vivo/PD2115/PD2115:11/RP1A.200720.012/compiler1018205834:user/release-keys`
 - Previously observed USB serial: `34472930300027K`
-- Previous laboratory wireless address: `192.168.3.44:5555`
+- Previous laboratory wireless address: `<target-device-address>:5555`
 
 ROM-specific adapters are allowed only behind strict fail-closed locks.
 

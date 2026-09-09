@@ -4,6 +4,26 @@ All notable FloatClip development changes are recorded here.
 
 ## 2026-09-09
 
+### 0.5.0 physics, gestures, categories and encrypted vault
+- Raised app version to `0.5.0` (`versionCode=5`).
+- Reworked floating-ball release handling around gesture velocity, inertial continuation, friction and soft edge settling so fast/slow throws no longer feel identical or instantly magnetized.
+- Preserved delayed edge half-hide while removing intentional position teleports between direct drag, inertial motion, settle and idle states.
+- Reworked panel open/close into overlapping bubble/panel transitions to avoid blank frames between windows.
+- Reworked fixed mode so it changes the existing scrim/touch state in-place instead of destroying and recreating the panel; this removes the known fixed-mode flash.
+- Expanded panel dragging to border zones and header empty space instead of a tiny dedicated drag handle.
+- Added progressive clipboard-row gestures: single-tap paste/copy, double-tap pin, left-swipe reveal actions and long-press extended actions.
+- Added a shared category model and bottom category bar, in-app manual category assignment, safe category deletion and basic semantic auto-classification when matching categories exist.
+- Removed the temporary overlay focus-grab clipboard path that could force the active IME/keyboard to collapse.
+- Migrated primary clipboard history from plaintext preferences to an Android Keystore + AES-GCM app-private vault.
+- Added a user-selected Storage Access Framework portable `FloatClip.vault` encrypted backup with six-digit PIN support and reinstall-safe write protection before authenticated restore.
+- Added a user-configured HTTPS sync endpoint field. No sync hostname is built into the application, and 0.5.0 does not automatically upload clipboard content.
+- Reserved ciphertext-only end-to-end sync semantics for future Windows support; the server is not intended to receive plaintext clipboard entries or client decryption keys.
+- Reduced the foreground-service notification to a minimum-importance silent/no-badge channel while preserving Android's required foreground-service notification contract.
+- Added `SECURITY.md` and `docs/INTERACTION_0.5.0.md` covering storage, backup, sync, IPC and motion/gesture invariants.
+- Protected the internal appearance-refresh broadcast with an app-defined signature permission.
+- Public tracked-file domain scan is clean for the private deployment hostname patterns; public documentation uses generic user-configured endpoint language.
+- Final clean-build, signing and GitHub Release evidence is recorded after the release asset is generated.
+
 ### 0.4.0 adaptive theme / native edge interaction
 - Raised app version to `0.4.0` (`versionCode=4`).
 - Added `跟随系统 / 浅色 / 深色` appearance modes for both the app and floating clipboard, with normalized foreground colors so OEM semantic resources cannot produce white-on-white or dark-on-dark content.
@@ -90,7 +110,7 @@ All notable FloatClip development changes are recorded here.
 
 ### Device acceptance status
 - Orange Pi ADB device enumeration is currently empty.
-- Explicit connection to the laboratory address `192.168.3.44:5555` returns `No route to host` because the target vivo is no longer on a network routable from the Orange Pi.
+- Explicit connection to the laboratory address `<target-device-address>:5555` returns `No route to host` because the target vivo is no longer on a network routable from the Orange Pi.
 - Final install/launch/OriginOS runtime acceptance remains pending only on restoration of a routable device path; no build or lint blocker remains.
 
 ## 2026-09-08
@@ -145,7 +165,7 @@ The following steps were not completed in this development pass because the Code
 - run `floatclip_debug`;
 - run `floatclip_lint`;
 - fix any resulting compiler/lint errors;
-- install the APK to `192.168.3.44:5555`;
+- install the APK to `<target-device-address>:5555`;
 - launch `com.floatclip.app/.MainActivity`;
 - verify the ROM lock through UI and `FloatClipOriginOS` logs;
 - validate overlay permission, bubble launch, expand/collapse, edge snap, fixed mode, and multi-paste on the target vivo device.

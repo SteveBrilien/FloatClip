@@ -95,7 +95,7 @@ The current milestone is **not complete** until all of the following are true:
 
 - `floatclip_debug` succeeds;
 - `floatclip_lint` completes without blocking findings;
-- APK installs to `192.168.3.44:5555`;
+- APK installs to `<target-device-address>:5555`;
 - MainActivity launches without crash;
 - ROM lock is observable and behaves fail-closed;
 - overlay bubble starts and remains stable;

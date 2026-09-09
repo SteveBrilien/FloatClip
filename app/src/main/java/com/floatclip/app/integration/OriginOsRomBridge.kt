@@ -1,5 +1,6 @@
 package com.floatclip.app.integration
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Resources
@@ -226,6 +227,7 @@ class LockedOriginOsSystemBridge(context: Context) : OriginOsSystemBridge {
 
     override fun registerClipboardObserver(observer: (CapturedClipboardItem) -> Unit): AutoCloseable? = null
 
+    @SuppressLint("DiscouragedApi")
     @Suppress("DEPRECATION")
     private fun Resources.colorOrNull(name: String): Int? {
         val id = getIdentifier(name, "color", OriginOsRomLock.FLOATING_BALL_PACKAGE)
@@ -233,6 +235,7 @@ class LockedOriginOsSystemBridge(context: Context) : OriginOsSystemBridge {
         return runCatching { getColor(id, null) }.getOrNull()
     }
 
+    @SuppressLint("DiscouragedApi")
     private fun Resources.dimenDpOrNull(name: String): Float? {
         val id = getIdentifier(name, "dimen", OriginOsRomLock.FLOATING_BALL_PACKAGE)
         if (id == 0) return null

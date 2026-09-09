@@ -7,6 +7,8 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.text.InputFilter
+import android.text.InputType
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -14,11 +16,14 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
 import com.floatclip.app.accessibility.PasteAccessibilityService
+import com.floatclip.app.backup.VaultBackupManager
 import com.floatclip.app.clipboard.ClipStore
 import com.floatclip.app.integration.IntegrationRegistry
 import com.floatclip.app.model.ClipEntry
@@ -26,15 +31,19 @@ import com.floatclip.app.overlay.ClipboardOverlayService
 import com.floatclip.app.prefs.CategoryStore
 import com.floatclip.app.prefs.OverlayPreferences
 import com.floatclip.app.prefs.OverlayThemeMode
+import com.floatclip.app.security.VaultSettings
 
 class MainActivity : Activity() {
     private lateinit var categoryStore: CategoryStore
     private lateinit var clipStore: ClipStore
     private lateinit var overlayPreferences: OverlayPreferences
+    private lateinit var vaultSettings: VaultSettings
+    private lateinit var vaultBackupManager: VaultBackupManager
     private lateinit var content: LinearLayout
     private lateinit var colors: AppColors
     private var searchQuery: String = ""
     private var currentPage: Int = PAGE_STATUS
+    private var historyCategory: String = ALL_CATEGORY
 
     private val overlayServiceIntent by lazy(LazyThreadSafetyMode.NONE) {
         Intent(this, ClipboardOverlayService::class.java)
@@ -46,6 +55,8 @@ class MainActivity : Activity() {
         categoryStore = CategoryStore(this)
         clipStore = ClipStore(this)
         overlayPreferences = OverlayPreferences(this)
+        vaultSettings = VaultSettings(this)
+        vaultBackupManager = VaultBackupManager(this)
         currentPage = savedInstanceState?.getInt(STATE_PAGE, PAGE_STATUS) ?: PAGE_STATUS
         render()
     }
@@ -58,6 +69,35 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (::content.isInitialized) render()
+    }
+
+    @Deprecated("Legacy activity result is sufficient for the fixed Android 11 target")
+    @android.annotation.SuppressLint("WrongConstant")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_BACKUP_TREE || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        val flags = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        runCatching { contentResolver.takePersistableUriPermission(uri, flags) }
+        // Selecting a tree never immediately grants overwrite permission. First inspect it so a
+        // surviving FloatClip.vault from a previous install cannot be destroyed by an empty/new vault.
+        vaultSettings.saveBackupTreeUri(uri, writeArmed = false)
+        Thread {
+            val existing = vaultBackupManager.hasBackup(uri)
+            val pin = vaultSettings.pin()
+            val initialized = !existing && pin != null &&
+                vaultBackupManager.initializeBackup(uri, pin, clipStore.exportJson())
+            runOnUiThread {
+                val message = when {
+                    existing -> "检测到已有 FloatClip.vault；已保持只读保护，请使用“从备份恢复”确认后再启用自动写入"
+                    initialized -> "加密备份已初始化，后续会自动更新"
+                    pin == null -> "目录已保存；设置 6 位 PIN 后会初始化加密备份"
+                    else -> "目录已保存，但初始化失败；不会覆盖任何已有备份"
+                }
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                render()
+            }
+        }.start()
     }
 
     private fun render() {
@@ -203,6 +243,8 @@ class MainActivity : Activity() {
         addCard(categoryCard)
 
         sectionTitle("历史")
+        content.addView(historyCategorySelector())
+        spacer(9)
         val searchCard = card()
         val search = EditText(this).apply {
             hint = "搜索内容或分类"
@@ -231,7 +273,10 @@ class MainActivity : Activity() {
         )
         addCard(searchCard)
 
-        val visibleHistory = clipStore.entries().filter(::matchesSearch).take(50)
+        val visibleHistory = clipStore.entries()
+            .filter { historyCategory == ALL_CATEGORY || it.category == historyCategory }
+            .filter(::matchesSearch)
+            .take(80)
         if (visibleHistory.isEmpty()) {
             addCard(
                 card().apply {
@@ -346,6 +391,56 @@ class MainActivity : Activity() {
                 )
             },
         )
+
+        sectionTitle("数据安全与备份")
+        addCard(
+            card().apply {
+                addView(infoRow("本地加密", "剪贴板主数据使用 Android Keystore + AES-GCM 加密保存；升级应用不会丢失。"))
+                addView(divider())
+                addView(settingRow(
+                    "6 位数字 PIN",
+                    if (vaultSettings.hasPin()) "已设置；用于便携备份和未来端到端同步" else "用于可迁移的加密备份；不会明文保存",
+                    if (vaultSettings.hasPin()) "修改" else "设置",
+                    ::showSetPinDialog,
+                ))
+                addView(divider())
+                val backupTreeSelected = vaultSettings.backupTreeUri() != null
+                val backupDetail = when {
+                    !backupTreeSelected -> "选择共享目录后，卸载应用也不会删除备份文件"
+                    vaultSettings.backupWriteArmed() -> "已选择；FloatClip.vault 会在本地数据变化后自动加密更新"
+                    vaultSettings.hasPin() -> "已选择；当前为写保护，请先恢复已有备份或完成安全初始化"
+                    else -> "已选择；设置 6 位 PIN 后再初始化加密备份"
+                }
+                addView(settingRow(
+                    "持久化备份目录",
+                    backupDetail,
+                    if (backupTreeSelected) "更改" else "选择",
+                    ::chooseBackupDirectory,
+                ))
+                addView(divider())
+                addView(settingRow(
+                    "从备份恢复",
+                    "重装后重新选择原目录并输入 PIN 即可恢复",
+                    "恢复",
+                    ::showRestorePinDialog,
+                ))
+            },
+        )
+
+        sectionTitle("端到端同步（预留）")
+        addCard(syncEndpointCard())
+
+        sectionTitle("后台运行")
+        addCard(
+            card().apply {
+                addView(infoRow("常驻通知", "Android 前台服务必须保留系统通知。当前已降为最低重要级、静默、无角标；完全隐藏会降低后台稳定性。"))
+                spacerInside(this, 8)
+                addView(
+                    compactTextAction("打开系统通知设置") { openNotificationSettings() },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38)),
+                )
+            },
+        )
     }
 
     private fun themeSelector(): View {
@@ -399,7 +494,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         header.addView(textView(title, 14.5f, false), LinearLayout.LayoutParams(0, dp(30), 1f))
-        val valueLabel = textView("$currentValue$suffix", 12.5f, false, colors.secondaryText)
+        val valueLabel = textView(getString(R.string.slider_value, currentValue, suffix), 12.5f, false, colors.secondaryText)
         header.addView(valueLabel)
         root.addView(header)
         root.addView(
@@ -411,7 +506,7 @@ class MainActivity : Activity() {
                 setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                     override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                         val value = minValue + progress
-                        valueLabel.text = "$value$suffix"
+                        valueLabel.text = getString(R.string.slider_value, value, suffix)
                         if (fromUser) onChanged(value)
                     }
 
@@ -466,6 +561,228 @@ class MainActivity : Activity() {
         addView(textView(detail, 12f, false, colors.secondaryText).apply { maxLines = 3 })
     }
 
+    private fun historyCategorySelector(): View {
+        val scroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val categories = (listOf(ALL_CATEGORY) + categoryStore.categories()).distinct()
+        if (historyCategory !in categories) historyCategory = ALL_CATEGORY
+        categories.forEachIndexed { index, category ->
+            val selected = category == historyCategory
+            row.addView(
+                TextView(this).apply {
+                    text = category
+                    textSize = 12.5f
+                    gravity = Gravity.CENTER
+                    setPadding(dp(14), 0, dp(14), 0)
+                    setTextColor(if (selected) colors.accentTextOnFill else colors.secondaryText)
+                    background = roundedBackground(if (selected) colors.accent else colors.fieldBackground, 12f, !selected)
+                    setOnClickListener {
+                        historyCategory = category
+                        render()
+                    }
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)).apply {
+                    if (index > 0) marginStart = dp(7)
+                },
+            )
+        }
+        scroll.addView(row, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)))
+        return scroll
+    }
+
+    private fun showCategoryPicker(entry: ClipEntry) {
+        val categories = categoryStore.categories().distinct()
+        val selected = categories.indexOf(entry.category).coerceAtLeast(0)
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle("选择分类")
+            .setSingleChoiceItems(categories.toTypedArray(), selected, null)
+            .setNegativeButton("取消", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.listView.setOnItemClickListener { _, _, position, _ ->
+                clipStore.updateCategory(entry.id, categories[position])
+                dialog.dismiss()
+                render()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun syncEndpointCard(): View {
+        val root = card()
+        root.addView(textView("应用不内置任何同步域名。留空即关闭；未来同步只发送客户端加密后的 vault envelope，服务端不应接触明文。", 12f, false, colors.secondaryText))
+        spacerInside(root, 10)
+        val input = EditText(this).apply {
+            hint = "https://你的同步服务地址"
+            isSingleLine = true
+            textSize = 14f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setText(vaultSettings.syncEndpoint())
+            setSelection(text.length)
+            setTextColor(colors.primaryText)
+            setHintTextColor(colors.secondaryText)
+            background = roundedBackground(colors.fieldBackground, 13f)
+            setPadding(dp(13), 0, dp(13), 0)
+        }
+        root.addView(
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(input, LinearLayout.LayoutParams(0, dp(44), 1f))
+                addView(
+                    actionButton("保存", false) {
+                        val value = input.text?.toString().orEmpty().trim()
+                        if (!isValidSyncEndpoint(value)) {
+                            Toast.makeText(this@MainActivity, "仅允许 HTTPS 地址，且 URL 中不能包含账号密码", Toast.LENGTH_LONG).show()
+                        } else {
+                            vaultSettings.saveSyncEndpoint(value)
+                            Toast.makeText(this@MainActivity, if (value.isBlank()) "同步端点已清空" else "同步端点已保存到本机", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    LinearLayout.LayoutParams(dp(68), dp(44)).apply { marginStart = dp(8) },
+                )
+            },
+        )
+        spacerInside(root, 8)
+        root.addView(textView("当前版本仅完成端点配置和端到端加密格式，不会自动上传剪贴板。", 11.5f, false, colors.secondaryText))
+        return root
+    }
+
+    private fun isValidSyncEndpoint(value: String): Boolean {
+        if (value.isBlank()) return true
+        val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return false
+        return uri.scheme.equals("https", ignoreCase = true) && !uri.host.isNullOrBlank() && uri.userInfo.isNullOrBlank()
+    }
+
+    private fun chooseBackupDirectory() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
+        }
+        startActivityForResult(intent, REQUEST_BACKUP_TREE)
+    }
+
+    private fun securePinField(hintText: String): EditText = EditText(this).apply {
+        hint = hintText
+        isSingleLine = true
+        gravity = Gravity.CENTER
+        textSize = 18f
+        inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        filters = arrayOf(InputFilter.LengthFilter(6))
+        setTextColor(colors.primaryText)
+        setHintTextColor(colors.secondaryText)
+        background = roundedBackground(colors.fieldBackground, 13f)
+        setPadding(dp(13), 0, dp(13), 0)
+    }
+
+    private fun showSetPinDialog() {
+        val first = securePinField("输入 6 位数字 PIN")
+        val second = securePinField("再次输入 PIN")
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(4), dp(22), 0)
+            addView(first, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+            addView(second, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) })
+            addView(textView("PIN 不会明文写入磁盘。忘记 PIN 后，便携备份无法恢复。", 11.5f, false, colors.secondaryText).apply { setPadding(0, dp(10), 0, 0) })
+        }
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle("设置加密 PIN")
+            .setView(box)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("保存", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+                val a = first.text?.toString().orEmpty()
+                val b = second.text?.toString().orEmpty()
+                if (!a.matches(Regex("\\d{6}")) || a != b) {
+                    Toast.makeText(this, "请输入两次相同的 6 位数字 PIN", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                val wasWriteArmed = vaultSettings.backupWriteArmed()
+                vaultSettings.savePin(a)
+                val tree = vaultSettings.backupTreeUri()
+                if (tree != null) {
+                    Thread {
+                        when {
+                            // Normal PIN rotation: the already trusted portable vault is immediately
+                            // re-encrypted so the new PIN is valid even if the app is uninstalled next.
+                            wasWriteArmed -> vaultBackupManager.backup(tree, a, clipStore.exportJson())
+                            // Reinstall/reselect safety: never overwrite a pre-existing untrusted vault.
+                            !vaultBackupManager.hasBackup(tree) ->
+                                vaultBackupManager.initializeBackup(tree, a, clipStore.exportJson())
+                        }
+                    }.start()
+                }
+                dialog.dismiss()
+                render()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showRestorePinDialog() {
+        val tree = vaultSettings.backupTreeUri()
+        if (tree == null) {
+            Toast.makeText(this, "请先选择保存 FloatClip.vault 的目录", Toast.LENGTH_LONG).show()
+            return
+        }
+        val pin = securePinField("输入备份的 6 位 PIN")
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle("恢复加密备份")
+            .setMessage("恢复会合并为当前本地 vault 的新状态。")
+            .setView(pin)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("恢复", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+                val value = pin.text?.toString().orEmpty()
+                if (!value.matches(Regex("\\d{6}"))) {
+                    Toast.makeText(this, "请输入 6 位数字 PIN", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                val button = dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)
+                button.isEnabled = false
+                Thread {
+                    val raw = vaultBackupManager.restore(tree, value)
+                    runOnUiThread {
+                        val ok = raw != null && clipStore.importJson(raw)
+                        if (ok) {
+                            vaultSettings.savePin(value)
+                            // A successful authenticated restore is the explicit point at which this
+                            // surviving backup becomes safe for subsequent automatic updates.
+                            vaultSettings.setBackupWriteArmed(true)
+                            Toast.makeText(this, "剪贴板备份已恢复，自动加密备份已重新启用", Toast.LENGTH_SHORT).show()
+                            dialog.dismiss()
+                            render()
+                        } else {
+                            button.isEnabled = true
+                            Toast.makeText(this, "恢复失败：PIN 不正确或备份已损坏", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }.start()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun openNotificationSettings() {
+        val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            putExtra(Settings.EXTRA_CHANNEL_ID, ClipboardOverlayService.NOTIFICATION_CHANNEL_ID)
+        }
+        startActivity(intent)
+    }
+
     private fun matchesSearch(entry: ClipEntry): Boolean =
         searchQuery.isBlank() || entry.text.contains(searchQuery, ignoreCase = true) ||
             entry.category.contains(searchQuery, ignoreCase = true)
@@ -486,6 +803,10 @@ class MainActivity : Activity() {
                 addView(
                     textView("${entry.category}${if (entry.pinned) " · 已置顶" else ""}", 12f, false, colors.secondaryText),
                     LinearLayout.LayoutParams(0, dp(36), 1f),
+                )
+                addView(
+                    compactTextAction("分类") { showCategoryPicker(entry) },
+                    LinearLayout.LayoutParams(dp(54), dp(34)).apply { marginEnd = dp(6) },
                 )
                 addView(
                     compactTextAction(if (entry.pinned) "取消置顶" else "置顶") {
@@ -681,6 +1002,7 @@ class MainActivity : Activity() {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun applySystemBars() {
         window.statusBarColor = colors.pageBackground
         window.navigationBarColor = colors.navigationBackground
@@ -696,8 +1018,8 @@ class MainActivity : Activity() {
 
     @Suppress("DEPRECATION")
     private fun versionName(): String = runCatching {
-        packageManager.getPackageInfo(packageName, 0).versionName ?: "0.4.0"
-    }.getOrDefault("0.4.0")
+        packageManager.getPackageInfo(packageName, 0).versionName ?: "0.5.0"
+    }.getOrDefault("0.5.0")
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
     private fun dp(value: Float): Int = (value * resources.displayMetrics.density).toInt()
@@ -723,5 +1045,7 @@ class MainActivity : Activity() {
         private const val PAGE_CLIPBOARD = 1
         private const val PAGE_SETTINGS = 2
         private const val STATE_PAGE = "current_page"
+        private const val ALL_CATEGORY = "全部"
+        private const val REQUEST_BACKUP_TREE = 6201
     }
 }

@@ -184,7 +184,7 @@ Before this analysis milestone is considered fully validated on-device:
 1. add Android 11 package visibility for `com.vivo.floatingball` in the FloatClip manifest;
 2. run debug build;
 3. run lint;
-4. install to `192.168.3.44:5555`;
+4. install to `<target-device-address>:5555`;
 5. launch the app;
 6. verify the ROM lock reports `MATCHED` on this exact ROM;
 7. confirm semantic resource lookup succeeds or safely falls back;

@@ -35,6 +35,6 @@ class CategoryStore(context: Context) {
         const val DEFAULT_CATEGORY = "未分类"
         private const val KEY_CATEGORIES = "categories"
         private const val MAX_LENGTH = 24
-        private val DEFAULTS = listOf("常用", "工作", "验证码", "地址")
+        private val DEFAULTS = listOf("常用", "网址", "电话", "邮箱", "地址", "验证码", "工作")
     }
 }

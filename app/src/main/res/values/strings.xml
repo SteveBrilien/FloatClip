@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">FloatClip</string>
     <string name="accessibility_description">用于把 FloatClip 中选中的内容粘贴到当前输入框。不会读取密码输入框。</string>
-    <string name="overlay_title">FloatClip</string>
     <string name="empty_history_hint">还没有历史记录。\n复制内容后重新展开 FloatClip 即会自动同步。</string>
+    <string name="slider_value">%1$d%2$s</string>
 </resources>

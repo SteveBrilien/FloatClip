@@ -211,6 +211,6 @@ Current profiles:
 - `floatclip_debug` → debug APK;
 - `floatclip_lint` → lint report.
 
-The target acceptance device is expected at `192.168.3.44:5555`.
+The target acceptance device is expected at `<target-device-address>:5555`.
 
 See `docs/STATUS.md` for the exact current continuation point and release gate.

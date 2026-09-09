@@ -1,52 +1,54 @@
 # FloatClip
 
-FloatClip is an Android 11 / vivo OriginOS-first floating clipboard utility focused on native-feeling overlay interaction, repeated paste workflows and safe ROM-specific adaptation.
+FloatClip is an Android 11 / vivo OriginOS-first floating clipboard utility focused on native-feeling overlay interaction, repeated paste workflows, local-first encrypted storage and fail-closed ROM-specific adaptation.
 
-Current release: **0.4.0** (`versionCode=4`).
+Current source/release line: **0.5.0** (`versionCode=5`).
 
-## What 0.4.0 includes
+## What 0.5.0 includes
 
-- Three-page app structure: `状态`, `剪贴板`, `设置`.
-- Appearance modes: `跟随系统`, `浅色`, `深色`.
-- Light/dark-safe surface and foreground color pairing so OEM semantic colors cannot produce white-on-white or dark-on-dark content.
-- Configurable expanded-panel opacity, width and height.
-- Configurable floating-ball size and opacity.
-- Configurable edge half-hide depth; `0%` disables half-hide.
-- Distance-aware eased edge snapping instead of instant attachment.
-- Press/release/landing scale feedback and short panel fade/scale transitions.
-- Delayed OriginOS-style edge half-hide after the bubble settles.
-- Reliable normal-mode outside dismissal through a dedicated scrim touch dispatcher; outside taps collapse FloatClip without touching the app underneath.
-- Fixed mode remains panel-only/non-modal for repeated paste workflows.
-- Text clipboard history with de-duplication, pinning, deletion, search and custom categories.
-- Automatic synchronization of the current Android system clipboard when the floating panel opens.
-- Optional AccessibilityService for one-tap paste into the focused editable field.
-- Runtime appearance refresh without restarting the foreground overlay service.
+- Three-page app structure: `状态`, `剪贴板`, `设置`, with system/light/dark appearance modes.
+- Velocity-sensitive floating-ball motion: direct drag, inertial continuation, friction, soft edge settling and delayed configurable edge half-hide.
+- Continuous panel/bubble transitions with overlap so open/close does not intentionally introduce a blank frame.
+- Fixed mode changes the existing panel/scrim state in-place; it no longer destroys and recreates the panel window when pinning/unpinning.
+- Expanded panel dragging from border zones and header empty space instead of a tiny dedicated drag handle.
+- Clipboard row gestures: single tap paste/copy, double tap pin/unpin, left-swipe reveal actions, long-press extended menu.
+- Shared category model across the app and overlay, including `全部`, custom categories, manual reassignment, safe category deletion and basic semantic classification for common data types.
+- Overlay windows remain non-focusable, avoiding the previous temporary focus grab that could collapse the active keyboard.
+- Reliable normal-mode outside dismissal without touch-through, while fixed mode remains non-modal for repeated paste.
+- Encrypted app-private clipboard vault using Android Keystore + AES-GCM, including migration away from the previous plaintext preference store.
+- Optional user-selected portable encrypted `FloatClip.vault` backup that can survive app uninstall because it lives in a Storage Access Framework directory chosen by the user.
+- Six-digit PIN workflow for the portable backup, with reinstall-safe write protection until an existing backup has been authenticated/restored.
+- A user-configured HTTPS sync endpoint placeholder. No private sync hostname is embedded, and 0.5.0 does not automatically upload clipboard data.
+- Minimum-importance silent foreground-service notification channel with a shortcut to Android's notification settings.
+- ROM-locked OriginOS semantic-resource bridge; the standalone `TYPE_APPLICATION_OVERLAY` renderer remains the permanent recovery path.
+
+See `docs/INTERACTION_0.5.0.md` for gesture/motion invariants and the device acceptance checklist, and `SECURITY.md` for the storage, backup, sync and release-signing model.
+
+## Security and privacy
+
+Clipboard content is treated as sensitive user data. The default design is local-first. The main history is encrypted in app-private storage, and portable backup is separately encrypted before being written to a user-selected shared directory.
+
+The application contains no built-in private synchronization hostname. The endpoint setting is empty by default and only accepts an HTTPS URL entered by the user. Future cross-platform synchronization is intended to be client-side encrypted so a relay server stores/transports ciphertext rather than plaintext clipboard entries or client decryption keys.
+
+A six-digit PIN is convenient but has limited entropy; it protects the current portable-backup format but is not intended to be the sole cryptographic identity for future multi-device end-to-end synchronization. The planned cross-platform design should use a random high-entropy master key with wrapped recovery credentials.
+
+Public tracked files are scanned before release for private deployment hostname patterns. Avoiding infrastructure-name disclosure is only defense-in-depth; authentication, TLS, least privilege and ciphertext-only server handling remain the actual security controls.
 
 ## OriginOS integration
 
-The standalone `TYPE_APPLICATION_OVERLAY` renderer is the permanent recovery path. ROM-specific integration is isolated behind `OriginOsSystemBridge` and is strictly fail-closed.
+The analysed target is vivo PD2115 / V2115A on Android 11 / OriginOS Ocean. `OriginOsRomLock` requires the expected device fingerprint, `com.vivo.floatingball` package version and OEM APK hash to match before the semantic-resource bridge activates.
 
-The analysed target is:
-
-- vivo PD2115 / V2115A
-- Android 11
-- OriginOS Ocean
-- fingerprint: `vivo/PD2115/PD2115:11/RP1A.200720.012/compiler1018205834:user/release-keys`
-- native floating-ball package: `com.vivo.floatingball`
-- FloatingBall version: `2.5.32.0` (`253200`)
-- FloatingBall APK SHA-256: `e24c914cc6e74f01922cd89385b2168226e5c425a5b212543ff4800ffdd0989e`
-
-`OriginOsRomLock` requires fingerprint + package version + APK hash to match before the ROM bridge can activate.
-
-The current bridge only reads semantic resources from the verified OEM package. FloatClip does **not** call vivo private AIDL, request signature-only permissions, inject into SystemUI, or bundle proprietary OriginOS artwork.
+The current bridge only reads selected semantic resources from the verified OEM package. FloatClip does **not** call private vivo AIDL, request signature-only OEM permissions, inject into SystemUI, or bundle proprietary OriginOS artwork.
 
 Runtime diagnostics use the log tag `FloatClipOriginOS`.
 
-## Android 11 clipboard behavior
+## Android clipboard / foreground-service behavior
 
-Android 10+ limits background clipboard reads for normal apps. FloatClip therefore synchronizes the current system clipboard when its floating panel is actively opened rather than attempting unrestricted always-on background polling.
+Android 10+ limits background clipboard access for normal apps. FloatClip uses its Accessibility integration as the clipboard-observation path when available and does not make the overlay window focusable just to read the clipboard.
 
-The current target device is fixed on Android 11, so `targetSdk = 30` remains intentional for this deployment.
+The floating overlay runs as a foreground service. Android requires a foreground-service notification; 0.5.0 minimizes that notification instead of attempting to hide it by violating the foreground-service contract.
+
+The target device is intentionally fixed on Android 11, so `targetSdk = 30` remains deliberate for this deployment line.
 
 ## Build
 
@@ -60,52 +62,43 @@ Outputs:
 - APK: `app/build/outputs/apk/debug/app-debug.apk`
 - lint report: `app/build/reports/lint-results-debug.html`
 
-The Orange Pi build path uses JDK 17 and the project-local Android 35 toolchain.
-
-Latest clean verification from release source commit `effe2409b99cc124801ed5a5b2269a797c9cf380`:
-
-- debug job `task-floatclip_debug-4b06e1d958b0433bbc61` — **BUILD SUCCESSFUL**
-- APK Artifact `artifact-07ac59e239e046acb3703212562b29da`
-- APK size `2,582,629` bytes
-- APK SHA-256 `4aa2e1dfbaedc02ee9d2ca63328d128b8235d6861735869d151c33827a084182`
-- lint job `task-floatclip_lint-781f539504ae4d7e8a3b` — **BUILD SUCCESSFUL**
-- lint Artifact `artifact-e907432f6e764a4c89e6332f3ddedc7e`
+The Orange Pi build path uses JDK 17 and a project-local Android 35 toolchain. Release APKs use the established stable FloatClip signing identity so they can overwrite prior accepted installations.
 
 ## GitHub CI / release path
 
-`.github/workflows/android.yml` is ready for a FloatClip GitHub repository:
+Repository: `SteveBrilien/FloatClip`.
 
-- pushes / pull requests / manual runs build and lint on GitHub-hosted Ubuntu;
-- APK and lint report are uploaded as Actions artifacts;
-- tags matching `v*` publish the APK through GitHub Releases.
+`.github/workflows/android.yml` performs independent build/lint verification on GitHub-hosted runners. Runner-generated debug APKs are CI evidence only because their debug signing identity is ephemeral. Tagged public releases fail closed to the preverified stable-signature artifact committed under `dist/` with its checksum.
 
-The local annotated release tag `v0.4.0` points to commit `effe2409b99cc124801ed5a5b2269a797c9cf380`.
+Release download pattern:
 
-The GitHub repository is `SteveBrilien/FloatClip`. `main` and annotated tag `v0.4.0` are published, and GitHub Actions completed both build/lint and release automation successfully. The release APK is deliberately the stable-signature artifact produced from source commit `effe2409b99cc124801ed5a5b2269a797c9cf380`, not the GitHub runner's ephemeral debug-signed CI APK.
+`https://github.com/SteveBrilien/FloatClip/releases/download/v0.5.0/FloatClip-0.5.0-debug.apk`
 
-Release APK: `https://github.com/SteveBrilien/FloatClip/releases/download/v0.4.0/FloatClip-0.4.0-debug.apk`
+The exact release SHA-256 and source/build evidence are recorded in `docs/STATUS.md` and `dist/release.env`.
 
-- size: `2,582,629` bytes
-- SHA-256: `4aa2e1dfbaedc02ee9d2ca63328d128b8235d6861735869d151c33827a084182`
-- signing certificate SHA-256: `9e476b6a60e08a14ec0d563ee1dde772145c70ea0463ce227b9b6e9e50275056`
+## Device acceptance for 0.5.0
 
-GitHub CI builds remain compile/lint evidence only until protected signing credentials are provisioned in Actions. The release workflow fails closed to a preverified stable-signature artifact under `dist/`.
+After overwrite-installing the candidate on the target vivo, verify:
 
-## Device acceptance
-
-The 0.4.0 candidate still needs the user's manual overwrite-install check on the vivo target. The important acceptance points are:
-
-1. light-mode and dark-mode text/background contrast;
-2. drag feel and edge-snap timing;
-3. delayed half-hidden resting position;
-4. normal-mode outside tap collapses without touch-through;
-5. fixed mode keeps the underlying app usable for repeated paste;
-6. opening the panel still synchronizes the current system clipboard;
-7. the exact supported OriginOS build still reports ROM lock `MATCHED`.
+1. slow and fast floating-ball releases have visibly different inertia/travel;
+2. the ball does not feel strongly magnetized from the middle of the display;
+3. vertical release velocity naturally influences the final resting Y position;
+4. half-hide contains no jump or discontinuity;
+5. panel open/close has no blank-frame flash;
+6. repeated fixed/unfixed toggles cause no flash or position reset;
+7. opening FloatClip over an active input field does not force the keyboard closed;
+8. border/header empty areas can drag the panel without fighting row gestures;
+9. single/double/long-press/left-swipe interactions remain distinguishable during normal scrolling;
+10. category filters and manual category assignment work in both the app page and floating panel;
+11. normal-mode outside tap collapses without touching the underlying app;
+12. fixed mode allows repeated paste while the underlying app remains interactive;
+13. exact supported OriginOS build still reports ROM lock `MATCHED`.
 
 ## Project documentation
 
-- `docs/STATUS.md` — current continuation point and acceptance state.
+- `docs/STATUS.md` — current continuation point, build/release evidence and device acceptance state.
+- `docs/INTERACTION_0.5.0.md` — 0.5.0 motion, transition and gesture model.
+- `SECURITY.md` — local vault, portable backup, sync and signing security model.
 - `docs/ARCHITECTURE.md` — standalone and enhanced-integration architecture.
 - `docs/ORIGINOS_ANALYSIS.md` — OriginOS/FloatingBall findings and ROM lock.
 - `docs/ROADMAP.md` — milestones and remaining work.

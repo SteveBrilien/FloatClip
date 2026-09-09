@@ -4,201 +4,165 @@ Last updated: 2026-09-09
 
 ## Current phase
 
-FloatClip has moved beyond the initial feasibility prototype and now has a working standalone architecture plus the first ROM-specific OriginOS integration layer. OriginOS/FloatingBall static analysis, ROM-lock implementation, Android 11 package visibility, debug build and lint have all completed successfully. The project is now at the **device-runtime acceptance** stage; automatic installation/launch is blocked only because the target vivo is no longer reachable from the Orange Pi network.
+FloatClip is now in the **manual-device acceptance candidate** stage. The standalone overlay, ROM-locked OriginOS bridge, automatic clipboard synchronization, UI refresh, signature migration, debug build and lint gates are complete. The remaining device work is to install the latest candidate on the vivo again and re-run the final interaction checks for the new scrim/fixed-mode behavior.
+
+The user has chosen the normal delivery flow going forward: publish the APK and let the user perform the overwrite install manually; automated ADB installation is no longer a release requirement for every iteration.
 
 ## Target device
 
-- Device family: vivo PD2115
-- Android: 11
-- ROM family: OriginOS Ocean
-- Expected ADB serial/address: `192.168.3.44:5555`
-- Supported build fingerprint:
-  - `vivo/PD2115/PD2115:11/RP1A.200720.012/compiler1018205834:user/release-keys`
+- vivo PD2115 / V2115A
+- Android 11
+- OriginOS Ocean
+- Build fingerprint: `vivo/PD2115/PD2115:11/RP1A.200720.012/compiler1018205834:user/release-keys`
+- Previously observed USB serial: `34472930300027K`
+- Previous laboratory wireless address: `192.168.3.44:5555`
 
-The user expects this ROM to remain effectively fixed, therefore ROM-locked adapters are acceptable as long as they fail closed.
+ROM-specific adapters are allowed only behind strict fail-closed locks.
 
-## Implemented standalone functionality
+## Current implemented behavior
 
-- `TYPE_APPLICATION_OVERLAY` floating bubble.
+- `TYPE_APPLICATION_OVERLAY` floating clipboard bubble.
+- 48dp compact floating bubble with persisted edge/vertical position.
 - Dragging and left/right edge snapping.
-- Persisted bubble side and vertical position.
-- Expand/collapse clipboard panel.
-- Outside-touch collapse.
-- Fixed-open mode for repeated multi-paste.
-- Text history storage.
-- Pin/unpin.
-- Delete.
-- Search.
-- Custom categories.
-- Category cycling from the overlay.
-- Accessibility-based one-tap paste through `ACTION_PASTE`.
-- Explicit current-clipboard import path for Android 11/OEM validation.
+- Compact expanded clipboard panel.
+- Text history, search, pin/unpin, delete, categories and category cycling.
+- Accessibility-based one-tap paste via `ACTION_PASTE`.
+- Fixed-open mode for repeated paste operations.
 - Foreground overlay service.
-- Adaptive standalone light/dark palette.
+- OriginOS semantic-resource palette behind ROM lock.
+- Main application redesigned from a developer/test panel into a compact card-style settings/status page.
+- Opening the floating panel automatically reads the current Android system clipboard; the old large manual "read clipboard" control is no longer part of the normal interaction path.
+- Clipboard import is deduplicated: if the current clipboard already exists, its timestamp is refreshed rather than creating a duplicate row.
 
-## OriginOS analysis completed
+## Automatic clipboard synchronization — device validated
 
-Read-only snapshots and static analysis established that the native OriginOS floating ball is owned by `com.vivo.floatingball`, running as a system component rather than a normal application overlay.
+The first UI/runtime candidate was installed on the target vivo and tested with the existing user history preserved.
 
-Observed native windows/surfaces include:
+Device-side validation showed:
 
-- `FloatingBallIdleView`
-- `FloatingBallDragView`
-- `FloatingBallEdgeView`
-- `FloatingBallExpandedView`
+- history count before panel expansion: 3;
+- history count after automatic synchronization: 3;
+- IDs/text set/categories/pin state unchanged;
+- exactly one existing item's `createdAt` changed.
 
-Analysed package identity:
+This verifies the intended path:
 
-- package: `com.vivo.floatingball`
-- versionName: `2.5.32.0`
-- versionCode: `253200`
-- APK SHA-256: `e24c914cc6e74f01922cd89385b2168226e5c425a5b212543ff4800ffdd0989e`
+`open bubble -> expand panel -> read current system clipboard -> deduplicate -> refresh matching history entry`
 
-The APK contains OEM/private interfaces such as `IFloatingBallService`, `IFloatingBallServiceForSettings`, and `IUpSlideServiceForFloatingBall`, and requests signature/system permissions including `INTERNAL_SYSTEM_WINDOW`, `WRITE_SECURE_SETTINGS`, and `INJECT_EVENTS`.
+No clipboard text was emitted into MCP/chat diagnostics during this validation.
 
-### Consequence
+## Outside-touch / fixed-mode interaction
 
-A normal FloatClip APK must not attempt to impersonate the OEM floating-ball service or depend on those private privileged APIs. Doing so would be fragile and could destabilize the system UI path. Native controller reuse, if pursued later, belongs in an explicitly privileged/root/LSPosed-side adapter.
+The first runtime candidate exposed an OriginOS interaction issue: the old `FLAG_NOT_TOUCH_MODAL + WATCH_OUTSIDE_TOUCH` approach could allow an outside tap to pass through to the app underneath.
 
-## OriginOS Bridge implemented
+The latest candidate changes the model to:
 
-File:
+- **normal mode:** a transparent full-screen scrim owns the outside area, so an outside tap collapses FloatClip without being delivered to the underlying app;
+- **fixed mode:** the panel remains panel-only / non-modal so the user can continue interacting with the underlying app while repeatedly pasting.
+
+This second interaction revision has passed debug and lint. Final on-device revalidation is pending the user's manual overwrite install / next available ADB session.
+
+## OriginOS Bridge
 
 `app/src/main/java/com/floatclip/app/integration/OriginOsRomBridge.kt`
 
-### ROM lock
+`OriginOsRomLock` activates only when all of the following match:
 
-`OriginOsRomLock` activates only when all of the following match the analysed specimen:
+1. the full supported `Build.FINGERPRINT`;
+2. `com.vivo.floatingball` version `2.5.32.0` / code `253200`;
+3. FloatingBall APK SHA-256 `e24c914cc6e74f01922cd89385b2168226e5c425a5b212543ff4800ffdd0989e`.
 
-1. full `Build.FINGERPRINT`;
-2. FloatingBall version name/code;
-3. SHA-256 of the installed FloatingBall APK.
+The current bridge reads semantic package resources only. It does not invoke vivo private AIDL or privileged controller APIs. Any lock mismatch disables the bridge and preserves standalone behavior.
 
-Possible diagnostic states include:
+Runtime log tag: `FloatClipOriginOS`.
 
-- `MATCHED`
-- `FINGERPRINT_MISMATCH`
-- `PACKAGE_MISSING`
-- `VERSION_MISMATCH`
-- `APK_PATH_UNAVAILABLE`
-- `APK_HASH_MISMATCH`
-- `HASH_READ_FAILED`
+## vivo input-method clipboard investigation
 
-Any state other than `MATCHED` disables the ROM bridge and leaves FloatClip in standalone mode.
+The target default input method was identified as:
 
-### Semantic-resource bridge
+`com.vivo.ai.ime/.main.IMEService`
 
-`LockedOriginOsSystemBridge` currently does **not** call private vivo AIDL. After the ROM lock matches, it attempts to read semantic resources from the installed `com.vivo.floatingball` package, such as:
+It is a platform privileged app. Package/component inspection did not reveal a public clipboard/history Provider or Service suitable for a normal APK. Therefore FloatClip currently synchronizes the Android system clipboard, not the vivo IME's private historical clipboard database.
 
-- floating-ball background color;
-- panel/list background color;
-- expanded-function label color;
-- expanded-outline corner dimension.
+A future full-history integration would require a separate ROM-specific privileged bridge, most plausibly Shizuku/LSPosed-side, and must remain optional/fail-closed.
 
-These values are mapped to `OriginOsThemeSnapshot` and then consumed by `AdaptiveOverlayThemeProvider`.
+## Signature migration and user-data preservation
 
-This is intentionally a low-risk first integration level: the system package still owns its resources, no OEM artwork is redistributed, and FloatClip falls back automatically if lookup fails.
+The earlier installed FloatClip and the newer build used different debug signing certificates, causing `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
 
-## Integration registry
+A one-time migration was completed safely:
 
-`IntegrationRegistry` now initializes the locked OriginOS bridge from the application context. Both `MainActivity` and `ClipboardOverlayService` initialize the integration before using it.
+1. the old FloatClip SharedPreferences were backed up privately on the Orange Pi;
+2. the old signature package was removed;
+3. the newer package was installed and launched;
+4. `floatclip_store.xml` and `floatclip_overlay.xml` were restored through the controlled host path;
+5. device-side SHA verification matched the backups;
+6. FloatClip AccessibilityService and overlay permission were restored.
 
-The application UI exposes the current OriginOS Bridge / ROM-lock state for device-side debugging.
+The restored history remained intact after launching the new app. The private migration backup is under the Git-ignored `analysis/` tree and is not committed.
 
-Runtime diagnostics use log tag:
+Future builds can overwrite this migrated installation normally because the signing identity is now stable.
 
-`FloatClipOriginOS`
+## Latest build gates
 
-Expected successful path:
+Latest second-interaction candidate:
 
-- ROM lock reports `MATCHED`;
-- bridge reports semantic resource activation;
-- overlay palette source changes from standalone to OriginOS-derived semantic resources.
+### Debug
 
-## Build configuration
+- Job: `task-floatclip_debug-6b8a334bafb243eaa7fd`
+- Result: **BUILD SUCCESSFUL**
+- Artifact: `artifact-a17025eff83d4f949defea6f866158ce`
+- APK: `app/build/outputs/apk/debug/app-debug.apk`
+- Size: `2,524,512` bytes
+- SHA-256: `262a6a0a1c2a00b1262b0138c73814f1b4526867ad8453407d08555da23865c2`
 
-Registered MCP v2 TaskProfiles:
+### Lint
 
-### `floatclip_debug`
+- Job: `task-floatclip_lint-9d7b411d3b304cfca304`
+- Result: **BUILD SUCCESSFUL**
+- Artifact: `artifact-2919a3f89c2246258c556a76f98d0559`
 
-- project: `floatclip`
-- command: `scripts/build-orangepi.sh :app:assembleDebug`
-- artifact: `app/build/outputs/apk/debug/app-debug.apk`
-- JDK: 17
-- Android SDK: project/host ARM64 toolchain
+The only known lint warnings are non-blocking warnings associated with deliberate ROM semantic-resource lookup / platform compatibility code.
 
-### `floatclip_lint`
+## MCP infrastructure notes
 
-- project: `floatclip`
-- command: `scripts/build-orangepi.sh :app:lintDebug`
-- report: `app/build/reports/lint-results-debug.html`
+Earlier HostCapability mount-point issues are tracked in the MCP project's issue ledger.
 
-The TaskProfiles were successfully written using the MCP v2 artifact schema. Both profiles now use the project-local `.toolchains/jdk17` and `.toolchains/android-sdk` paths because MCP 2.1.0 currently has a durable-task HostCapability mount bug for `required_capabilities`.
+A new defect discovered during FloatClip device testing is tracked as:
 
-## Build and lint acceptance
+`MCP-20260909-034520-adb-sandbox-server-hijack`
 
-- Manifest package visibility for `com.vivo.floatingball` has been added through `<queries>`.
-- Debug job: `task-floatclip_debug-b7b8f0e363a34d4c92af`.
-- Debug result: **BUILD SUCCESSFUL**.
-- APK artifact: `artifact-1a81ea498bf341c1985fa68d76f50463`.
-- APK path: `app/build/outputs/apk/debug/app-debug.apk`.
-- APK size: `2,512,988` bytes.
-- APK SHA-256: `2fa88da2ea12dcaa81b15144a1ebdf9dce4a574a0253946ea6afc73d9ff9efdb`.
-- `zipalign -c -v 4`: verification successful.
-- `apksigner verify`: verification successful; debug signer, APK Signature Scheme v2 active.
-- Lint job: `task-floatclip_lint-46957a67acb2455d9da2`.
-- Lint result: **BUILD SUCCESSFUL**, 0 errors and 2 non-blocking `DiscouragedApi` warnings caused by intentional ROM semantic-resource lookup via `Resources.getIdentifier()`.
+Summary: a Bubblewrap TaskProfile that launches an adb client/server can bind the shared host `127.0.0.1:5037`; because the sandbox does not own the host USB device nodes, this can replace a working host adb server with one that reports no USB devices. FloatClip's temporary sandbox ADB TaskProfiles were removed. Device install/launch operations must use structured host ADB capabilities rather than starting adb inside a generic sandbox task.
 
-The MCP Artifact registry successfully published the APK, but MCP 2.1.0 currently exposes only a loopback Artifact URL (`127.0.0.1:18777`). A one-off externally reachable download copy was therefore created for user delivery; temporary URLs are intentionally not persisted here because they expire.
+The `adb` HostCapability was subsequently narrowed back to fixed FloatClip install/launch/permission actions; one-time migration actions were removed.
 
-## MCP infrastructure findings
+## Current external blocker
 
-During this build, a durable task using `required_capabilities=["jdk17"]` failed before command execution with:
+At the end of this pass, `adb_devices` is empty and the vivo is not currently enumerated through USB. This does not block APK delivery because the user will perform the overwrite installation manually.
 
-`bwrap: Can't mkdir /opt/codex-mcp: Read-only file system`
+## Next actions after manual install
 
-Two failing reproductions were captured before applying the project-local toolchain workaround:
+1. Open FloatClip and start the floating clipboard.
+2. Verify normal mode: expand the panel and tap the transparent outside area; FloatClip must collapse without activating the app underneath.
+3. Verify fixed mode: enable fixed mode and confirm the underlying app remains interactive while the FloatClip panel stays available for repeated paste operations.
+4. Confirm opening the panel still auto-synchronizes the current system clipboard.
+5. Check `FloatClipOriginOS` diagnostics and confirm the exact supported ROM remains `MATCHED`.
+6. If the above pass, mark this UI iteration device-accepted; only rebuild for defects found in that test.
 
-- `task-floatclip_debug-79ac17f4202c454ebe32`
-- `task-floatclip_debug-b9e141c8861c42dd85e8`
+## Acceptance definition for this UI iteration
 
-The defect is tracked in the MCP 2.1.1 issue ledger as `MCP-20260908-192700-hostcap-mountpoint`; FloatClip evidence has been appended to that existing issue rather than creating a duplicate. The external Artifact URL limitation is separately tracked as `MCP-20260908-192701-artifact-external-url`.
+Completed:
 
-The workaround does not weaken Bubblewrap isolation: FloatClip uses its already-present workspace-local JDK and Android SDK and no longer requests the broken capability mount in these two build profiles.
+- debug build passes;
+- lint passes without blocking errors;
+- signature migration completed without losing existing FloatClip history;
+- MainActivity launches on the target vivo;
+- overlay permission and AccessibilityService restored;
+- floating service/window confirmed on device;
+- automatic system-clipboard synchronization confirmed on device;
+- second-generation scrim/fixed-mode implementation builds and lints cleanly.
 
-## Current runtime blocker
+Pending:
 
-The user is no longer on the laboratory LAN. Orange Pi ADB validation on 2026-09-09 produced an empty device list, and an explicit connection attempt to `192.168.3.44:5555` returned:
-
-`No route to host`
-
-Therefore APK installation, MainActivity launch and OriginOS runtime validation cannot be completed remotely until the vivo device and Orange Pi again have a routable ADB path. This is an external network/device availability condition, not a build or lint failure.
-
-## Required next actions
-
-Resume from this point; do **not** repeat static analysis, ROM-lock implementation, debug or lint unless code changes again.
-
-1. Restore a routable ADB path to the target vivo device.
-2. Confirm the device is authorized and visible.
-3. Install/upgrade the already-built `app-debug.apk`.
-4. Launch `com.floatclip.app/.MainActivity`.
-5. Verify ROM-lock status on the main screen and inspect `FloatClipOriginOS` logs.
-6. Validate overlay permission flow and start the floating clipboard.
-7. Validate bubble render, drag, edge snap, expand/collapse, outside-touch collapse, fixed mode, pin/delete/category behavior, clipboard import and accessibility paste.
-8. Inspect `dumpsys window`, process state and logcat for crashes or permission failures.
-9. Record final device acceptance and only rebuild if runtime fixes are required.
-
-## Acceptance definition
-
-This milestone is complete only when:
-
-- debug build succeeds;
-- lint completes without blocking errors;
-- APK installs on the target vivo device;
-- MainActivity launches without crash;
-- overlay can be started after permission is granted;
-- floating bubble is visible and interactive;
-- panel opens/closes correctly;
-- fixed mode permits repeated paste operations;
-- ROM lock either activates correctly on the exact supported build or fails closed without breaking the standalone UI;
-- no repeated fatal exceptions are visible in runtime logs.
+- final device confirmation that normal-mode scrim collapse does not pass the touch to the app underneath;
+- final device confirmation that fixed mode preserves intended underlying-app interaction.

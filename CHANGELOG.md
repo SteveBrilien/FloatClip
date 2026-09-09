@@ -4,6 +4,37 @@ All notable FloatClip development changes are recorded here.
 
 ## 2026-09-09
 
+### UI and runtime iteration
+- Reworked the floating overlay toward a denser OriginOS-style interaction model: 48dp bubble, compact panel, tighter action controls and reduced default Android button styling.
+- Reworked `MainActivity` from a developer/test panel into a compact card-style settings/status page.
+- Removed the large manual "read current clipboard" action from the normal overlay flow.
+- Added automatic system-clipboard synchronization whenever the floating panel is opened.
+- Device validation confirmed deduplication behavior: history remained at 3 items, IDs/text/category/pin state stayed unchanged, and one existing item's timestamp was refreshed.
+- Investigated the target vivo input method `com.vivo.ai.ime/.main.IMEService`; no public clipboard/history Provider or Service suitable for a normal APK was found. Full vivo-IME history integration is therefore deferred to a future optional privileged/Shizuku/LSPosed bridge.
+- Identified an OriginOS outside-touch problem in the first overlay revision: `FLAG_NOT_TOUCH_MODAL + WATCH_OUTSIDE_TOUCH` could allow the collapse tap to reach the app underneath.
+- Changed normal mode to use a transparent full-screen scrim that consumes outside taps before collapsing.
+- Preserved panel-only/non-modal behavior in fixed mode so the underlying app can remain interactive for repeated paste workflows.
+
+### Device migration and acceptance
+- Resolved `INSTALL_FAILED_UPDATE_INCOMPATIBLE` caused by a one-time debug signing-key mismatch.
+- Backed up the existing FloatClip SharedPreferences privately, migrated to the current signing identity, restored `floatclip_store.xml` and `floatclip_overlay.xml`, and verified device-side SHA values against the backups.
+- Restored FloatClip AccessibilityService and overlay permission after migration.
+- Confirmed MainActivity launch, foreground overlay service, system overlay window and automatic clipboard synchronization on the vivo target.
+- The latest second-interaction candidate passed debug and lint; final scrim/fixed-mode device confirmation is pending a manual overwrite install / next available device session.
+
+### Latest candidate
+- Debug job: `task-floatclip_debug-6b8a334bafb243eaa7fd` — **BUILD SUCCESSFUL**.
+- APK Artifact: `artifact-a17025eff83d4f949defea6f866158ce`.
+- APK size: `2,524,512` bytes.
+- APK SHA-256: `262a6a0a1c2a00b1262b0138c73814f1b4526867ad8453407d08555da23865c2`.
+- Lint job: `task-floatclip_lint-9d7b411d3b304cfca304` — **BUILD SUCCESSFUL**.
+- Lint Artifact: `artifact-2919a3f89c2246258c556a76f98d0559`.
+
+### MCP integration notes — current
+- Recorded MCP issue `MCP-20260909-034520-adb-sandbox-server-hijack`: a sandbox adb daemon can bind the shared host `5037` while lacking USB visibility, replacing a working host daemon and making USB devices disappear from MCP ADB calls.
+- Removed the temporary sandbox ADB TaskProfiles used during diagnosis.
+- Narrowed the `adb` HostCapability back to fixed FloatClip install/launch/permission actions and removed one-time migration actions after the data migration completed.
+
 ### Build and validation
 - Added Android 11 package visibility for `com.vivo.floatingball` through the manifest `<queries>` declaration.
 - `floatclip_debug` completed successfully with job `task-floatclip_debug-b7b8f0e363a34d4c92af`.

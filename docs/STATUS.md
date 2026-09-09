@@ -28,6 +28,12 @@ Pre-commit gates for 0.4.0:
 - lint job `task-floatclip_lint-f743f8dcb8724625ab41` — **BUILD SUCCESSFUL**;
 - lint Artifact `artifact-c16f2b10f7664e5aa9ea16978c7df168`;
 - lint result: 5 warnings, 0 errors.
+- clean distribution source commit `d9d20d531bd84006160014b41e3bad0f7eea6835`;
+- clean distribution debug job `task-floatclip_debug-cc9d040e57ba41d49a7c` — **BUILD SUCCESSFUL**;
+- clean distribution Artifact `artifact-e2f31f436a744c7f8ca071e9c2d10f58`;
+- clean distribution APK size `2,582,629` bytes; SHA-256 `ae8ba13289d1880b6b4fff46b8dc8ab9ce41831d2b6382b4b94fc6e4508f9ddf`.
+
+Artifact publication is currently unavailable from this connector because it is attached to an MCP secondary runtime (`ancillary_listeners_enabled=false`) and the configured artifact server is not running/owned by this runtime. The build Artifact remains registered and can be published once the primary artifact listener is reachable.
 
 The remaining acceptance work is device-side feel/interaction validation after a manual overwrite install: confirm light/dark contrast, snap timing, half-hidden resting position, normal-mode outside dismissal, fixed-mode interaction and automatic clipboard synchronization. A clean-commit distribution rebuild is performed before publishing the APK.
 

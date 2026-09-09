@@ -19,6 +19,10 @@ All notable FloatClip development changes are recorded here.
 - Pre-commit debug: `task-floatclip_debug-00bbe66b99254d1794a3` — **BUILD SUCCESSFUL** — Artifact `artifact-a00d77ca1a674edd9b951e47b6e5042e`.
 - Pre-commit lint: `task-floatclip_lint-f743f8dcb8724625ab41` — **BUILD SUCCESSFUL** — Artifact `artifact-c16f2b10f7664e5aa9ea16978c7df168`; lint report contains 5 warnings and no errors.
 - Pre-commit APK: 2,582,629 bytes; SHA-256 `9fd3613d493294efcb76f82ab13c5ddb91959b94c0294353d675891785484959`.
+- Clean distribution source commit: `d9d20d531bd84006160014b41e3bad0f7eea6835`.
+- Clean distribution rebuild: `task-floatclip_debug-cc9d040e57ba41d49a7c` — **BUILD SUCCESSFUL** — Artifact `artifact-e2f31f436a744c7f8ca071e9c2d10f58`.
+- Clean distribution APK: 2,582,629 bytes; SHA-256 `ae8ba13289d1880b6b4fff46b8dc8ab9ce41831d2b6382b4b94fc6e4508f9ddf`.
+- Publication is temporarily blocked because this MCP connection is attached to a secondary runtime whose configured artifact server is not owned/running; the APK itself is complete and registered as a first-class Artifact.
 
 ### 0.3.0 native-style UI / movable panel
 - Raised app version to `0.3.0` (`versionCode=3`).

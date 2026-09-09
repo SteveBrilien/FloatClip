@@ -161,3 +161,11 @@ Added .github/workflows/android.yml. Main/PR/manual runs build and lint on GitHu
 Files:
 - `.github/workflows/android.yml`
 - `CHANGELOG.md`
+
+## 2026-09-09T08:55:36.454038Z — RELEASE: Finalize local 0.4.0 release source and GitHub handoff
+
+Revalidated the GitHub-ready release source commit effe2409b99cc124801ed5a5b2269a797c9cf380 with floatclip_debug and floatclip_lint. Debug job task-floatclip_debug-4b06e1d958b0433bbc61 succeeded and produced Artifact artifact-07ac59e239e046acb3703212562b29da (2,582,629 bytes, SHA-256 4aa2e1dfbaedc02ee9d2ca63328d128b8235d6861735869d151c33827a084182). Lint job task-floatclip_lint-781f539504ae4d7e8a3b succeeded and produced Artifact artifact-e907432f6e764a4c89e6332f3ddedc7e. Created annotated local tag v0.4.0 on effe2409b99cc124801ed5a5b2269a797c9cf380. Refreshed README for the 0.4.0 feature set, device acceptance checklist and GitHub CI/release workflow. GitHub connector inspection confirms the connected account currently has no FloatClip repository, so remote creation is the only remaining GitHub handoff prerequisite.
+
+Files:
+- `README.md`
+- `.github/workflows/android.yml`

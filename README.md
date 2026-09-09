@@ -1,26 +1,34 @@
 # FloatClip
 
-Android 11 / vivo OriginOS-first floating clipboard application.
+FloatClip is an Android 11 / vivo OriginOS-first floating clipboard utility focused on native-feeling overlay interaction, repeated paste workflows and safe ROM-specific adaptation.
 
-Current stage: standalone MVP + first ROM-locked OriginOS semantic-resource bridge implemented; debug/lint and final device acceptance are still pending.
+Current release candidate: **0.4.0** (`versionCode=4`).
 
-## Standalone functionality
+## What 0.4.0 includes
 
-- Edge-snapping floating bubble with remembered side/Y position.
-- Tap to expand; outside touch collapses the panel unless fixed mode is enabled.
-- Fixed mode supports repeated multi-paste without closing the panel.
+- Three-page app structure: `状态`, `剪贴板`, `设置`.
+- Appearance modes: `跟随系统`, `浅色`, `深色`.
+- Light/dark-safe surface and foreground color pairing so OEM semantic colors cannot produce white-on-white or dark-on-dark content.
+- Configurable expanded-panel opacity, width and height.
+- Configurable floating-ball size and opacity.
+- Configurable edge half-hide depth; `0%` disables half-hide.
+- Distance-aware eased edge snapping instead of instant attachment.
+- Press/release/landing scale feedback and short panel fade/scale transitions.
+- Delayed OriginOS-style edge half-hide after the bubble settles.
+- Reliable normal-mode outside dismissal through a dedicated scrim touch dispatcher; outside taps collapse FloatClip without touching the app underneath.
+- Fixed mode remains panel-only/non-modal for repeated paste workflows.
 - Text clipboard history with de-duplication, pinning, deletion, search and custom categories.
-- Optional AccessibilityService for one-tap paste into the currently focused editable field.
-- Explicit "read current clipboard" action for Android 11/OEM clipboard validation.
-- Native Android Views only; the core APK does not depend on Compose or AndroidX.
+- Automatic synchronization of the current Android system clipboard when the floating panel opens.
+- Optional AccessibilityService for one-tap paste into the focused editable field.
+- Runtime appearance refresh without restarting the foreground overlay service.
 
 ## OriginOS integration
 
-The standalone renderer is the permanent recovery path. ROM-specific integration is isolated behind `OriginOsSystemBridge` and is strictly fail-closed.
+The standalone `TYPE_APPLICATION_OVERLAY` renderer is the permanent recovery path. ROM-specific integration is isolated behind `OriginOsSystemBridge` and is strictly fail-closed.
 
-The currently analysed target is:
+The analysed target is:
 
-- vivo PD2115
+- vivo PD2115 / V2115A
 - Android 11
 - OriginOS Ocean
 - fingerprint: `vivo/PD2115/PD2115:11/RP1A.200720.012/compiler1018205834:user/release-keys`
@@ -28,63 +36,70 @@ The currently analysed target is:
 - FloatingBall version: `2.5.32.0` (`253200`)
 - FloatingBall APK SHA-256: `e24c914cc6e74f01922cd89385b2168226e5c425a5b212543ff4800ffdd0989e`
 
-`OriginOsRomLock` requires fingerprint + version + APK hash to match before the ROM bridge is allowed to activate.
+`OriginOsRomLock` requires fingerprint + package version + APK hash to match before the ROM bridge can activate.
 
-The first bridge level is intentionally limited to semantic resource lookup from the installed FloatingBall package. It does **not** call vivo private AIDL, request signature permissions, inject into SystemUI, or bundle vivo proprietary "未来科技" artwork.
+The current bridge only reads semantic resources from the verified OEM package. FloatClip does **not** call vivo private AIDL, request signature-only permissions, inject into SystemUI, or bundle proprietary OriginOS artwork.
 
-Static analysis confirmed the native OEM implementation uses privileged system windows and private services, including `FloatingBallIdleView`, `FloatingBallEdgeView`, `FloatingBallExpandedView`, `IFloatingBallService` and related interfaces. Any future native-controller reuse must therefore live in a separate privileged/root/LSPosed-side adapter.
+Runtime diagnostics use the log tag `FloatClipOriginOS`.
 
-Runtime OriginOS diagnostics use log tag:
+## Android 11 clipboard behavior
 
-`FloatClipOriginOS`
+Android 10+ limits background clipboard reads for normal apps. FloatClip therefore synchronizes the current system clipboard when its floating panel is actively opened rather than attempting unrestricted always-on background polling.
 
-## Android 11 clipboard policy
-
-A normal background app cannot continuously read clipboard contents on Android 10+ unless it is the default IME or has privileged/system capabilities. FloatClip therefore keeps automatic background capture behind future privilege/SystemUI bridge work and retains an explicit import flow in standalone mode.
-
-`targetSdk = 30` is intentional for this fixed Android 11 deployment target. The expired-target Play lint rule is disabled specifically; other lint checks remain enabled.
+The current target device is fixed on Android 11, so `targetSdk = 30` remains intentional for this deployment.
 
 ## Build
 
-MCP v2 TaskProfiles:
+MCP TaskProfiles:
 
 - `floatclip_debug` → `scripts/build-orangepi.sh :app:assembleDebug`
 - `floatclip_lint` → `scripts/build-orangepi.sh :app:lintDebug`
 
-APK output:
+Outputs:
 
-`app/build/outputs/apk/debug/app-debug.apk`
+- APK: `app/build/outputs/apk/debug/app-debug.apk`
+- lint report: `app/build/reports/lint-results-debug.html`
 
-Lint report:
+The Orange Pi build path uses JDK 17 and the project-local Android 35 toolchain.
 
-`app/build/reports/lint-results-debug.html`
+Latest clean verification from release source commit `effe2409b99cc124801ed5a5b2269a797c9cf380`:
 
-The build uses JDK 17 and the ARM64 Android toolchain available to the Orange Pi / project workspace.
+- debug job `task-floatclip_debug-4b06e1d958b0433bbc61` — **BUILD SUCCESSFUL**
+- APK Artifact `artifact-07ac59e239e046acb3703212562b29da`
+- APK size `2,582,629` bytes
+- APK SHA-256 `4aa2e1dfbaedc02ee9d2ca63328d128b8235d6861735869d151c33827a084182`
+- lint job `task-floatclip_lint-781f539504ae4d7e8a3b` — **BUILD SUCCESSFUL**
+- lint Artifact `artifact-e907432f6e764a4c89e6332f3ddedc7e`
 
-## Target-device acceptance
+## GitHub CI / release path
 
-Expected ADB target:
+`.github/workflows/android.yml` is ready for a FloatClip GitHub repository:
 
-`192.168.3.44:5555`
+- pushes / pull requests / manual runs build and lint on GitHub-hosted Ubuntu;
+- APK and lint report are uploaded as Actions artifacts;
+- tags matching `v*` publish the APK through GitHub Releases.
 
-Before the current milestone is complete:
+The local annotated release tag `v0.4.0` points to commit `effe2409b99cc124801ed5a5b2269a797c9cf380`.
 
-1. add Android 11 package visibility for `com.vivo.floatingball` via `<queries>`;
-2. run debug build and fix all compiler failures;
-3. run lint and address blocking findings;
-4. install/upgrade the APK on the target vivo device;
-5. launch `com.floatclip.app/.MainActivity`;
-6. verify ROM-lock status and `FloatClipOriginOS` logs;
-7. validate overlay permission, bubble start, drag/snap, expand/collapse, fixed mode, clipboard import and accessibility paste;
-8. inspect runtime logs/window state for crashes or permission loops.
+At present this local repository has no Git remote, and the connected GitHub account does not yet contain a FloatClip repository. Once an empty repository is created, the project can be connected and `main` plus `v0.4.0` pushed without changing the release source.
 
-The previous attempt stopped before this acceptance sequence because the Codex MCP Dev registry remained in `TOOL_REGISTRY_NOT_READY` after TaskProfile configuration reload. This is recorded as a control-plane blocker, not a known FloatClip build/runtime failure.
+## Device acceptance
+
+The 0.4.0 candidate still needs the user's manual overwrite-install check on the vivo target. The important acceptance points are:
+
+1. light-mode and dark-mode text/background contrast;
+2. drag feel and edge-snap timing;
+3. delayed half-hidden resting position;
+4. normal-mode outside tap collapses without touch-through;
+5. fixed mode keeps the underlying app usable for repeated paste;
+6. opening the panel still synchronizes the current system clipboard;
+7. the exact supported OriginOS build still reports ROM lock `MATCHED`.
 
 ## Project documentation
 
-- `docs/STATUS.md` — exact current continuation point and acceptance checklist.
+- `docs/STATUS.md` — current continuation point and acceptance state.
 - `docs/ARCHITECTURE.md` — standalone and enhanced-integration architecture.
-- `docs/ORIGINOS_ANALYSIS.md` — completed FloatingBall/OriginOS findings and ROM lock.
-- `docs/ROADMAP.md` — milestone status and remaining work.
-- `CHANGELOG.md` — chronological development/update record.
-- `analysis/originos/` — captured snapshots, static-analysis outputs and pulled system APK hashes.
+- `docs/ORIGINOS_ANALYSIS.md` — OriginOS/FloatingBall findings and ROM lock.
+- `docs/ROADMAP.md` — milestones and remaining work.
+- `CHANGELOG.md` — chronological development record.
+- `analysis/originos/` — local captured snapshots/static-analysis material; sensitive or binary analysis data remains Git-ignored where appropriate.

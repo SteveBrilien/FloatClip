@@ -2,6 +2,35 @@
 
 Last updated: 2026-09-09
 
+## 0.4.0 adaptive theme / native interaction candidate
+
+FloatClip is now at `versionName=0.4.0` / `versionCode=4`. This iteration directly addresses the light-theme contrast and floating-interaction issues reported from the 0.3.0 device screenshots:
+
+- app and overlay appearance support `SYSTEM`, `LIGHT`, and `DARK` modes;
+- foreground colors are derived from the effective surface luminance, so a light OriginOS semantic surface cannot be paired with white clipboard text;
+- the app is split into three pages (`状态`, `剪贴板`, `设置`) with all appearance controls on the final Settings page;
+- floating-ball opacity is independently configurable (35–100%, default 76%);
+- edge half-hide depth is configurable (0–55%, default 38%);
+- bubble edge snap is now distance-aware and eased instead of immediate, with touch/landing scale feedback;
+- after settling, the bubble waits 900 ms and smoothly half-hides toward the current screen edge;
+- expanded-panel open/close transitions use short fade/scale animations;
+- normal-mode blank-area dismissal now uses a dedicated `DismissScrimLayout` touch dispatcher instead of relying on a parent click listener, eliminating the child-touch-consumption failure mode while still preventing touch-through;
+- fixed mode remains non-modal for repeated paste;
+- appearance changes send a scoped refresh broadcast to the running overlay service;
+- delayed clipboard capture is guarded by a generation token so panel rebuild/collapse cannot leave a stale clipboard callback behind.
+
+Pre-commit gates for 0.4.0:
+
+- debug job `task-floatclip_debug-00bbe66b99254d1794a3` — **BUILD SUCCESSFUL**;
+- APK Artifact `artifact-a00d77ca1a674edd9b951e47b6e5042e`;
+- APK size `2,582,629` bytes;
+- APK SHA-256 `9fd3613d493294efcb76f82ab13c5ddb91959b94c0294353d675891785484959`;
+- lint job `task-floatclip_lint-f743f8dcb8724625ab41` — **BUILD SUCCESSFUL**;
+- lint Artifact `artifact-c16f2b10f7664e5aa9ea16978c7df168`;
+- lint result: 5 warnings, 0 errors.
+
+The remaining acceptance work is device-side feel/interaction validation after a manual overwrite install: confirm light/dark contrast, snap timing, half-hidden resting position, normal-mode outside dismissal, fixed-mode interaction and automatic clipboard synchronization. A clean-commit distribution rebuild is performed before publishing the APK.
+
 
 ## 0.3.0 native-style UI iteration
 

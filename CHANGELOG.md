@@ -4,6 +4,22 @@ All notable FloatClip development changes are recorded here.
 
 ## 2026-09-09
 
+### 0.4.0 adaptive theme / native edge interaction
+- Raised app version to `0.4.0` (`versionCode=4`).
+- Added `跟随系统 / 浅色 / 深色` appearance modes for both the app and floating clipboard, with normalized foreground colors so OEM semantic resources cannot produce white-on-white or dark-on-dark content.
+- Split the main app into three bottom-navigation pages: `状态`, `剪贴板`, and `设置`; appearance, permissions, theme and overlay controls now live on the final Settings page.
+- Added configurable floating-ball opacity (35–100%, default 76%) and configurable edge half-hide depth (0–55%, default 38%).
+- Replaced instantaneous edge snapping with distance-aware eased motion, press/release scale feedback and a subtle landing animation.
+- Added OriginOS-style delayed edge half-hide: after settling on the nearest edge, the bubble waits briefly and smoothly moves partially off-screen; touching/dragging restores direct interaction.
+- Added smooth fade/scale transitions for opening and closing the expanded clipboard panel.
+- Replaced the fragile normal-mode outside-click listener with a dedicated touch-consuming scrim dispatcher so taps outside the panel deterministically collapse it without passing through to the underlying app.
+- Preserved fixed mode as a panel-only/non-modal overlay for repeated paste workflows.
+- Added an appearance-refresh broadcast so changing theme/opacity/size settings can rebuild a currently running overlay without restarting the foreground service.
+- Preserved automatic clipboard synchronization and added generation guards so delayed clipboard reads cannot act on a panel that has already been removed/rebuilt.
+- Pre-commit debug: `task-floatclip_debug-00bbe66b99254d1794a3` — **BUILD SUCCESSFUL** — Artifact `artifact-a00d77ca1a674edd9b951e47b6e5042e`.
+- Pre-commit lint: `task-floatclip_lint-f743f8dcb8724625ab41` — **BUILD SUCCESSFUL** — Artifact `artifact-c16f2b10f7664e5aa9ea16978c7df168`; lint report contains 5 warnings and no errors.
+- Pre-commit APK: 2,582,629 bytes; SHA-256 `9fd3613d493294efcb76f82ab13c5ddb91959b94c0294353d675891785484959`.
+
 ### 0.3.0 native-style UI / movable panel
 - Raised app version to `0.3.0` (`versionCode=3`).
 - Replaced the launcher artwork with a white-background, flat black copy/paste icon.

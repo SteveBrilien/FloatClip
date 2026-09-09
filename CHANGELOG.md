@@ -209,3 +209,14 @@ Files:
 - `dist/FloatClip-0.4.0-debug.apk`
 - `dist/FloatClip-0.4.0-debug.apk.sha256`
 - `dist/release.env`
+
+## 2026-09-09T14:39:53.909938Z — RELEASE: Prepare FloatClip 0.5.0 with new persistent signing identity
+
+At the user's direction, the clean 0.5.0 APK from source commit 13b3102290d5f788f99f89f649d6dfb49b31f650 was re-signed with a new persistent FloatClip release key stored outside the Git repository. Final asset: dist/FloatClip-0.5.0-debug.apk, SHA-256 6c1821d8ca2ce58b81005e832d37083e396c3b7ef0f9608b571797f3f3d5d71f, signing certificate SHA-256 89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3. apksigner verification reports one signer using APK Signature Scheme v3. This signer intentionally differs from 0.4.0, so the 0.4.0 package must be uninstalled before the first 0.5.0 install; subsequent releases using this identity can update normally.
+
+Files:
+- `dist/FloatClip-0.5.0-debug.apk`
+- `dist/FloatClip-0.5.0-debug.apk.sha256`
+- `dist/release.env`
+- `dist/README.md`
+- `docs/STATUS.md`

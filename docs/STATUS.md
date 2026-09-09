@@ -8,7 +8,18 @@ Last updated: 2026-09-09
 
 Security/storage invariants are documented in `SECURITY.md`; interaction invariants and the device acceptance checklist are documented in `docs/INTERACTION_0.5.0.md`. Public tracked files are scanned for private deployment hostname patterns before release.
 
-Current release gates are being rerun after warning cleanup. Final source commit, clean-build job, Artifact SHA-256, signing certificate and GitHub Release verification are appended here after publication.
+The 0.5.0 source gate is complete: clean source commit `13b3102290d5f788f99f89f649d6dfb49b31f650` passed both debug assembly and lint with no lint issues. The clean-build Artifact was `artifact-b5290d91ca4d4e34987099a129100aec`.
+
+The installable 0.5.0 distribution has now been deliberately re-signed with a new persistent FloatClip release identity at the user's direction:
+
+- asset: `dist/FloatClip-0.5.0-debug.apk`;
+- size: `2,676,869` bytes;
+- SHA-256: `6c1821d8ca2ce58b81005e832d37083e396c3b7ef0f9608b571797f3f3d5d71f`;
+- signing certificate SHA-256: `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`;
+- signature verification: APK Signature Scheme v3, one signer;
+- package metadata: `com.floatclip.app`, `versionCode=5`, `versionName=0.5.0`, `minSdk=28`, `targetSdk=30`.
+
+Because 0.5.0 intentionally changes the application signing certificate relative to 0.4.0, Android will require the previous package to be uninstalled before installing 0.5.0. Future releases signed with this new persistent identity can update 0.5.0 normally. Final GitHub Release verification is appended after publication.
 
 ## 0.4.0 GitHub release published
 

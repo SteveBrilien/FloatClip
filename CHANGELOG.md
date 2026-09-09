@@ -29,6 +29,10 @@ All notable FloatClip development changes are recorded here.
 - APK SHA-256: `262a6a0a1c2a00b1262b0138c73814f1b4526867ad8453407d08555da23865c2`.
 - Lint job: `task-floatclip_lint-9d7b411d3b304cfca304` — **BUILD SUCCESSFUL**.
 - Lint Artifact: `artifact-2919a3f89c2246258c556a76f98d0559`.
+- Clean distribution rebuild source commit: `1fd7b7f0c307de655af4bf31e9f5591e1ebbaeec`.
+- Clean distribution rebuild job: `task-floatclip_debug-262b23f6b47a41ae82cb` — **BUILD SUCCESSFUL**.
+- Clean distribution Artifact: `artifact-1b00d27060b54df0ba4bebcc9473ca19`.
+- Clean distribution APK SHA-256: `9272d41f07aebc0f41b535bb79026ebdcf4ddde8beb5acd59d727ce2d0f8fc54`.
 
 ### MCP integration notes — current
 - Recorded MCP issue `MCP-20260909-034520-adb-sandbox-server-hijack`: a sandbox adb daemon can bind the shared host `5037` while lacking USB visibility, replacing a working host daemon and making USB devices disappear from MCP ADB calls.

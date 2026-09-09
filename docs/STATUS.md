@@ -122,6 +122,14 @@ Latest second-interaction candidate:
 - Result: **BUILD SUCCESSFUL**
 - Artifact: `artifact-2919a3f89c2246258c556a76f98d0559`
 
+### Distribution rebuild from clean commit
+
+- Source commit: `1fd7b7f0c307de655af4bf31e9f5591e1ebbaeec`
+- Job: `task-floatclip_debug-262b23f6b47a41ae82cb` — **BUILD SUCCESSFUL**
+- Artifact: `artifact-1b00d27060b54df0ba4bebcc9473ca19`
+- Size: `2,524,512` bytes
+- SHA-256: `9272d41f07aebc0f41b535bb79026ebdcf4ddde8beb5acd59d727ce2d0f8fc54`
+
 The only known lint warnings are non-blocking warnings associated with deliberate ROM semantic-resource lookup / platform compatibility code.
 
 ## MCP infrastructure notes

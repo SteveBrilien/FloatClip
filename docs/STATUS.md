@@ -2,6 +2,24 @@
 
 Last updated: 2026-09-09
 
+## 0.4.0 GitHub release published
+
+FloatClip 0.4.0 is now published from the public repository `SteveBrilien/FloatClip`. The release path was verified end-to-end after correcting an important signing issue in the first GitHub-hosted asset.
+
+- `main` remote head after release handoff: `45426765dbbe0d601c988d90d6c234f0dd1344bc`;
+- annotated tag `v0.4.0` resolves to source commit `effe2409b99cc124801ed5a5b2269a797c9cf380`;
+- initial tag workflow run `34333602665`: build **success**, release **success**;
+- stable-signature repair workflow run `34334404446`: build **success**, `sync_release` **success**;
+- final GitHub Release asset: `FloatClip-0.4.0-debug.apk`;
+- size: `2,582,629` bytes;
+- SHA-256: `4aa2e1dfbaedc02ee9d2ca63328d128b8235d6861735869d151c33827a084182`;
+- signing certificate SHA-256: `9e476b6a60e08a14ec0d563ee1dde772145c70ea0463ce227b9b6e9e50275056`;
+- download: `https://github.com/SteveBrilien/FloatClip/releases/download/v0.4.0/FloatClip-0.4.0-debug.apk`.
+
+The first GitHub Actions APK used the runner's ephemeral default debug key and therefore could not safely overwrite the migrated FloatClip installation. That asset was replaced in-place by the byte-identical stable-signature Orange Pi Artifact (`artifact-07ac59e239e046acb3703212562b29da`). The final public release SHA-256 was downloaded and rechecked after replacement and matches the registered local Artifact exactly.
+
+GitHub CI continues to build/lint independently, but release publishing now consumes only the preverified stable-signature artifact from `dist/` until protected signing credentials are provisioned for Actions. MCP's localhost-only Artifact server is no longer a delivery blocker.
+
 ## 0.4.0 adaptive theme / native interaction candidate
 
 FloatClip is now at `versionName=0.4.0` / `versionCode=4`. This iteration directly addresses the light-theme contrast and floating-interaction issues reported from the 0.3.0 device screenshots:

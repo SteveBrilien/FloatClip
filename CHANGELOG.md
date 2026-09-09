@@ -177,3 +177,15 @@ The FloatClip GitHub repository now exists at wmy7512/FloatClip. The controlled 
 Files:
 - `README.md`
 - `.git/config`
+
+## 2026-09-09T09:25:57.622068Z — RELEASE: Publish FloatClip 0.4.0 to GitHub with stable update signature
+
+Published main to SteveBrilien/FloatClip and pushed annotated tag v0.4.0. GitHub Actions run 34333602665 completed build and release successfully. A signing audit then detected the GitHub runner's ephemeral debug certificate did not match the stable FloatClip update certificate, so release repair commit 45426765dbbe0d601c988d90d6c234f0dd1344bc added the preverified stable-signature APK and a fail-closed release path. Repair workflow run 34334404446 completed build and sync_release successfully, replacing the public v0.4.0 asset in place. The final GitHub asset was downloaded and verified at 2,582,629 bytes with SHA-256 4aa2e1dfbaedc02ee9d2ca63328d128b8235d6861735869d151c33827a084182, matching local Artifact artifact-07ac59e239e046acb3703212562b29da. Signing certificate SHA-256 is 9e476b6a60e08a14ec0d563ee1dde772145c70ea0463ce227b9b6e9e50275056.
+
+Files:
+- `README.md`
+- `docs/STATUS.md`
+- `.github/workflows/android.yml`
+- `dist/FloatClip-0.4.0-debug.apk`
+- `dist/FloatClip-0.4.0-debug.apk.sha256`
+- `dist/release.env`

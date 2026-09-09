@@ -2,7 +2,7 @@
 
 FloatClip is an Android 11 / vivo OriginOS-first floating clipboard utility focused on native-feeling overlay interaction, repeated paste workflows and safe ROM-specific adaptation.
 
-Current release candidate: **0.4.0** (`versionCode=4`).
+Current release: **0.4.0** (`versionCode=4`).
 
 ## What 0.4.0 includes
 
@@ -81,7 +81,15 @@ Latest clean verification from release source commit `effe2409b99cc124801ed5a5b2
 
 The local annotated release tag `v0.4.0` points to commit `effe2409b99cc124801ed5a5b2269a797c9cf380`.
 
-The GitHub repository is now provisioned as `wmy7512/FloatClip`. The controlled project allows non-force pushes to `main`, and `origin` is configured through GitHub SSH-over-443 so it remains usable on networks that block outbound TCP/22. A repository-scoped ED25519 deploy key is stored under the Git-ignored `.mcp/github/` directory; GitHub must grant that public key write access before the first push can complete. After authorization, push `main` and the existing `v0.4.0` tag to trigger the prepared CI/release workflow without changing the release source.
+The GitHub repository is `SteveBrilien/FloatClip`. `main` and annotated tag `v0.4.0` are published, and GitHub Actions completed both build/lint and release automation successfully. The release APK is deliberately the stable-signature artifact produced from source commit `effe2409b99cc124801ed5a5b2269a797c9cf380`, not the GitHub runner's ephemeral debug-signed CI APK.
+
+Release APK: `https://github.com/SteveBrilien/FloatClip/releases/download/v0.4.0/FloatClip-0.4.0-debug.apk`
+
+- size: `2,582,629` bytes
+- SHA-256: `4aa2e1dfbaedc02ee9d2ca63328d128b8235d6861735869d151c33827a084182`
+- signing certificate SHA-256: `9e476b6a60e08a14ec0d563ee1dde772145c70ea0463ce227b9b6e9e50275056`
+
+GitHub CI builds remain compile/lint evidence only until protected signing credentials are provisioned in Actions. The release workflow fails closed to a preverified stable-signature artifact under `dist/`.
 
 ## Device acceptance
 

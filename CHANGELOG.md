@@ -153,3 +153,11 @@ The following steps were not completed in this development pass because the Code
 ### Known follow-up
 - Add an explicit Android package-visibility `<queries>` declaration for `com.vivo.floatingball` before final device acceptance, so `PackageManager.getPackageInfo()` remains deterministic on Android 11 package-visibility implementations.
 - Re-run debug + lint after that manifest change, then perform the complete ADB acceptance sequence.
+
+## 2026-09-09T08:20:20.356362Z — UPDATE: Prepare GitHub CI and tagged APK release publishing
+
+Added .github/workflows/android.yml. Main/PR/manual runs build and lint on GitHub-hosted Ubuntu with JDK 17 and Android 35, uploads APK and lint artifacts, and v* tags publish the debug APK through GitHub Releases using the repository GITHUB_TOKEN. This provides a GitHub-backed distribution path once a FloatClip repository is connected.
+
+Files:
+- `.github/workflows/android.yml`
+- `CHANGELOG.md`

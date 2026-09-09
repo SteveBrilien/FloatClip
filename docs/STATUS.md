@@ -19,7 +19,15 @@ The installable 0.5.0 distribution has now been deliberately re-signed with a ne
 - signature verification: APK Signature Scheme v3, one signer;
 - package metadata: `com.floatclip.app`, `versionCode=5`, `versionName=0.5.0`, `minSdk=28`, `targetSdk=30`.
 
-Because 0.5.0 intentionally changes the application signing certificate relative to 0.4.0, Android will require the previous package to be uninstalled before installing 0.5.0. Future releases signed with this new persistent identity can update 0.5.0 normally. Final GitHub Release verification is appended after publication.
+Because 0.5.0 intentionally changes the application signing certificate relative to 0.4.0, Android will require the previous package to be uninstalled before installing 0.5.0. Future releases signed with this new persistent identity can update 0.5.0 normally.
+
+GitHub publication is complete and independently verified:
+
+- release commit/tag target: `f9e1289e5b8e72872f001cfe5150e54926f8c966` / `v0.5.0`;
+- main workflow run `34365181024`: **success**;
+- tag/release workflow run `34365223029`: **success**;
+- GitHub Release asset size: `2,676,869` bytes;
+- the public asset was downloaded back from GitHub and matched local SHA-256 `6c1821d8ca2ce58b81005e832d37083e396c3b7ef0f9608b571797f3f3d5d71f` and signer SHA-256 `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3` exactly.
 
 ## 0.4.0 GitHub release published
 

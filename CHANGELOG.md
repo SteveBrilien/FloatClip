@@ -220,3 +220,11 @@ Files:
 - `dist/release.env`
 - `dist/README.md`
 - `docs/STATUS.md`
+
+## 2026-09-09T14:49:43.523898Z — RELEASE: Publish and verify FloatClip 0.5.0 on GitHub
+
+Tag v0.5.0 was pushed at release commit f9e1289e5b8e72872f001cfe5150e54926f8c966. GitHub Actions main run 34365181024 and tag/release run 34365223029 both completed successfully. The public GitHub Release asset FloatClip-0.5.0-debug.apk was downloaded back and independently verified at 2,676,869 bytes, SHA-256 6c1821d8ca2ce58b81005e832d37083e396c3b7ef0f9608b571797f3f3d5d71f, signing certificate SHA-256 89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3. This exactly matches the locally prepared distribution asset.
+
+Files:
+- `docs/STATUS.md`
+- `CHANGELOG.md`

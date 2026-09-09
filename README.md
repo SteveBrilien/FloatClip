@@ -81,7 +81,7 @@ Latest clean verification from release source commit `effe2409b99cc124801ed5a5b2
 
 The local annotated release tag `v0.4.0` points to commit `effe2409b99cc124801ed5a5b2269a797c9cf380`.
 
-At present this local repository has no Git remote, and the connected GitHub account does not yet contain a FloatClip repository. Once an empty repository is created, the project can be connected and `main` plus `v0.4.0` pushed without changing the release source.
+The GitHub repository is now provisioned as `wmy7512/FloatClip`. The controlled project allows non-force pushes to `main`, and `origin` is configured through GitHub SSH-over-443 so it remains usable on networks that block outbound TCP/22. A repository-scoped ED25519 deploy key is stored under the Git-ignored `.mcp/github/` directory; GitHub must grant that public key write access before the first push can complete. After authorization, push `main` and the existing `v0.4.0` tag to trigger the prepared CI/release workflow without changing the release source.
 
 ## Device acceptance
 

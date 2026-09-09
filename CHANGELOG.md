@@ -169,3 +169,11 @@ Revalidated the GitHub-ready release source commit effe2409b99cc124801ed5a5b2269
 Files:
 - `README.md`
 - `.github/workflows/android.yml`
+
+## 2026-09-09T09:05:00.958690Z — RELEASE: Provision GitHub remote and repo-scoped deploy authentication
+
+The FloatClip GitHub repository now exists at wmy7512/FloatClip. The controlled project was updated to allow non-force pushes only to main. Origin is configured as ssh://git@ssh.github.com:443/wmy7512/FloatClip.git because outbound TCP/22 is blocked from the build sandbox while ssh.github.com:443 is reachable. A dedicated ED25519 deploy key was generated under the Git-ignored .mcp/github/ directory. The first remote read correctly reaches GitHub but is denied until the public deploy key is granted write access. Local main and annotated tag v0.4.0 remain ready for publication.
+
+Files:
+- `README.md`
+- `.git/config`

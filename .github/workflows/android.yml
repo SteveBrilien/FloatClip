@@ -43,10 +43,10 @@ jobs:
           chmod +x ./gradlew
           ./gradlew :app:assembleDebug :app:lintDebug --no-daemon --stacktrace
 
-      - name: Upload APK
+      - name: Upload CI APK
         uses: actions/upload-artifact@v4
         with:
-          name: FloatClip-debug
+          name: FloatClip-debug-ci-only
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
@@ -70,20 +70,57 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download APK artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: FloatClip-debug
-          path: release
+      - name: Verify stable-signature release APK
+        id: release_asset
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          apk="dist/FloatClip-${version}-debug.apk"
+          checksum="${apk}.sha256"
+          test -f "$apk"
+          test -f "$checksum"
+          (cd dist && sha256sum -c "$(basename "$checksum")")
+          echo "apk=$apk" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          APK: ${{ steps.release_asset.outputs.apk }}
         run: |
-          apk="$(find release -type f -name '*.apk' -print -quit)"
-          test -n "$apk"
-          cp "$apk" "release/FloatClip-${GITHUB_REF_NAME#v}-debug.apk"
-          gh release create "$GITHUB_REF_NAME" \
-            "release/FloatClip-${GITHUB_REF_NAME#v}-debug.apk" \
+          gh release create "$GITHUB_REF_NAME" "$APK" \
             --title "FloatClip ${GITHUB_REF_NAME#v}" \
             --generate-notes
+
+  sync_release:
+    if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[sync-release]')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify release manifest
+        id: manifest
+        shell: bash
+        run: |
+          set -a
+          source dist/release.env
+          set +a
+          test -n "$TAG"
+          test -n "$ASSET"
+          test -n "$SHA256"
+          printf '%s  %s\n' "$SHA256" "$ASSET" > dist/.release-check.sha256
+          (cd dist && sha256sum -c .release-check.sha256)
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
+
+      - name: Replace release APK with stable-signature artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.manifest.outputs.tag }}
+          ASSET: ${{ steps.manifest.outputs.asset }}
+        run: |
+          gh release view "$TAG" >/dev/null
+          gh release upload "$TAG" "dist/$ASSET" --clobber

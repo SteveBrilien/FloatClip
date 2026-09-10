@@ -244,3 +244,14 @@ Tag v0.5.0 was pushed at release commit f9e1289e5b8e72872f001cfe5150e54926f8c966
 Files:
 - `docs/STATUS.md`
 - `CHANGELOG.md`
+
+## 2026-09-10T16:31:26.620710Z — RELEASE: Stage stable-signed FloatClip 0.5.1 release asset
+
+Clean source commit a3a9db0e02a8c767c8f0c39f4a70ab7cfc8874e2 passed debug build task-floatclip_debug-92a16e7d87a64586bc00 and lint task-floatclip_lint-b0fadcefa29c4b3d9242 with No issues found. Prepared dist/FloatClip-0.5.1-debug.apk (2,689,079 bytes, SHA-256 a5bd45526903a15ebec12833fee68b49c0e6383af9e6659d1244057b11e8da58), verified package com.floatclip.app versionCode 6/versionName 0.5.1/minSdk 28/targetSdk 30, zip alignment, APK Signature Scheme v3 with one signer, and reuse of the 0.5.0 persistent signing certificate SHA-256 89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3. This preserves direct overwrite upgrade from 0.5.0.
+
+Files:
+- `dist/FloatClip-0.5.1-debug.apk`
+- `dist/FloatClip-0.5.1-debug.apk.sha256`
+- `dist/release.env`
+- `dist/README.md`
+- `docs/STATUS.md`

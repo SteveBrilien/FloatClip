@@ -2,16 +2,26 @@
 
 This directory contains the preverified APK used for GitHub Releases.
 
-## Current release: FloatClip 0.5.0
+## Current release candidate: FloatClip 0.5.1
+
+- APK: `FloatClip-0.5.1-debug.apk`
+- SHA-256: `a5bd45526903a15ebec12833fee68b49c0e6383af9e6659d1244057b11e8da58`
+- Android signing certificate SHA-256: `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`
+- source commit: `a3a9db0e02a8c767c8f0c39f4a70ab7cfc8874e2`
+- package metadata: `com.floatclip.app`, `versionCode=6`, `versionName=0.5.1`, `minSdk=28`, `targetSdk=30`
+
+0.5.1 deliberately reuses the persistent signing identity introduced by 0.5.0, so it can overwrite-install 0.5.0 normally. The release asset is produced from the clean source commit above, independently linted with `No issues found`, aligned, and verified with APK Signature Scheme v3 and one signer before tagging.
+
+The private keystore and password are stored outside the Git repository in the controlled workspace and are never committed. GitHub-hosted CI APKs remain compile/lint evidence only because their default debug signer is runner-local. Tagged public releases consume the preverified asset committed under `dist/`.
+
+## Previous release: FloatClip 0.5.0
 
 - APK: `FloatClip-0.5.0-debug.apk`
 - SHA-256: `6c1821d8ca2ce58b81005e832d37083e396c3b7ef0f9608b571797f3f3d5d71f`
 - Android signing certificate SHA-256: `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`
 - source commit: `13b3102290d5f788f99f89f649d6dfb49b31f650`
 
-0.5.0 intentionally starts a new persistent FloatClip signing identity. It therefore cannot overwrite-install an APK signed with the previous 0.4.0 certificate; the transition requires uninstalling the older package first. Future builds signed with the 0.5.0 identity can update 0.5.0 normally.
-
-The private keystore and password are stored outside the Git repository in the controlled workspace and are never committed. GitHub-hosted CI APKs remain compile/lint evidence only because their default debug signer is runner-local. Tagged public releases consume the preverified asset committed under `dist/`.
+0.5.0 intentionally started the current persistent FloatClip signing identity. It therefore could not overwrite-install an APK signed with the previous 0.4.0 certificate; that one transition required uninstalling the older package first. 0.5.1 and later releases that retain this identity can update 0.5.0 normally.
 
 ## Previous release: FloatClip 0.4.0
 

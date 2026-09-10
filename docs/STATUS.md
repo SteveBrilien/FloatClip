@@ -8,13 +8,17 @@ Last updated: 2026-09-10
 
 Implementation details and the nine-point device acceptance checklist are in `docs/INTERACTION_0.5.1.md`. The keep-alive path is deliberately best-effort: Android `START_STICKY`, task-removal scheduling, boot recovery and package-replacement recovery are implemented, but an OriginOS force-stop/autostart denial cannot be bypassed by a normal application.
 
-Current pre-commit gates:
+Release staging gates are complete:
 
-- debug job `task-floatclip_debug-0c8e4ab7639645c08caf` — **BUILD SUCCESSFUL** — Artifact `artifact-271d1a7c087d40ac8fd5cf6141b17a01`;
-- first lint pass `task-floatclip_lint-77eabed644064ab9b1fa` — **BUILD SUCCESSFUL**, 0 errors / 1 warning; the sole warning was the now-unused collapse-chevron drawable, which was then removed;
-- final lint rerun `task-floatclip_lint-13ad3c8ce2eb42fc808a` — **BUILD SUCCESSFUL**, `No issues found` — Artifact `artifact-722f6c35594c45a1a81d081c4170ebc7`.
+- final source commit `a3a9db0e02a8c767c8f0c39f4a70ab7cfc8874e2` is clean;
+- clean debug job `task-floatclip_debug-92a16e7d87a64586bc00` — **BUILD SUCCESSFUL** — Artifact `artifact-e3a49425c97c495187a8c3fd7dcdd611`;
+- clean lint job `task-floatclip_lint-b0fadcefa29c4b3d9242` — **BUILD SUCCESSFUL**, `No issues found` — Artifact `artifact-2110d6cc714c446fac0ee18e62f7e9c9`;
+- installable asset `dist/FloatClip-0.5.1-debug.apk` is `2,689,079` bytes with SHA-256 `a5bd45526903a15ebec12833fee68b49c0e6383af9e6659d1244057b11e8da58`;
+- package metadata is `com.floatclip.app`, `versionCode=6`, `versionName=0.5.1`, `minSdk=28`, `targetSdk=30`;
+- release signing certificate SHA-256 is `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`, exactly reusing the 0.5.0 persistent identity;
+- `apksigner` verifies APK Signature Scheme v3 with one signer, and `zipalign -c` passes.
 
-Final clean source commit, clean-build Artifact, stable 0.5.x signer verification, tag, GitHub Actions runs and public-release checksum are appended before this version is marked published.
+Because the 0.5.0 signer is preserved, 0.5.1 can overwrite-install 0.5.0 normally. GitHub tag/Actions/Release and public-download checksum evidence are appended after publication.
 
 ## 0.5.0 interaction/security release candidate
 

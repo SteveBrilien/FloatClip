@@ -7,7 +7,13 @@ Last updated: 2026-09-11
 Source version is 0.5.3 / code 8. See docs/INTERACTION_0.5.3.md for confirmed source defects, behaviour contracts and the manual device checklist.
 The 0.5.2 device feedback supersedes its earlier successful compile/lint assessment: pin hit-through, stuck swipe and category drag defects required a further repair.
 This pass restores single-copy/double-pin/long-options and uses a persistent bubble surface with guarded dismissal.
-Manual OriginOS visual acceptance is still pending; build and publication evidence follows below.
+Manual OriginOS visual acceptance is still pending.
+- Clean source: `41e1a05990eac23bfc26463d3c442aa9af0641de`.
+- Lint: `task-floatclip_lint-593e3ba7f59b420db8a2`, succeeded, No issues found.
+- Debug: `task-floatclip_debug-fedcc62da0ec4f3db689`, succeeded, clean source recorded.
+- APK: `dist/FloatClip-0.5.3-debug.apk`, 2,725,943 bytes; SHA-256 `3e84643eca4e630c18e0f6e5245859890174bf3921a0c1f204cd8d04eb6cd758`.
+- Persistent signer unchanged: `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`.
+- APK signature v3 and alignment verified. Publication is in progress.
 
 ## 0.5.2 gesture / close-transition / background-runtime candidate
 

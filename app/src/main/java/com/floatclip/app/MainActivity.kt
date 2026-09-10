@@ -16,7 +16,7 @@ import android.provider.Settings
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.os.PowerManager
-import com.floatclip.app.overlay.ui.SwipeRevealRow
+import com.floatclip.app.overlay.ui.EntryGestureRow
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -50,6 +50,8 @@ class MainActivity : Activity() {
     private lateinit var colors: AppColors
     private var searchQuery: String = ""
     private var currentPage: Int = PAGE_STATUS
+    private var categoryManagement = false
+    private var settingsSection = ""
     private var historyCategory: String = ALL_CATEGORY
 
     private val overlayServiceIntent by lazy(LazyThreadSafetyMode.NONE) {
@@ -65,12 +67,25 @@ class MainActivity : Activity() {
         vaultSettings = VaultSettings(this)
         vaultBackupManager = VaultBackupManager(this)
         currentPage = savedInstanceState?.getInt(STATE_PAGE, PAGE_STATUS) ?: PAGE_STATUS
+        settingsSection = savedInstanceState?.getString("settingsSection").orEmpty()
+        categoryManagement = savedInstanceState?.getBoolean("categoryManagement") ?: false
         render()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putInt(STATE_PAGE, currentPage)
+        outState.putString("settingsSection", settingsSection)
+        outState.putBoolean("categoryManagement", categoryManagement)
         super.onSaveInstanceState(outState)
+    }
+
+    @Deprecated("Fixed Android 11 navigation")
+    override fun onBackPressed() {
+        when {
+            currentPage == PAGE_SETTINGS && settingsSection.isNotEmpty() -> { settingsSection = ""; render() }
+            currentPage == PAGE_CLIPBOARD && categoryManagement -> { categoryManagement = false; render() }
+            else -> super.onBackPressed()
+        }
     }
 
     override fun onResume() {
@@ -128,7 +143,7 @@ class MainActivity : Activity() {
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
         )
         root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        root.addView(bottomNavigation(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60)))
+        root.addView(bottomNavigation(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
         setContentView(root)
 
         renderHeader()
@@ -140,72 +155,49 @@ class MainActivity : Activity() {
     }
 
     private fun renderHeader() {
-        content.addView(textView("FloatClip", 29f, true))
-        val pageName = when (currentPage) {
-            PAGE_CLIPBOARD -> "剪贴板"
-            PAGE_SETTINGS -> "设置"
-            else -> "运行状态"
+        val title = when (currentPage) {
+            PAGE_CLIPBOARD -> if (categoryManagement) "分类" else "剪贴板"
+            PAGE_SETTINGS -> settingsSection.ifEmpty { "设置" }
+            else -> "FloatClip"
         }
-        content.addView(textView("${versionName()} · OriginOS 悬浮剪贴板 · $pageName", 13f, false, colors.secondaryText))
+        content.addView(textView(title, 27f, true))
         spacer(18)
     }
 
     private fun renderStatusPage() {
-        renderPermissionGuide()
-        val romLock = IntegrationRegistry.romLockResult()
-        val bridgeReady = IntegrationRegistry.originOsSystemBridge.isAvailable()
-
-        addCard(
-            card().apply {
-                addView(textView("运行状态", 16f, true))
-                spacerInside(this, 8)
-                addView(statusRow("悬浮窗", if (Settings.canDrawOverlays(this@MainActivity)) "已授权" else "未授权"))
-                addView(divider())
-                addView(statusRow("一键粘贴", if (PasteAccessibilityService.isConnected()) "已连接" else "未启用"))
-                addView(divider())
-                addView(statusRow("OriginOS", if (bridgeReady) "ROM 已匹配" else "独立模式"))
-            },
-        )
-
+        val enabled = overlayPreferences.overlayEnabled()
+        addCard(card().apply {
+            addView(textView("悬浮剪贴板", 18f, true))
+            spacerInside(this, 6)
+            addView(textView(if (enabled) "已开启" else "已关闭", 13f, false, colors.secondaryText))
+            spacerInside(this, 16)
+            addView(actionButton(if (enabled) "关闭悬浮球" else "开启悬浮球", !enabled) {
+                if (enabled) stopOverlay() else startOverlay()
+                render()
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+        })
         spacer(12)
-        val runRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        runRow.addView(actionButton("启动悬浮剪贴板", true, ::startOverlay), LinearLayout.LayoutParams(0, dp(48), 1f))
-        runRow.addView(
-            actionButton("停止", false, ::stopOverlay),
-            LinearLayout.LayoutParams(dp(86), dp(48)).apply { marginStart = dp(10) },
-        )
-        content.addView(runRow)
-
-        sectionTitle("工作方式")
-        addCard(
-            card().apply {
-                addView(infoRow("普通模式", "点击面板外空白区域收回，不把这次触摸穿透到底层应用。"))
-                addView(divider())
-                addView(infoRow("固定模式", "面板保持展开，可继续操作底层应用并连续粘贴多个条目。"))
-                addView(divider())
-                addView(infoRow("贴边待机", "悬浮球吸附到最近屏幕边缘后会缓慢半隐藏，触摸后立即恢复交互。"))
-            },
-        )
-
-        sectionTitle("兼容状态")
-        addCard(
-            card().apply {
-                addView(
-                    settingRow(
-                        "OriginOS 兼容",
-                        if (bridgeReady) "FloatingBall ROM Lock 匹配，语义主题桥可用" else "${romLock?.state?.name ?: "UNINITIALIZED"} · 使用独立悬浮层",
-                        "详情",
-                    ) { showCompatibilityDetails(bridgeReady, romLock?.state?.name) },
-                )
-            },
-        )
+        addCard(card().apply {
+            addView(settingRow("权限与后台", "", "›") {
+                currentPage = PAGE_SETTINGS
+                settingsSection = "权限与后台"
+                render()
+            })
+            addView(divider())
+            addView(settingRow("使用帮助", "", "›", ::showUsageHelp))
+        })
     }
 
-    private fun renderClipboardPage() {
-        sectionTitle("分类", compactTop = true)
+    private fun showUsageHelp() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("使用帮助")
+            .setMessage("单击复制，双击置顶，长按更多。\n拖动标题移动面板，点击外侧收回。\n右上角图钉用于保持面板展开。")
+            .setPositiveButton("知道了", null).show()
+    }
+
+    private fun renderCategoryManager() {
+        content.addView(compactTextAction("‹ 剪贴板") { categoryManagement = false; render() })
+        spacer(12)
         val categoryCard = card()
         val categoryInput = EditText(this).apply {
             hint = "新分类"
@@ -217,7 +209,7 @@ class MainActivity : Activity() {
             setPadding(dp(13), 0, dp(13), 0)
         }
         val addCategory = actionButton("添加", false) {
-            if (categoryStore.add(categoryInput.text?.toString().orEmpty())) render()
+            if (categoryStore.add(categoryInput.text?.toString().orEmpty())) { notifyOverlayAppearanceChanged(); render() }
         }
         categoryCard.addView(
             LinearLayout(this).apply {
@@ -231,8 +223,6 @@ class MainActivity : Activity() {
         val categories = categoryStore.categories().filterNot { it == CategoryStore.DEFAULT_CATEGORY }
         if (categories.isNotEmpty()) {
             spacerInside(categoryCard, 8)
-            categoryCard.addView(textView("拖动右侧手柄排序 · 左滑删除分类", 11.5f, false, colors.secondaryText))
-            spacerInside(categoryCard, 7)
 
             val dragItems = categories.toMutableList()
             val dragList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -251,8 +241,9 @@ class MainActivity : Activity() {
                     contentDescription = "拖动 $category 排序"
                 }
                 row.addView(handle, LinearLayout.LayoutParams(dp(48), dp(48)))
-                val wrapper = SwipeRevealRow(this)
-                wrapper.bind(row, swipeDelete {
+                val wrapper = EntryGestureRow(this)
+                wrapper.bind(row)
+                wrapper.onLongPress = {
                     android.app.AlertDialog.Builder(this)
                         .setTitle("删除分类“$category”？")
                         .setMessage("词条会保留并移到未分类。")
@@ -263,7 +254,7 @@ class MainActivity : Activity() {
                             notifyOverlayAppearanceChanged()
                             render()
                         }.show()
-                }, dp(72))
+                }
                 wrapper.touchPassthrough = handle
                 dragList.addView(wrapper, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(6) })
                 installCategoryDrag(handle, wrapper, dragList, dragItems, category)
@@ -272,8 +263,12 @@ class MainActivity : Activity() {
         }
         addCard(categoryCard)
 
-        sectionTitle("历史")
-        content.addView(textView("单击复制 · 双击置顶 · 长按更多 · 左滑删除", 11.5f, false, colors.secondaryText))
+    }
+
+    private fun renderClipboardPage() {
+        if (categoryManagement) { renderCategoryManager(); return }
+        content.addView(compactTextAction("管理分类") { categoryManagement = true; render() })
+        spacer(12)
         content.addView(historyCategorySelector())
         spacer(9)
         val searchCard = card()
@@ -325,19 +320,19 @@ class MainActivity : Activity() {
         val overlay = Settings.canDrawOverlays(this)
         val battery = getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
         addCard(card().apply {
-            addView(textView("授权与后台运行", 16f, true))
-            spacerInside(this, 6)
-            addView(textView("系统“未请求权限”不包含以下特殊访问权限。按需要开启即可。", 12f, false, colors.secondaryText))
-            addView(settingRow("悬浮窗", "显示悬浮球和剪贴板面板", if (overlay) "已授权" else "去授权", ::openOverlayPermission))
+            addView(settingRow("悬浮窗", "", if (overlay) "已授权" else "去授权", ::openOverlayPermission))
             addView(divider())
-            addView(settingRow("无障碍（可选）", "提供更多菜单中的直接粘贴；未开启也能复制", if (PasteAccessibilityService.isConnected()) "已连接" else "去设置", ::openAccessibilitySettings))
+            addView(settingRow("无障碍", "可选，用于直接粘贴", if (PasteAccessibilityService.isConnected()) "已连接" else "设置", ::openAccessibilitySettings))
             addView(divider())
-            addView(settingRow("电池优化", "在系统列表中找到 FloatClip，按需选择不优化", if (battery) "已放宽" else "去设置") {
-                openSystemSettings(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            addView(settingRow("电池优化", "", if (battery) "已放宽" else "设置") {
+                android.app.AlertDialog.Builder(this@MainActivity)
+                    .setTitle("电池优化")
+                    .setMessage("在系统列表找到 FloatClip，选择不优化，可减少后台被暂停。")
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("去设置") { _, _ -> openSystemSettings(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }.show()
             })
             addView(divider())
-            addView(settingRow("OriginOS 后台与自启动", "到电量/后台耗电管理允许后台运行；自启动需在系统设置确认", "去设置", ::openAppDetailsSettings))
-            addView(textView("后台与自启动状态需手动确认。无障碍不等于后台剪贴板读取权限；强行停止后需重新打开应用。", 11.5f, false, colors.secondaryText))
+            addView(settingRow("后台与自启动", "系统中手动设置", "›", ::openAppDetailsSettings))
         })
         spacer(12)
     }
@@ -350,41 +345,48 @@ class MainActivity : Activity() {
     }
 
     private fun renderSettingsPage() {
-        renderPermissionGuide()
-        sectionTitle("启动与恢复", compactTop = true)
-        addCard(
-            card().apply {
-                val keepAlive = overlayPreferences.keepAliveEnabled()
-                addView(
-                    settingRow(
-                        "后台常驻",
-                        "任务清理后尝试恢复，并在重启/应用更新后恢复已启用的悬浮球",
-                        if (keepAlive) "已开启" else "已关闭",
-                    ) {
-                        overlayPreferences.saveKeepAliveEnabled(!keepAlive)
-                        if (overlayPreferences.overlayEnabled()) {
-                            startOverlayRuntime()
-                        }
-                        render()
-                    },
-                )
-            },
-        )
+        if (settingsSection.isNotEmpty()) {
+            content.addView(compactTextAction("‹ 设置") { settingsSection = ""; render() })
+            spacer(12)
+            when (settingsSection) {
+                "外观" -> renderAppearanceSettings()
+                "备份与恢复" -> renderBackupSettings()
+                else -> {
+                    renderPermissionGuide()
+                    addCard(card().apply {
+                        val keepAlive = overlayPreferences.keepAliveEnabled()
+                        addView(settingRow("自动恢复悬浮球", "", if (keepAlive) "已开启" else "已关闭") {
+                            overlayPreferences.saveKeepAliveEnabled(!keepAlive)
+                            render()
+                        })
+                        addView(divider())
+                        addView(settingRow("通知", "", "›", ::openNotificationSettings))
+                    })
+                }
+            }
+            return
+        }
+        addCard(card().apply { addView(themeSelector()) })
+        spacer(12)
+        addCard(card().apply {
+            listOf("外观", "权限与后台", "备份与恢复").forEachIndexed { index, title ->
+                if (index > 0) addView(divider())
+                addView(settingRow(title, "", "›") { settingsSection = title; render() })
+            }
+            addView(divider())
+            addView(settingRow("关于", "", "›") {
+                android.app.AlertDialog.Builder(this@MainActivity).setTitle("FloatClip ${versionName()}")
+                    .setMessage("Android 悬浮剪贴板")
+                    .setPositiveButton("关闭", null)
+                    .setNeutralButton("使用帮助") { _, _ -> showUsageHelp() }.show()
+            })
+        })
+    }
 
-        sectionTitle("主题")
-        addCard(
-            card().apply {
-                addView(textView("界面与悬浮剪贴板可跟随系统浅色 / 深色模式，也可以手动锁定。", 12f, false, colors.secondaryText))
-                spacerInside(this, 12)
-                addView(themeSelector())
-            },
-        )
-
+    private fun renderAppearanceSettings() {
         sectionTitle("悬浮球")
         addCard(
             card().apply {
-                addView(textView("拖动松手后采用缓动吸附；停靠片刻后按设定比例半隐藏。", 12f, false, colors.secondaryText))
-                spacerInside(this, 10)
                 addView(
                     sliderSetting(
                         "悬浮球大小",
@@ -430,8 +432,6 @@ class MainActivity : Activity() {
         sectionTitle("展开面板")
         addCard(
             card().apply {
-                addView(textView("面板支持自由拖动并记忆位置；外观调整在松开滑块后同步到正在运行的悬浮层。", 12f, false, colors.secondaryText))
-                spacerInside(this, 10)
                 addView(
                     sliderSetting(
                         "面板透明度",
@@ -473,27 +473,27 @@ class MainActivity : Activity() {
             },
         )
 
-        sectionTitle("数据安全与备份")
+    }
+
+    private fun renderBackupSettings() {
         addCard(
             card().apply {
-                addView(infoRow("本地加密", "剪贴板主数据使用 Android Keystore + AES-GCM 加密保存；升级应用不会丢失。"))
-                addView(divider())
                 addView(settingRow(
                     "6 位数字 PIN",
-                    if (vaultSettings.hasPin()) "已设置；用于便携备份和未来端到端同步" else "用于可迁移的加密备份；不会明文保存",
+                    if (vaultSettings.hasPin()) "已设置" else "",
                     if (vaultSettings.hasPin()) "修改" else "设置",
                     ::showSetPinDialog,
                 ))
                 addView(divider())
                 val backupTreeSelected = vaultSettings.backupTreeUri() != null
                 val backupDetail = when {
-                    !backupTreeSelected -> "选择共享目录后，卸载应用也不会删除备份文件"
-                    vaultSettings.backupWriteArmed() -> "已选择；FloatClip.vault 会在本地数据变化后自动加密更新"
-                    vaultSettings.hasPin() -> "已选择；当前为写保护，请先恢复已有备份或完成安全初始化"
-                    else -> "已选择；设置 6 位 PIN 后再初始化加密备份"
+                    !backupTreeSelected -> "未选择"
+                    vaultSettings.backupWriteArmed() -> "自动备份已开启"
+                    vaultSettings.hasPin() -> "写保护：请先恢复备份"
+                    else -> "请先设置 PIN"
                 }
                 addView(settingRow(
-                    "持久化备份目录",
+                    "备份目录",
                     backupDetail,
                     if (backupTreeSelected) "更改" else "选择",
                     ::chooseBackupDirectory,
@@ -501,45 +501,13 @@ class MainActivity : Activity() {
                 addView(divider())
                 addView(settingRow(
                     "从备份恢复",
-                    "重装后重新选择原目录并输入 PIN 即可恢复",
+                    "需要原目录和 PIN",
                     "恢复",
                     ::showRestorePinDialog,
                 ))
             },
         )
 
-        sectionTitle("端到端同步（预留）")
-        addCard(syncEndpointCard())
-
-        sectionTitle("后台运行")
-        addCard(
-            card().apply {
-                if (PasteAccessibilityService.isConnected()) {
-                    addView(infoRow("运行方式", "无障碍托管模式：一键粘贴服务由系统绑定，并同时托管悬浮层；FloatClip 自己不需要前台服务常驻通知。"))
-                    spacerInside(this, 8)
-                    addView(
-                        compactTextAction("打开无障碍设置") { openAccessibilitySettings() },
-                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38)),
-                    )
-                } else {
-                    addView(infoRow("运行方式", "标准前台服务模式：Android 要求显示常驻通知。启用一键粘贴后可切换到无障碍托管模式，并移除 FloatClip 的前台服务通知。"))
-                    spacerInside(this, 8)
-                    addView(
-                        LinearLayout(this@MainActivity).apply {
-                            orientation = LinearLayout.HORIZONTAL
-                            addView(
-                                compactTextAction("启用无障碍托管") { openAccessibilitySettings() },
-                                LinearLayout.LayoutParams(0, dp(38), 1f),
-                            )
-                            addView(
-                                compactTextAction("通知设置") { openNotificationSettings() },
-                                LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginStart = dp(7) },
-                            )
-                        },
-                    )
-                }
-            },
-        )
     }
 
     private fun themeSelector(): View {
@@ -713,52 +681,6 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
-    private fun syncEndpointCard(): View {
-        val root = card()
-        root.addView(textView("应用不内置任何同步域名。留空即关闭；未来同步只发送客户端加密后的 vault envelope，服务端不应接触明文。", 12f, false, colors.secondaryText))
-        spacerInside(root, 10)
-        val input = EditText(this).apply {
-            hint = "https://你的同步服务地址"
-            isSingleLine = true
-            textSize = 14f
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            setText(vaultSettings.syncEndpoint())
-            setSelection(text.length)
-            setTextColor(colors.primaryText)
-            setHintTextColor(colors.secondaryText)
-            background = roundedBackground(colors.fieldBackground, 13f)
-            setPadding(dp(13), 0, dp(13), 0)
-        }
-        root.addView(
-            LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                addView(input, LinearLayout.LayoutParams(0, dp(44), 1f))
-                addView(
-                    actionButton("保存", false) {
-                        val value = input.text?.toString().orEmpty().trim()
-                        if (!isValidSyncEndpoint(value)) {
-                            Toast.makeText(this@MainActivity, "仅允许 HTTPS 地址，且 URL 中不能包含账号密码", Toast.LENGTH_LONG).show()
-                        } else {
-                            vaultSettings.saveSyncEndpoint(value)
-                            Toast.makeText(this@MainActivity, if (value.isBlank()) "同步端点已清空" else "同步端点已保存到本机", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    LinearLayout.LayoutParams(dp(68), dp(44)).apply { marginStart = dp(8) },
-                )
-            },
-        )
-        spacerInside(root, 8)
-        root.addView(textView("当前版本仅完成端点配置和端到端加密格式，不会自动上传剪贴板。", 11.5f, false, colors.secondaryText))
-        return root
-    }
-
-    private fun isValidSyncEndpoint(value: String): Boolean {
-        if (value.isBlank()) return true
-        val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return false
-        return uri.scheme.equals("https", ignoreCase = true) && !uri.host.isNullOrBlank() && uri.userInfo.isNullOrBlank()
-    }
-
     private fun chooseBackupDirectory() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -886,28 +808,13 @@ class MainActivity : Activity() {
         searchQuery.isBlank() || entry.text.contains(searchQuery, ignoreCase = true) ||
             entry.category.contains(searchQuery, ignoreCase = true)
 
-    private fun swipeDelete(action: () -> Unit): View = TextView(this).apply {
-        text = "删除"
-        textSize = 14f
-        gravity = Gravity.CENTER
-        setTextColor(Color.WHITE)
-        background = roundedBackground(Color.rgb(210, 65, 75), 14f)
-        setOnClickListener { action() }
-    }
-
     private fun addHistoryCard(entry: ClipEntry) {
         val item = card()
         item.addView(textView(entry.text, 15f, false).apply { maxLines = 3 })
         spacerInside(item, 7)
         item.addView(textView("${entry.category}${if (entry.pinned) " · 已置顶" else ""}", 12f, false, colors.secondaryText))
-        val wrapper = SwipeRevealRow(this)
-        wrapper.bind(item, swipeDelete {
-            android.app.AlertDialog.Builder(this)
-                .setTitle("删除这条记录？")
-                .setNegativeButton("取消", null)
-                .setPositiveButton("删除") { _, _ -> clipStore.delete(entry.id); render() }
-                .show()
-        }, dp(72))
+        val wrapper = EntryGestureRow(this)
+        wrapper.bind(item)
         wrapper.onSingleTap = {
             getSystemService(android.content.ClipboardManager::class.java)
                 .setPrimaryClip(ClipData.newPlainText("FloatClip", entry.text))
@@ -917,9 +824,14 @@ class MainActivity : Activity() {
         wrapper.onLongPress = {
             android.app.AlertDialog.Builder(this)
                 .setTitle("词条选项")
-                .setItems(arrayOf("更改分类", if (entry.pinned) "取消置顶" else "置顶")) { _, which ->
-                    if (which == 0) showCategoryPicker(entry)
-                    else { clipStore.togglePinned(entry.id); render(); notifyOverlayAppearanceChanged() }
+                .setItems(arrayOf("更改分类", if (entry.pinned) "取消置顶" else "置顶", "删除")) { _, which ->
+                    when (which) {
+                        0 -> showCategoryPicker(entry)
+                        1 -> { clipStore.togglePinned(entry.id); render(); notifyOverlayAppearanceChanged() }
+                        else -> android.app.AlertDialog.Builder(this)
+                            .setTitle("删除这条记录？").setNegativeButton("取消", null)
+                            .setPositiveButton("删除") { _, _ -> clipStore.delete(entry.id); render(); notifyOverlayAppearanceChanged() }.show()
+                    }
                 }.show()
         }
         content.addView(wrapper, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
@@ -927,7 +839,7 @@ class MainActivity : Activity() {
 
     @android.annotation.SuppressLint("ClickableViewAccessibility")
     private fun installCategoryDrag(
-        handle: View, row: SwipeRevealRow, list: LinearLayout,
+        handle: View, row: EntryGestureRow, list: LinearLayout,
         items: MutableList<String>, category: String,
     ) {
         var downY = 0f
@@ -980,7 +892,7 @@ class MainActivity : Activity() {
             if (completing) return@setOnTouchListener true
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    row.close(false)
+                    row.cancelPendingGestures()
                     downY = event.rawY
                     latestRawY = downY
                     from = items.indexOf(category)
@@ -1063,9 +975,11 @@ class MainActivity : Activity() {
         val labels = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(textView(title, 15f, false))
-            addView(textView(subtitle, 12f, false, colors.secondaryText).apply { maxLines = 2 })
+            if (subtitle.isNotBlank()) addView(textView(subtitle, 12f, false, colors.secondaryText).apply { maxLines = 2 })
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(if (subtitle.isBlank()) 44 else 58)
         }
-        row.addView(labels, LinearLayout.LayoutParams(0, dp(58), 1f))
+        row.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         row.addView(compactTextAction(actionLabel, action), LinearLayout.LayoutParams(dp(68), dp(36)))
         return row
     }

@@ -8,6 +8,7 @@ import kotlin.math.abs
 
 class BorderDragFrameLayout(context: Context) : FrameLayout(context) {
     var interactionBlocked = false
+    var dragEnabled = true
     override fun dispatchTouchEvent(event: MotionEvent): Boolean =
         if (interactionBlocked) true else super.dispatchTouchEvent(event)
 
@@ -22,6 +23,7 @@ class BorderDragFrameLayout(context: Context) : FrameLayout(context) {
     private var dragMoved = false
 
     override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
+        if (!dragEnabled) return false
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
             dragging = isDragZone(event.x, event.y)
             if (dragging) {

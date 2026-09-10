@@ -2,6 +2,13 @@
 
 Last updated: 2026-09-11
 
+## 0.5.4 retained-window candidate
+
+User feedback reports 0.5.3 still jitters. See docs/INTERACTION_0.5.4.md.
+This revision removes panel open/close transforms and keeps the panel/catcher surfaces attached but transparent and non-touchable while closed.
+Long-press actions are one vertical column; category selection is a separate vertical list. App navigation removes duplicate status/help blocks and unused sync UI.
+Version 0.5.4 / code 9. Manual visual and touch-through acceptance remains pending.
+
 ## 0.5.3 interaction repair candidate
 
 Source version is 0.5.3 / code 8. See docs/INTERACTION_0.5.3.md for confirmed source defects, behaviour contracts and the manual device checklist.

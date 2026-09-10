@@ -4,6 +4,18 @@ All notable FloatClip development changes are recorded here.
 
 ## 2026-09-11
 
+### 0.5.4 retained windows and reduced UI
+- Replaced close-time window removal/cross-fade/scale with attached-window visibility and touchability switching.
+- Kept bubble dock coordinates unchanged on close; removed delayed post-close edge-hide and ignored sub-slop bubble MOVE events.
+- Switched long-press actions and category selection to scrollable vertical lists; disabled panel dragging while menus are open.
+- Removed swipe action machinery; deletion is available from long press.
+- Reduced Home to enable/disable and shortcuts; moved category management and settings groups into nested views.
+- Removed repeated permission/background explanations, daily gesture banners and the unused sync editor.
+- Added nested Back handling and saved navigation state. Preserved essential backup write-protection indicators.
+- Version 0.5.4 / code 9; device jitter acceptance remains pending.
+
+
+
 ### 0.5.3 touch routing, stable dismissal and simplified controls
 - Fixed covered swipe buttons receiving taps through translucent rows; action layers now clip to the revealed area and disappear when closed.
 - Restored single-tap copy, double-tap pin and platform long-press menus; removed swipe pin buttons.

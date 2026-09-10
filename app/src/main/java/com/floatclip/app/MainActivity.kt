@@ -13,7 +13,10 @@ import android.text.InputType
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
-import android.view.DragEvent
+import android.view.MotionEvent
+import android.view.ViewConfiguration
+import android.os.PowerManager
+import com.floatclip.app.overlay.ui.SwipeRevealRow
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -148,6 +151,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderStatusPage() {
+        renderPermissionGuide()
         val romLock = IntegrationRegistry.romLockResult()
         val bridgeReady = IntegrationRegistry.originOsSystemBridge.isAvailable()
 
@@ -227,121 +231,49 @@ class MainActivity : Activity() {
         val categories = categoryStore.categories().filterNot { it == CategoryStore.DEFAULT_CATEGORY }
         if (categories.isNotEmpty()) {
             spacerInside(categoryCard, 8)
-            categoryCard.addView(textView("按住右侧拖动柄拖拽排序；顺序会同步到悬浮面板", 11.5f, false, colors.secondaryText))
+            categoryCard.addView(textView("拖动右侧手柄排序 · 左滑删除分类", 11.5f, false, colors.secondaryText))
             spacerInside(categoryCard, 7)
 
             val dragItems = categories.toMutableList()
-            val dragList = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-            }
-
+            val dragList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             categories.forEach { category ->
-                lateinit var row: LinearLayout
-                row = LinearLayout(this).apply {
+                val row = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(dp(12), 0, dp(7), 0)
                     background = roundedBackground(colors.fieldBackground, 13f, true)
-                    addView(textView(category, 15f, false), LinearLayout.LayoutParams(0, dp(46), 1f))
-
-                    val delete = compactTextAction("删除") {
-                        clipStore.moveCategoryToDefault(category)
-                        categoryStore.delete(category)
-                        render()
-                    }
-                    addView(delete, LinearLayout.LayoutParams(dp(54), dp(34)).apply { marginEnd = dp(3) })
-
-                    val handle = ImageView(this@MainActivity).apply {
-                        setImageResource(R.drawable.ic_drag)
-                        imageTintList = ColorStateList.valueOf(colors.secondaryText)
-                        setPadding(dp(9), dp(9), dp(9), dp(9))
-                        contentDescription = "拖动 $category 排序"
-                        setOnClickListener { }
-                        setOnTouchListener { view, event ->
-                            when (event.actionMasked) {
-                                android.view.MotionEvent.ACTION_DOWN -> {
-                                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                                    val started = row.startDragAndDrop(
-                                        ClipData.newPlainText("FloatClip category", category),
-                                        View.DragShadowBuilder(row),
-                                        category,
-                                        0,
-                                    )
-                                    if (started) {
-                                        row.alpha = 0.56f
-                                        row.scaleX = 0.985f
-                                        row.scaleY = 0.985f
-                                    }
-                                    started
-                                }
-                                android.view.MotionEvent.ACTION_UP -> {
-                                    view.performClick()
-                                    true
-                                }
-                                else -> true
-                            }
-                        }
-                    }
-                    addView(handle, LinearLayout.LayoutParams(dp(42), dp(42)))
+                    addView(textView(category, 15f, false), LinearLayout.LayoutParams(0, dp(48), 1f))
                 }
-                dragList.addView(
-                    row,
-                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply {
-                        bottomMargin = dp(6)
-                    },
-                )
-            }
-
-            dragList.setOnDragListener { _, event ->
-                val category = event.localState as? String
-                if (category == null || category !in dragItems) return@setOnDragListener false
-                when (event.action) {
-                    DragEvent.ACTION_DRAG_STARTED -> true
-                    DragEvent.ACTION_DRAG_LOCATION -> {
-                        val from = dragItems.indexOf(category)
-                        if (from >= 0 && dragList.childCount > 0) {
-                            var target = dragList.childCount - 1
-                            for (i in 0 until dragList.childCount) {
-                                val child = dragList.getChildAt(i)
-                                if (event.y < child.top + child.height / 2f) {
-                                    target = i
-                                    break
-                                }
-                            }
-                            if (target != from) {
-                                val value = dragItems.removeAt(from)
-                                dragItems.add(target, value)
-                                val moved = dragList.getChildAt(from)
-                                dragList.removeViewAt(from)
-                                dragList.addView(moved, target)
-                                moved.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                            }
-                        }
-                        true
-                    }
-                    DragEvent.ACTION_DROP -> {
-                        categoryStore.replaceOrder(dragItems)
-                        true
-                    }
-                    DragEvent.ACTION_DRAG_ENDED -> {
-                        for (i in 0 until dragList.childCount) {
-                            dragList.getChildAt(i).animate()
-                                .alpha(1f)
-                                .scaleX(1f)
-                                .scaleY(1f)
-                                .setDuration(130L)
-                                .start()
-                        }
-                        true
-                    }
-                    else -> true
+                val handle = ImageView(this).apply {
+                    setImageResource(R.drawable.ic_drag)
+                    imageTintList = ColorStateList.valueOf(colors.secondaryText)
+                    setPadding(dp(10), dp(10), dp(10), dp(10))
+                    contentDescription = "拖动 $category 排序"
                 }
+                row.addView(handle, LinearLayout.LayoutParams(dp(48), dp(48)))
+                val wrapper = SwipeRevealRow(this)
+                wrapper.bind(row, swipeDelete {
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle("删除分类“$category”？")
+                        .setMessage("词条会保留并移到未分类。")
+                        .setNegativeButton("取消", null)
+                        .setPositiveButton("删除") { _, _ ->
+                            clipStore.moveCategoryToDefault(category)
+                            categoryStore.delete(category)
+                            notifyOverlayAppearanceChanged()
+                            render()
+                        }.show()
+                }, dp(72))
+                wrapper.touchPassthrough = handle
+                dragList.addView(wrapper, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(6) })
+                installCategoryDrag(handle, wrapper, dragList, dragItems, category)
             }
             categoryCard.addView(dragList)
         }
         addCard(categoryCard)
 
         sectionTitle("历史")
+        content.addView(textView("单击复制 · 双击置顶 · 长按更多 · 左滑删除", 11.5f, false, colors.secondaryText))
         content.addView(historyCategorySelector())
         spacer(9)
         val searchCard = card()
@@ -389,14 +321,39 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun renderPermissionGuide() {
+        val overlay = Settings.canDrawOverlays(this)
+        val battery = getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
+        addCard(card().apply {
+            addView(textView("授权与后台运行", 16f, true))
+            spacerInside(this, 6)
+            addView(textView("系统“未请求权限”不包含以下特殊访问权限。按需要开启即可。", 12f, false, colors.secondaryText))
+            addView(settingRow("悬浮窗", "显示悬浮球和剪贴板面板", if (overlay) "已授权" else "去授权", ::openOverlayPermission))
+            addView(divider())
+            addView(settingRow("无障碍（可选）", "提供更多菜单中的直接粘贴；未开启也能复制", if (PasteAccessibilityService.isConnected()) "已连接" else "去设置", ::openAccessibilitySettings))
+            addView(divider())
+            addView(settingRow("电池优化", "在系统列表中找到 FloatClip，按需选择不优化", if (battery) "已放宽" else "去设置") {
+                openSystemSettings(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            })
+            addView(divider())
+            addView(settingRow("OriginOS 后台与自启动", "到电量/后台耗电管理允许后台运行；自启动需在系统设置确认", "去设置", ::openAppDetailsSettings))
+            addView(textView("后台与自启动状态需手动确认。无障碍不等于后台剪贴板读取权限；强行停止后需重新打开应用。", 11.5f, false, colors.secondaryText))
+        })
+        spacer(12)
+    }
+
+    private fun openSystemSettings(intent: Intent) {
+        runCatching { startActivity(intent) }.onFailure {
+            runCatching { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
+                .onFailure { Toast.makeText(this, "请在系统设置中打开 FloatClip 应用详情", Toast.LENGTH_LONG).show() }
+        }
+    }
+
     private fun renderSettingsPage() {
-        sectionTitle("应用与权限", compactTop = true)
+        renderPermissionGuide()
+        sectionTitle("启动与恢复", compactTop = true)
         addCard(
             card().apply {
-                addView(settingRow("悬浮窗权限", "允许 FloatClip 显示在其他应用上层", if (Settings.canDrawOverlays(this@MainActivity)) "已授权" else "打开", ::openOverlayPermission))
-                addView(divider())
-                addView(settingRow("一键粘贴", "点击词条直接粘贴；启用后还可由系统无障碍服务托管悬浮层", if (PasteAccessibilityService.isConnected()) "已连接" else "设置", ::openAccessibilitySettings))
-                addView(divider())
                 val keepAlive = overlayPreferences.keepAliveEnabled()
                 addView(
                     settingRow(
@@ -411,8 +368,6 @@ class MainActivity : Activity() {
                         render()
                     },
                 )
-                addView(divider())
-                addView(settingRow("系统后台策略", "若 OriginOS 强制停止应用，需要在系统应用详情中放宽后台限制", "打开", ::openAppDetailsSettings))
             },
         )
 
@@ -931,44 +886,149 @@ class MainActivity : Activity() {
         searchQuery.isBlank() || entry.text.contains(searchQuery, ignoreCase = true) ||
             entry.category.contains(searchQuery, ignoreCase = true)
 
+    private fun swipeDelete(action: () -> Unit): View = TextView(this).apply {
+        text = "删除"
+        textSize = 14f
+        gravity = Gravity.CENTER
+        setTextColor(Color.WHITE)
+        background = roundedBackground(Color.rgb(210, 65, 75), 14f)
+        setOnClickListener { action() }
+    }
+
     private fun addHistoryCard(entry: ClipEntry) {
         val item = card()
-        item.addView(TextView(this).apply {
-            text = entry.text
-            maxLines = 3
-            textSize = 15f
-            setTextColor(colors.primaryText)
-        })
+        item.addView(textView(entry.text, 15f, false).apply { maxLines = 3 })
         spacerInside(item, 7)
-        item.addView(
-            LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                addView(
-                    textView("${entry.category}${if (entry.pinned) " · 已置顶" else ""}", 12f, false, colors.secondaryText),
-                    LinearLayout.LayoutParams(0, dp(36), 1f),
-                )
-                addView(
-                    compactTextAction("分类") { showCategoryPicker(entry) },
-                    LinearLayout.LayoutParams(dp(54), dp(34)).apply { marginEnd = dp(6) },
-                )
-                addView(
-                    compactTextAction(if (entry.pinned) "取消置顶" else "置顶") {
-                        clipStore.togglePinned(entry.id)
-                        render()
-                    },
-                    LinearLayout.LayoutParams(dp(72), dp(34)),
-                )
-                addView(
-                    compactTextAction("删除") {
-                        clipStore.delete(entry.id)
-                        render()
-                    },
-                    LinearLayout.LayoutParams(dp(54), dp(34)).apply { marginStart = dp(6) },
-                )
-            },
-        )
-        addCard(item, topMarginDp = 10)
+        item.addView(textView("${entry.category}${if (entry.pinned) " · 已置顶" else ""}", 12f, false, colors.secondaryText))
+        val wrapper = SwipeRevealRow(this)
+        wrapper.bind(item, swipeDelete {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("删除这条记录？")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("删除") { _, _ -> clipStore.delete(entry.id); render() }
+                .show()
+        }, dp(72))
+        wrapper.onSingleTap = {
+            getSystemService(android.content.ClipboardManager::class.java)
+                .setPrimaryClip(ClipData.newPlainText("FloatClip", entry.text))
+            Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
+        }
+        wrapper.onDoubleTap = { clipStore.togglePinned(entry.id); render(); notifyOverlayAppearanceChanged() }
+        wrapper.onLongPress = {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("词条选项")
+                .setItems(arrayOf("更改分类", if (entry.pinned) "取消置顶" else "置顶")) { _, which ->
+                    if (which == 0) showCategoryPicker(entry)
+                    else { clipStore.togglePinned(entry.id); render(); notifyOverlayAppearanceChanged() }
+                }.show()
+        }
+        content.addView(wrapper, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+    }
+
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    private fun installCategoryDrag(
+        handle: View, row: SwipeRevealRow, list: LinearLayout,
+        items: MutableList<String>, category: String,
+    ) {
+        var downY = 0f
+        var from = 0
+        var target = 0
+        var dragging = false
+        var completing = false
+        var scrollStart = 0
+        var scroll: ScrollView? = null
+        var latestRawY = 0f
+        val stride = dp(54).toFloat()
+        fun updatePosition() {
+            val dy = latestRawY - downY + ((scroll?.scrollY ?: 0) - scrollStart)
+            row.translationY = dy
+            target = (from + kotlin.math.round(dy / stride).toInt()).coerceIn(0, items.lastIndex)
+            for (i in 0 until list.childCount) {
+                val child = list.getChildAt(i)
+                if (child === row) continue
+                val offset = when {
+                    target > from && i in (from + 1)..target -> -stride
+                    target < from && i in target until from -> stride
+                    else -> 0f
+                }
+                if (child.tag != offset) {
+                    child.tag = offset
+                    child.animate().translationY(offset).setDuration(110L).start()
+                }
+            }
+        }
+        val autoScroll = object : Runnable {
+            override fun run() {
+                if (!dragging || !handle.isAttachedToWindow) return
+                scroll?.let {
+                    val pos = IntArray(2)
+                    it.getLocationOnScreen(pos)
+                    val delta = when {
+                        latestRawY < pos[1] + dp(64) -> -dp(7)
+                        latestRawY > pos[1] + it.height - dp(64) -> dp(7)
+                        else -> 0
+                    }
+                    if (delta != 0) { it.scrollBy(0, delta); updatePosition() }
+                }
+                handle.postOnAnimation(this)
+            }
+        }
+        handle.setOnClickListener {
+            Toast.makeText(this, "上下拖动手柄调整顺序", Toast.LENGTH_SHORT).show()
+        }
+        handle.setOnTouchListener { _, event ->
+            if (completing) return@setOnTouchListener true
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    row.close(false)
+                    downY = event.rawY
+                    latestRawY = downY
+                    from = items.indexOf(category)
+                    target = from
+                    dragging = false
+                    var ancestor = list.parent
+                    while (ancestor != null && ancestor !is ScrollView) ancestor = ancestor.parent
+                    scroll = ancestor as? ScrollView
+                    scrollStart = scroll?.scrollY ?: 0
+                    list.parent?.requestDisallowInterceptTouchEvent(true)
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    latestRawY = event.rawY
+                    if (!dragging && kotlin.math.abs(latestRawY - downY) > ViewConfiguration.get(this).scaledTouchSlop) {
+                        dragging = true
+                        row.elevation = dp(12).toFloat()
+                        row.scaleX = 1.025f
+                        row.scaleY = 1.025f
+                        handle.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        handle.postOnAnimation(autoScroll)
+                    }
+                    if (dragging) updatePosition()
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    completing = true
+                    handle.removeCallbacks(autoScroll)
+                    val commit = dragging && event.actionMasked == MotionEvent.ACTION_UP
+                    val views = (0 until list.childCount).map { list.getChildAt(it) }.toMutableList()
+                    if (commit && target != from) {
+                        views.add(target, views.removeAt(from))
+                        items.add(target, items.removeAt(from))
+                        categoryStore.replaceOrder(items)
+                        notifyOverlayAppearanceChanged()
+                        handle.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    }
+                    views.forEach { it.animate().cancel(); it.translationY = 0f; it.tag = null }
+                    list.removeAllViews()
+                    views.forEach { list.addView(it) }
+                    row.elevation = 0f
+                    row.animate().scaleX(1f).scaleY(1f).setDuration(140L).start()
+                    if (!dragging && event.actionMasked == MotionEvent.ACTION_UP) handle.performClick()
+                    dragging = false
+                    list.parent?.requestDisallowInterceptTouchEvent(false)
+                    completing = false
+                }
+            }
+            true
+        }
     }
 
     private fun showCompatibilityDetails(bridgeReady: Boolean, lockState: String?) {
@@ -1081,11 +1141,17 @@ class MainActivity : Activity() {
     }
 
     private fun openOverlayPermission() {
-        startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+        android.app.AlertDialog.Builder(this)
+            .setTitle("允许显示悬浮窗")
+            .setMessage("请在接下来的系统页面找到 FloatClip，开启“显示在其他应用上层”。返回后会重新检查授权状态。")
+            .setNegativeButton("暂不", null)
+            .setPositiveButton("去授权") { _, _ ->
+                openSystemSettings(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            }.show()
     }
 
     private fun openAccessibilitySettings() {
-        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        openSystemSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
     }
 
     private fun startOverlay() {
@@ -1109,7 +1175,7 @@ class MainActivity : Activity() {
     }
 
     private fun openAppDetailsSettings() {
-        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+        openSystemSettings(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
     }
 
     private fun notifyOverlayAppearanceChanged() {

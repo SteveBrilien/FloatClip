@@ -2,6 +2,18 @@
 
 All notable FloatClip development changes are recorded here.
 
+## 2026-09-11
+
+### 0.5.3 touch routing, stable dismissal and simplified controls
+- Fixed covered swipe buttons receiving taps through translucent rows; action layers now clip to the revealed area and disappear when closed.
+- Restored single-tap copy, double-tap pin and platform long-press menus; removed swipe pin buttons.
+- Added right-swipe/front-tap/other-row/idle closure and retained vertical list scrolling.
+- Reused the bubble surface during panel display, prevented close-time input/redraw, and removed close translation/scale changes.
+- Replaced category drag shadows and repeated reparenting with finger-following rows, animated gaps, edge scrolling, commit-on-release and cancellation rollback.
+- Moved in-app delete controls to swipe; added category/history deletion confirmation.
+- Added special-access status and settings guidance for overlay, optional accessibility, battery optimisation and manual OriginOS policies.
+- Version 0.5.3 / code 8. Device visual/gesture acceptance remains pending manual overwrite installation.
+
 ## 2026-09-10
 
 ### 0.5.1 visual continuity, dock persistence and keep-alive refinement

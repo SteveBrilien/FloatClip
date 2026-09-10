@@ -2,6 +2,13 @@
 
 Last updated: 2026-09-11
 
+## 0.5.3 interaction repair candidate
+
+Source version is 0.5.3 / code 8. See docs/INTERACTION_0.5.3.md for confirmed source defects, behaviour contracts and the manual device checklist.
+The 0.5.2 device feedback supersedes its earlier successful compile/lint assessment: pin hit-through, stuck swipe and category drag defects required a further repair.
+This pass restores single-copy/double-pin/long-options and uses a persistent bubble surface with guarded dismissal.
+Manual OriginOS visual acceptance is still pending; build and publication evidence follows below.
+
 ## 0.5.2 gesture / close-transition / background-runtime candidate
 
 0.5.2 addresses the September 11 device feedback on 0.5.1. The current implementation removes double-tap pinning, installs a pressure-independent 360 ms long press with haptic feedback, replaces the legacy PopupMenu with a palette-aware in-panel action sheet, changes custom-category ordering to drag handles, and rewrites panel dismissal so the destination bubble surface exists before the visible close animation begins.

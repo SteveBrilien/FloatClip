@@ -7,6 +7,10 @@ import android.widget.FrameLayout
 import kotlin.math.abs
 
 class BorderDragFrameLayout(context: Context) : FrameLayout(context) {
+    var interactionBlocked = false
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean =
+        if (interactionBlocked) true else super.dispatchTouchEvent(event)
+
     var borderDragPx: Int = 0
     var topDragHeightPx: Int = 0
     var topActionReservePx: Int = 0

@@ -153,7 +153,7 @@ class ClipboardOverlayService : Service() {
         } else if (bubbleView == null && panelView == null) {
             showBubble()
         }
-        return START_STICKY
+        return if (overlayPreferences.keepAliveEnabled()) START_STICKY else START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

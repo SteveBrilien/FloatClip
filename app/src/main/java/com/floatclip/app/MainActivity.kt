@@ -328,6 +328,9 @@ class MainActivity : Activity() {
                         if (keepAlive) "已开启" else "已关闭",
                     ) {
                         overlayPreferences.saveKeepAliveEnabled(!keepAlive)
+                        if (overlayPreferences.overlayEnabled()) {
+                            startForegroundService(overlayServiceIntent)
+                        }
                         render()
                     },
                 )

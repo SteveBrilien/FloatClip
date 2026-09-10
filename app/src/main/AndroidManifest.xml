@@ -7,6 +7,7 @@
     <uses-permission android:name="com.floatclip.app.permission.INTERNAL" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <queries>
         <package android:name="com.vivo.floatingball" />
@@ -30,6 +31,20 @@
         <service
             android:name=".overlay.ClipboardOverlayService"
             android:exported="false" />
+
+        <receiver
+            android:name=".overlay.OverlayRestartReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".overlay.OverlayBootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <service
             android:name=".accessibility.PasteAccessibilityService"

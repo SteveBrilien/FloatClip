@@ -19,12 +19,12 @@ class BubbleMotionController(
     context: Context,
     private val windowManager: WindowManager,
     private val screenSize: () -> Point,
+    private val sensitivityPercent: () -> Int,
     private val onSettled: (y: Int, onRight: Boolean) -> Unit,
 ) {
     private val density = context.resources.displayMetrics.density
-    private val scroller = OverScroller(context).apply {
-        setFriction(ViewConfiguration.getScrollFriction() * 0.42f)
-    }
+    private val baseScrollFriction = ViewConfiguration.getScrollFriction()
+    private val scroller = OverScroller(context)
     private var runningView: View? = null
     private var runningFrame: Runnable? = null
     private var generation = 0
@@ -39,11 +39,19 @@ class BubbleMotionController(
 
     fun release(view: View, params: WindowManager.LayoutParams, velocityX: Float, velocityY: Float) {
         cancel()
-        val speed = hypot(velocityX.toDouble(), velocityY.toDouble()).toFloat()
+        val sensitivity = sensitivityPercent().coerceIn(30, 120)
+        val velocityScale = sensitivity / 100f
+        val normalized = (sensitivity - 30f) / 90f
+        // Lower sensitivity should feel deliberately heavier: less launch velocity and more
+        // friction. Higher values retain more of the finger's throw without changing drag 1:1.
+        scroller.setFriction(baseScrollFriction * (1.25f - 0.65f * normalized))
+        val scaledX = velocityX * velocityScale
+        val scaledY = velocityY * velocityScale
+        val speed = hypot(scaledX.toDouble(), scaledY.toDouble()).toFloat()
         if (speed >= 180f * density) {
-            startFling(view, params, velocityX, velocityY)
+            startFling(view, params, scaledX, scaledY)
         } else {
-            startSpring(view, params, velocityX)
+            startSpring(view, params, scaledX)
         }
     }
 

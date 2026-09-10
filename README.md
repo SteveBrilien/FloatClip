@@ -2,7 +2,18 @@
 
 FloatClip is an Android 11 / vivo OriginOS-first floating clipboard utility focused on native-feeling overlay interaction, repeated paste workflows, local-first encrypted storage and fail-closed ROM-specific adaptation.
 
-Current source/release line: **0.5.0** (`versionCode=5`).
+Current source line: **0.5.1** (`versionCode=6`). The current published release is updated after the final clean-build/signing gate.
+
+## What 0.5.1 changes
+
+- The normal-mode outside-touch layer is now visually transparent instead of dimming app content; this removes the OriginOS status/navigation-bar brightness mismatch and the fast luminance flash when dismissing the panel.
+- Panel dismissal is lengthened to 380 ms with a low-amplitude scale/translation curve and a timed bubble cross-fade; fixed/unfixed mode no longer animates the whole panel/scrim.
+- The title is vertically centered and the redundant right-side collapse chevron is removed.
+- Bubble side/Y are persisted at finger release and again immediately before panel expansion, so interrupting a fling/spring cannot restore an older docking position after collapse.
+- Added a 30–120% motion-sensitivity control (default 65%). Lower values scale launch velocity down and increase fling friction while direct dragging remains 1:1.
+- Added best-effort keep-alive recovery for task removal, reboot and package replacement, while explicit Stop disables recovery. OriginOS force-stop/autostart policy can still override normal Android restart semantics.
+- System `uiMode` is now authoritative for light/dark selection; stale OEM semantic colors are rejected when their luminance conflicts with the current system mode, and OriginOS resources are re-resolved against the current configuration.
+- Category storage is ordered rather than set-based, with in-app up/down controls; the same order feeds the app selector and the floating panel category strip.
 
 ## What 0.5.0 includes
 
@@ -46,7 +57,7 @@ Runtime diagnostics use the log tag `FloatClipOriginOS`.
 
 Android 10+ limits background clipboard access for normal apps. FloatClip uses its Accessibility integration as the clipboard-observation path when available and does not make the overlay window focusable just to read the clipboard.
 
-The floating overlay runs as a foreground service. Android requires a foreground-service notification; 0.5.0 minimizes that notification instead of attempting to hide it by violating the foreground-service contract.
+The floating overlay runs as a foreground service. Android requires a foreground-service notification; FloatClip minimizes that notification instead of attempting to hide it by violating the foreground-service contract.
 
 The target device is intentionally fixed on Android 11, so `targetSdk = 30` remains deliberate for this deployment line.
 
@@ -72,11 +83,11 @@ Repository: `SteveBrilien/FloatClip`.
 
 Release download pattern:
 
-`https://github.com/SteveBrilien/FloatClip/releases/download/v0.5.0/FloatClip-0.5.0-debug.apk`
+`https://github.com/SteveBrilien/FloatClip/releases/download/v0.5.1/FloatClip-0.5.1-debug.apk`
 
 The exact release SHA-256 and source/build evidence are recorded in `docs/STATUS.md` and `dist/release.env`.
 
-## Device acceptance for 0.5.0
+## Device acceptance for 0.5.1
 
 After overwrite-installing the candidate on the target vivo, verify:
 

@@ -221,7 +221,11 @@ class MainActivity : Activity() {
         )
 
         val categories = categoryStore.categories().filterNot { it == CategoryStore.DEFAULT_CATEGORY }
-        if (categories.isNotEmpty()) spacerInside(categoryCard, 8)
+        if (categories.isNotEmpty()) {
+            spacerInside(categoryCard, 8)
+            categoryCard.addView(textView("使用 ↑ ↓ 调整分类在应用与悬浮面板中的顺序", 11.5f, false, colors.secondaryText))
+            spacerInside(categoryCard, 5)
+        }
         categories.forEachIndexed { index, category ->
             if (index > 0) categoryCard.addView(divider())
             categoryCard.addView(
@@ -229,13 +233,31 @@ class MainActivity : Activity() {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     addView(textView(category, 15f, false), LinearLayout.LayoutParams(0, dp(44), 1f))
+                    if (index > 0) {
+                        addView(
+                            compactTextAction("↑") {
+                                categoryStore.move(category, -1)
+                                render()
+                            },
+                            LinearLayout.LayoutParams(dp(36), dp(34)).apply { marginEnd = dp(5) },
+                        )
+                    }
+                    if (index < categories.lastIndex) {
+                        addView(
+                            compactTextAction("↓") {
+                                categoryStore.move(category, 1)
+                                render()
+                            },
+                            LinearLayout.LayoutParams(dp(36), dp(34)).apply { marginEnd = dp(5) },
+                        )
+                    }
                     addView(
                         compactTextAction("删除") {
                             clipStore.moveCategoryToDefault(category)
                             categoryStore.delete(category)
                             render()
                         },
-                        LinearLayout.LayoutParams(dp(54), dp(36)),
+                        LinearLayout.LayoutParams(dp(54), dp(34)),
                     )
                 },
             )
@@ -297,6 +319,20 @@ class MainActivity : Activity() {
                 addView(settingRow("悬浮窗权限", "允许 FloatClip 显示在其他应用上层", if (Settings.canDrawOverlays(this@MainActivity)) "已授权" else "打开", ::openOverlayPermission))
                 addView(divider())
                 addView(settingRow("一键粘贴", "点击剪贴板条目后直接写入当前输入框", if (PasteAccessibilityService.isConnected()) "已连接" else "设置", ::openAccessibilitySettings))
+                addView(divider())
+                val keepAlive = overlayPreferences.keepAliveEnabled()
+                addView(
+                    settingRow(
+                        "后台常驻",
+                        "任务清理后尝试恢复，并在重启/应用更新后恢复已启用的悬浮球",
+                        if (keepAlive) "已开启" else "已关闭",
+                    ) {
+                        overlayPreferences.saveKeepAliveEnabled(!keepAlive)
+                        render()
+                    },
+                )
+                addView(divider())
+                addView(settingRow("系统后台策略", "若 OriginOS 强制停止应用，需要在系统应用详情中放宽后台限制", "打开", ::openAppDetailsSettings))
             },
         )
 
@@ -332,6 +368,16 @@ class MainActivity : Activity() {
                         overlayPreferences.bubbleAlphaPercent(),
                         "%",
                     ) { overlayPreferences.saveBubbleAlphaPercent(it) },
+                )
+                addView(divider())
+                addView(
+                    sliderSetting(
+                        "滑动灵敏度",
+                        30,
+                        120,
+                        overlayPreferences.bubbleMotionSensitivityPercent(),
+                        "%",
+                    ) { overlayPreferences.saveBubbleMotionSensitivityPercent(it) },
                 )
                 addView(divider())
                 addView(
@@ -949,11 +995,17 @@ class MainActivity : Activity() {
             openOverlayPermission()
             return
         }
+        overlayPreferences.saveOverlayEnabled(true)
         startForegroundService(overlayServiceIntent)
     }
 
     private fun stopOverlay() {
+        overlayPreferences.saveOverlayEnabled(false)
         stopService(overlayServiceIntent)
+    }
+
+    private fun openAppDetailsSettings() {
+        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
     }
 
     private fun notifyOverlayAppearanceChanged() {
@@ -1018,8 +1070,8 @@ class MainActivity : Activity() {
 
     @Suppress("DEPRECATION")
     private fun versionName(): String = runCatching {
-        packageManager.getPackageInfo(packageName, 0).versionName ?: "0.5.0"
-    }.getOrDefault("0.5.0")
+        packageManager.getPackageInfo(packageName, 0).versionName ?: "0.5.1"
+    }.getOrDefault("0.5.1")
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
     private fun dp(value: Float): Int = (value * resources.displayMetrics.density).toInt()

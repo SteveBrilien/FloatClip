@@ -16,6 +16,12 @@ class OverlayPreferences(context: Context) {
     fun bubbleSizeDp(): Int = prefs.getInt(KEY_BUBBLE_SIZE_DP, DEFAULT_BUBBLE_SIZE_DP).coerceIn(42, 64)
     fun bubbleAlphaPercent(): Int = prefs.getInt(KEY_BUBBLE_ALPHA_PERCENT, DEFAULT_BUBBLE_ALPHA_PERCENT).coerceIn(35, 100)
     fun edgeHidePercent(): Int = prefs.getInt(KEY_EDGE_HIDE_PERCENT, DEFAULT_EDGE_HIDE_PERCENT).coerceIn(0, 55)
+    fun bubbleMotionSensitivityPercent(): Int = prefs.getInt(
+        KEY_BUBBLE_MOTION_SENSITIVITY_PERCENT,
+        DEFAULT_BUBBLE_MOTION_SENSITIVITY_PERCENT,
+    ).coerceIn(30, 120)
+    fun keepAliveEnabled(): Boolean = prefs.getBoolean(KEY_KEEP_ALIVE_ENABLED, true)
+    fun overlayEnabled(): Boolean = prefs.getBoolean(KEY_OVERLAY_ENABLED, false)
 
     fun panelAlphaPercent(): Int = prefs.getInt(KEY_PANEL_ALPHA_PERCENT, DEFAULT_PANEL_ALPHA_PERCENT).coerceIn(45, 100)
     fun panelWidthDp(): Int = prefs.getInt(KEY_PANEL_WIDTH_DP, DEFAULT_PANEL_WIDTH_DP).coerceIn(280, 420)
@@ -43,6 +49,18 @@ class OverlayPreferences(context: Context) {
         prefs.edit().putInt(KEY_EDGE_HIDE_PERCENT, value.coerceIn(0, 55)).apply()
     }
 
+    fun saveBubbleMotionSensitivityPercent(value: Int) {
+        prefs.edit().putInt(KEY_BUBBLE_MOTION_SENSITIVITY_PERCENT, value.coerceIn(30, 120)).apply()
+    }
+
+    fun saveKeepAliveEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_KEEP_ALIVE_ENABLED, value).apply()
+    }
+
+    fun saveOverlayEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_OVERLAY_ENABLED, value).apply()
+    }
+
     fun savePanelAlphaPercent(value: Int) {
         prefs.edit().putInt(KEY_PANEL_ALPHA_PERCENT, value.coerceIn(45, 100)).apply()
     }
@@ -68,6 +86,7 @@ class OverlayPreferences(context: Context) {
             .remove(KEY_BUBBLE_SIZE_DP)
             .remove(KEY_BUBBLE_ALPHA_PERCENT)
             .remove(KEY_EDGE_HIDE_PERCENT)
+            .remove(KEY_BUBBLE_MOTION_SENSITIVITY_PERCENT)
             .remove(KEY_PANEL_ALPHA_PERCENT)
             .remove(KEY_PANEL_WIDTH_DP)
             .remove(KEY_PANEL_HEIGHT_DP)
@@ -81,6 +100,7 @@ class OverlayPreferences(context: Context) {
         const val DEFAULT_BUBBLE_SIZE_DP = 50
         const val DEFAULT_BUBBLE_ALPHA_PERCENT = 76
         const val DEFAULT_EDGE_HIDE_PERCENT = 38
+        const val DEFAULT_BUBBLE_MOTION_SENSITIVITY_PERCENT = 65
         const val DEFAULT_PANEL_ALPHA_PERCENT = 88
         const val DEFAULT_PANEL_WIDTH_DP = 352
         const val DEFAULT_PANEL_HEIGHT_DP = 430
@@ -90,6 +110,9 @@ class OverlayPreferences(context: Context) {
         private const val KEY_BUBBLE_SIZE_DP = "bubble_size_dp"
         private const val KEY_BUBBLE_ALPHA_PERCENT = "bubble_alpha_percent"
         private const val KEY_EDGE_HIDE_PERCENT = "edge_hide_percent"
+        private const val KEY_BUBBLE_MOTION_SENSITIVITY_PERCENT = "bubble_motion_sensitivity_percent"
+        private const val KEY_KEEP_ALIVE_ENABLED = "keep_alive_enabled"
+        private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
         private const val KEY_PANEL_ALPHA_PERCENT = "panel_alpha_percent"
         private const val KEY_PANEL_WIDTH_DP = "panel_width_dp"
         private const val KEY_PANEL_HEIGHT_DP = "panel_height_dp"

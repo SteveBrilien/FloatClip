@@ -47,16 +47,23 @@ class AdaptiveOverlayThemeProvider(
         // the entire surface family to one luminance direction so white-on-white/black-on-black
         // combinations cannot occur.
         val panelBackground = if (mode == OverlayThemeMode.SYSTEM) {
-            system?.panelBackgroundArgb ?: fallback.panelBackground
+            system?.panelBackgroundArgb
+                ?.takeIf { isDarkColor(it) == requestedDark }
+                ?: fallback.panelBackground
         } else {
             fallback.panelBackground
         }
         val bubbleBackground = if (mode == OverlayThemeMode.SYSTEM) {
-            system?.bubbleBackgroundArgb ?: fallback.bubbleBackground
+            system?.bubbleBackgroundArgb
+                ?.takeIf { isDarkColor(it) == requestedDark }
+                ?: fallback.bubbleBackground
         } else {
             fallback.bubbleBackground
         }
-        val darkSurface = isDarkColor(panelBackground)
+        // Configuration.uiMode is authoritative. OEM semantic resources can lag one theme
+        // transition behind on this OriginOS build, so never infer the requested mode back from
+        // a potentially stale package color.
+        val darkSurface = requestedDark
         val rowBackground = if (darkSurface) {
             blend(panelBackground, Color.WHITE, 0.075f)
         } else {

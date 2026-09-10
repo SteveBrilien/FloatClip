@@ -180,20 +180,13 @@ class LockedOriginOsSystemBridge(context: Context) : OriginOsSystemBridge {
         }
     }
 
-    private val floatingBallResources: Resources? by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-        if (!lockResult.matched) return@lazy null
-        runCatching {
-            appContext.packageManager.getResourcesForApplication(OriginOsRomLock.FLOATING_BALL_PACKAGE)
-        }.getOrNull()
-    }
-
     override val protocolVersion: Int = OriginOsSystemBridge.PROTOCOL_VERSION
 
-    override fun isAvailable(): Boolean = lockResult.matched && floatingBallResources != null
+    override fun isAvailable(): Boolean = lockResult.matched && currentFloatingBallResources() != null
 
     override fun currentTheme(): OriginOsThemeSnapshot? {
         val lock = lockResult
-        val resources = floatingBallResources ?: return null
+        val resources = currentFloatingBallResources() ?: return null
         if (!lock.matched) return null
 
         val bubbleColor = resources.colorOrNull("floating_ball_circle_background_color")
@@ -226,6 +219,18 @@ class LockedOriginOsSystemBridge(context: Context) : OriginOsSystemBridge {
     }
 
     override fun registerClipboardObserver(observer: (CapturedClipboardItem) -> Unit): AutoCloseable? = null
+
+    private fun currentFloatingBallResources(): Resources? {
+        if (!lockResult.matched) return null
+        return runCatching {
+            // Resolve against FloatClip's current uiMode every time. Keeping a Resources instance
+            // forever can leave OEM night/day qualifiers one configuration behind.
+            appContext
+                .createPackageContext(OriginOsRomLock.FLOATING_BALL_PACKAGE, 0)
+                .createConfigurationContext(appContext.resources.configuration)
+                .resources
+        }.getOrNull()
+    }
 
     @SuppressLint("DiscouragedApi")
     @Suppress("DEPRECATION")

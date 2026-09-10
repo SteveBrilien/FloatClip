@@ -2,6 +2,22 @@
 
 All notable FloatClip development changes are recorded here.
 
+## 2026-09-10
+
+### 0.5.1 visual continuity, dock persistence and keep-alive refinement
+- Raised app version to `0.5.1` (`versionCode=6`).
+- Replaced the visible normal-mode dim scrim with a fully transparent outside-touch catcher so app content, status-bar and navigation regions no longer show different brightness while the panel is open; removing the catcher therefore cannot produce the previous luminance flash.
+- Lengthened panel dismissal to 380 ms, reduced close scale/translation amplitude and retimed the bubble cross-fade for a continuous handoff.
+- Centered the clipboard title vertically and removed the redundant right-side collapse chevron/resource.
+- Persisted floating-ball side/Y both at finger release and immediately before panel expansion, preventing an interrupted fling/spring from restoring an older docking position after collapse.
+- Added a 30–120% floating-ball motion sensitivity setting (default 65%); post-release velocity and friction now respond to this setting while direct dragging remains 1:1.
+- Added best-effort overlay keep-alive state plus task-removal restart scheduling and `BOOT_COMPLETED` / `MY_PACKAGE_REPLACED` recovery. Explicit Stop disables recovery.
+- Added an app-details shortcut for OriginOS background/autostart policy because OEM force-stop remains outside normal foreground-service restart guarantees.
+- Made system `uiMode` authoritative for overlay light/dark mode, reject stale OEM semantic colors that conflict with the current luminance direction, and re-resolve OriginOS package resources against the current configuration.
+- Migrated category persistence from unordered `StringSet` storage to an ordered JSON list and added in-app up/down ordering controls shared with the floating category strip.
+- Added `docs/INTERACTION_0.5.1.md` with the continuity/persistence model and device acceptance checklist.
+- Initial debug build `task-floatclip_debug-0c8e4ab7639645c08caf` completed successfully; final clean-commit build/lint and signed GitHub Release evidence are recorded after publication.
+
 ## 2026-09-09
 
 ### 0.5.0 physics, gestures, categories and encrypted vault

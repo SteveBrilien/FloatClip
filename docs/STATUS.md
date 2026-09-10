@@ -1,6 +1,20 @@
 # FloatClip development status
 
-Last updated: 2026-09-09
+Last updated: 2026-09-10
+
+## 0.5.1 device-feedback refinement
+
+0.5.1 addresses the September 9 late device screenshots/feedback without changing the encrypted-vault or sync security model. The implementation removes the visible outside dim layer, slows/softens panel dismissal, centers the title and removes the redundant chevron, persists the bubble's newest logical dock before expansion, adds adjustable motion sensitivity, adds best-effort service recovery, strengthens system-theme synchronization, and makes category order user-controlled.
+
+Implementation details and the nine-point device acceptance checklist are in `docs/INTERACTION_0.5.1.md`. The keep-alive path is deliberately best-effort: Android `START_STICKY`, task-removal scheduling, boot recovery and package-replacement recovery are implemented, but an OriginOS force-stop/autostart denial cannot be bypassed by a normal application.
+
+Current pre-commit gates:
+
+- debug job `task-floatclip_debug-0c8e4ab7639645c08caf` — **BUILD SUCCESSFUL** — Artifact `artifact-271d1a7c087d40ac8fd5cf6141b17a01`;
+- first lint pass `task-floatclip_lint-77eabed644064ab9b1fa` — **BUILD SUCCESSFUL**, 0 errors / 1 warning; the sole warning was the now-unused collapse-chevron drawable, which was then removed;
+- final lint rerun `task-floatclip_lint-13ad3c8ce2eb42fc808a` — **BUILD SUCCESSFUL**, `No issues found` — Artifact `artifact-722f6c35594c45a1a81d081c4170ebc7`.
+
+Final clean source commit, clean-build Artifact, stable 0.5.x signer verification, tag, GitHub Actions runs and public-release checksum are appended before this version is marked published.
 
 ## 0.5.0 interaction/security release candidate
 

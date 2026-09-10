@@ -2,7 +2,7 @@
 
 FloatClip is an Android 11 / vivo OriginOS-first floating clipboard utility focused on native-feeling overlay interaction, repeated paste workflows, local-first encrypted storage and fail-closed ROM-specific adaptation.
 
-Current source line: **0.5.2** (`versionCode=7`). The currently published release remains 0.5.1 until the final clean-build/signing/tag gate completes.
+Current source line: **0.5.2** (`versionCode=7`). The stable-signed 0.5.2 release asset has passed clean build/lint/signing gates and is being staged for publication.
 
 ## What 0.5.2 changes
 
@@ -97,7 +97,7 @@ Repository: `SteveBrilien/FloatClip`.
 
 Release download pattern:
 
-`https://github.com/SteveBrilien/FloatClip/releases/download/v0.5.1/FloatClip-0.5.1-debug.apk`
+`https://github.com/SteveBrilien/FloatClip/releases/download/v0.5.2/FloatClip-0.5.2-debug.apk`
 
 The exact release SHA-256 and source/build evidence are recorded in `docs/STATUS.md` and `dist/release.env`.
 

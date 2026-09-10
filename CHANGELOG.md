@@ -284,3 +284,15 @@ Files:
 - `docs/INTERACTION_0.5.2.md`
 - `docs/STATUS.md`
 - `README.md`
+
+## 2026-09-11 — RELEASE: Stage stable-signed FloatClip 0.5.2 release asset
+
+Final implementation source commit `892e9cad6c769d36e7c641ef978964b5f42b9b65` passed clean debug job `task-floatclip_debug-9e8d0f17963f490d8cd9` and clean lint job `task-floatclip_lint-befd3b29ee5e4b0faa96`; lint reports `No issues found`. Prepared `dist/FloatClip-0.5.2-debug.apk` at 2,709,559 bytes with SHA-256 `19b529c9a3da9cff45a4334646e1d1bffc75cdf6043427350f8ad2f0a16a8d45`. Verified package `com.floatclip.app` versionCode 7/versionName 0.5.2/minSdk 28/targetSdk 30, zip alignment, APK Signature Scheme v3 with one signer, and exact reuse of the 0.5.0/0.5.1 persistent signing certificate SHA-256 `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`. This preserves direct overwrite upgrade from 0.5.1.
+
+Files:
+- `dist/FloatClip-0.5.2-debug.apk`
+- `dist/FloatClip-0.5.2-debug.apk.sha256`
+- `dist/release.env`
+- `dist/README.md`
+- `docs/STATUS.md`
+- `README.md`

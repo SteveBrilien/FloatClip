@@ -15,7 +15,17 @@ Initial implementation gates before the final source-version/document pass:
 - debug job `task-floatclip_debug-9fb2a8a9e8de4dae9477` — **BUILD SUCCESSFUL** — Artifact `artifact-23dcb381df344e1eada94348f170d4f3`;
 - lint job `task-floatclip_lint-3d67628a4cab459b8a80` — **BUILD SUCCESSFUL**, `No Issues Found` — Artifact `artifact-b38da955a272489e80105555e4de51c3`.
 
-The source line is now `versionName=0.5.2` / `versionCode=7`. Final clean-commit debug/lint, persistent-signer verification and release publication evidence are appended after the final gate.
+The source line is now `versionName=0.5.2` / `versionCode=7`. The clean source and stable-signing gates are complete:
+
+- final implementation source commit `892e9cad6c769d36e7c641ef978964b5f42b9b65` is clean;
+- clean debug job `task-floatclip_debug-9e8d0f17963f490d8cd9` — **BUILD SUCCESSFUL** — Artifact `artifact-d780796b50254631b979c889c7a3245b`;
+- clean lint job `task-floatclip_lint-befd3b29ee5e4b0faa96` — **BUILD SUCCESSFUL**, `No issues found` — Artifact `artifact-bcf88d702c8d4a178b451dbf1b71a5da`;
+- installable asset `dist/FloatClip-0.5.2-debug.apk` is `2,709,559` bytes with SHA-256 `19b529c9a3da9cff45a4334646e1d1bffc75cdf6043427350f8ad2f0a16a8d45`;
+- package metadata is `com.floatclip.app`, `versionCode=7`, `versionName=0.5.2`, `minSdk=28`, `targetSdk=30`;
+- release signing certificate SHA-256 is `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`, reusing the 0.5.0/0.5.1 persistent identity;
+- `apksigner` verifies APK Signature Scheme v3 with one signer and `zipalign -c` passes.
+
+Because the signer is unchanged, 0.5.2 can overwrite-install 0.5.1 normally. GitHub publication evidence is appended after the tag workflow and public-asset round-trip verification complete.
 
 ## 0.5.1 device-feedback refinement
 

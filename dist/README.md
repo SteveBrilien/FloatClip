@@ -2,7 +2,7 @@
 
 This directory contains the preverified APK used for GitHub Releases.
 
-## Current release candidate: FloatClip 0.5.2
+## Current release: FloatClip 0.5.2
 
 - APK: `FloatClip-0.5.2-debug.apk`
 - SHA-256: `19b529c9a3da9cff45a4334646e1d1bffc75cdf6043427350f8ad2f0a16a8d45`

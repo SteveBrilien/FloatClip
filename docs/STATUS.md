@@ -25,7 +25,17 @@ The source line is now `versionName=0.5.2` / `versionCode=7`. The clean source a
 - release signing certificate SHA-256 is `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`, reusing the 0.5.0/0.5.1 persistent identity;
 - `apksigner` verifies APK Signature Scheme v3 with one signer and `zipalign -c` passes.
 
-Because the signer is unchanged, 0.5.2 can overwrite-install 0.5.1 normally. GitHub publication evidence is appended after the tag workflow and public-asset round-trip verification complete.
+Because the signer is unchanged, 0.5.2 can overwrite-install 0.5.1 normally. Publication is complete and independently verified:
+
+- release staging commit / annotated tag target: `8dead2250308b524c3777e69fc18eb7ee66a7b5e` / `v0.5.2`;
+- GitHub main workflow run `34510367812`: **success**;
+- GitHub tag/release workflow run `34510391315`: **success**;
+- public GitHub Release asset size: `2,709,559` bytes;
+- public asset SHA-256: `19b529c9a3da9cff45a4334646e1d1bffc75cdf6043427350f8ad2f0a16a8d45`;
+- public asset signing certificate SHA-256: `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`;
+- the public APK was downloaded back, verified as `versionCode=7` / `versionName=0.5.2`, and confirmed byte-identical to the local preverified release asset.
+
+Download: `https://github.com/SteveBrilien/FloatClip/releases/download/v0.5.2/FloatClip-0.5.2-debug.apk`.
 
 ## 0.5.1 device-feedback refinement
 

@@ -296,3 +296,13 @@ Files:
 - `dist/README.md`
 - `docs/STATUS.md`
 - `README.md`
+
+## 2026-09-11 — RELEASE: Publish and verify FloatClip 0.5.2 on GitHub
+
+Published annotated tag `v0.5.2` at release staging commit `8dead2250308b524c3777e69fc18eb7ee66a7b5e`. GitHub main workflow run `34510367812` and tag/release workflow run `34510391315` both completed successfully. The public release asset `FloatClip-0.5.2-debug.apk` is 2,709,559 bytes with SHA-256 `19b529c9a3da9cff45a4334646e1d1bffc75cdf6043427350f8ad2f0a16a8d45` and signing certificate SHA-256 `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`. The public APK was downloaded back and verified byte-identical to the locally staged release asset; package metadata is `com.floatclip.app` versionCode 7/versionName 0.5.2. The signer matches 0.5.0/0.5.1, preserving direct overwrite upgrades.
+
+Files:
+- `README.md`
+- `docs/STATUS.md`
+- `CHANGELOG.md`
+- `dist/README.md`

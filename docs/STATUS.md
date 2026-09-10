@@ -13,7 +13,11 @@ Manual OriginOS visual acceptance is still pending.
 - Debug: `task-floatclip_debug-fedcc62da0ec4f3db689`, succeeded, clean source recorded.
 - APK: `dist/FloatClip-0.5.3-debug.apk`, 2,725,943 bytes; SHA-256 `3e84643eca4e630c18e0f6e5245859890174bf3921a0c1f204cd8d04eb6cd758`.
 - Persistent signer unchanged: `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`.
-- APK signature v3 and alignment verified. Publication is in progress.
+- APK signature v3 and alignment verified.
+- Published tag `v0.5.3` targets staging commit `7f171322efd3703c237ccf329dc0dd3198b46d53`; GitHub release workflow `34514844972` succeeded.
+- Public APK was downloaded again and matched the local SHA-256, signer, versionCode 8 and versionName 0.5.3.
+- Download: https://github.com/SteveBrilien/FloatClip/releases/download/v0.5.3/FloatClip-0.5.3-debug.apk
+- Device acceptance remains pending; no ADB installation or visual verification is claimed.
 
 ## 0.5.2 gesture / close-transition / background-runtime candidate
 

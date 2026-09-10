@@ -1,6 +1,7 @@
 package com.floatclip.app
 
 import android.app.Activity
+import android.content.ClipData
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
@@ -12,11 +13,14 @@ import android.text.InputType
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.view.DragEvent
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
@@ -223,44 +227,117 @@ class MainActivity : Activity() {
         val categories = categoryStore.categories().filterNot { it == CategoryStore.DEFAULT_CATEGORY }
         if (categories.isNotEmpty()) {
             spacerInside(categoryCard, 8)
-            categoryCard.addView(textView("使用 ↑ ↓ 调整分类在应用与悬浮面板中的顺序", 11.5f, false, colors.secondaryText))
-            spacerInside(categoryCard, 5)
-        }
-        categories.forEachIndexed { index, category ->
-            if (index > 0) categoryCard.addView(divider())
-            categoryCard.addView(
-                LinearLayout(this).apply {
+            categoryCard.addView(textView("按住右侧拖动柄拖拽排序；顺序会同步到悬浮面板", 11.5f, false, colors.secondaryText))
+            spacerInside(categoryCard, 7)
+
+            val dragItems = categories.toMutableList()
+            val dragList = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+            }
+
+            categories.forEach { category ->
+                lateinit var row: LinearLayout
+                row = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    addView(textView(category, 15f, false), LinearLayout.LayoutParams(0, dp(44), 1f))
-                    if (index > 0) {
-                        addView(
-                            compactTextAction("↑") {
-                                categoryStore.move(category, -1)
-                                render()
-                            },
-                            LinearLayout.LayoutParams(dp(36), dp(34)).apply { marginEnd = dp(5) },
-                        )
+                    setPadding(dp(12), 0, dp(7), 0)
+                    background = roundedBackground(colors.fieldBackground, 13f, true)
+                    addView(textView(category, 15f, false), LinearLayout.LayoutParams(0, dp(46), 1f))
+
+                    val delete = compactTextAction("删除") {
+                        clipStore.moveCategoryToDefault(category)
+                        categoryStore.delete(category)
+                        render()
                     }
-                    if (index < categories.lastIndex) {
-                        addView(
-                            compactTextAction("↓") {
-                                categoryStore.move(category, 1)
-                                render()
-                            },
-                            LinearLayout.LayoutParams(dp(36), dp(34)).apply { marginEnd = dp(5) },
-                        )
+                    addView(delete, LinearLayout.LayoutParams(dp(54), dp(34)).apply { marginEnd = dp(3) })
+
+                    val handle = ImageView(this@MainActivity).apply {
+                        setImageResource(R.drawable.ic_drag)
+                        imageTintList = ColorStateList.valueOf(colors.secondaryText)
+                        setPadding(dp(9), dp(9), dp(9), dp(9))
+                        contentDescription = "拖动 $category 排序"
+                        setOnClickListener { }
+                        setOnTouchListener { view, event ->
+                            when (event.actionMasked) {
+                                android.view.MotionEvent.ACTION_DOWN -> {
+                                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                    val started = row.startDragAndDrop(
+                                        ClipData.newPlainText("FloatClip category", category),
+                                        View.DragShadowBuilder(row),
+                                        category,
+                                        0,
+                                    )
+                                    if (started) {
+                                        row.alpha = 0.56f
+                                        row.scaleX = 0.985f
+                                        row.scaleY = 0.985f
+                                    }
+                                    started
+                                }
+                                android.view.MotionEvent.ACTION_UP -> {
+                                    view.performClick()
+                                    true
+                                }
+                                else -> true
+                            }
+                        }
                     }
-                    addView(
-                        compactTextAction("删除") {
-                            clipStore.moveCategoryToDefault(category)
-                            categoryStore.delete(category)
-                            render()
-                        },
-                        LinearLayout.LayoutParams(dp(54), dp(34)),
-                    )
-                },
-            )
+                    addView(handle, LinearLayout.LayoutParams(dp(42), dp(42)))
+                }
+                dragList.addView(
+                    row,
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply {
+                        bottomMargin = dp(6)
+                    },
+                )
+            }
+
+            dragList.setOnDragListener { _, event ->
+                val category = event.localState as? String
+                if (category == null || category !in dragItems) return@setOnDragListener false
+                when (event.action) {
+                    DragEvent.ACTION_DRAG_STARTED -> true
+                    DragEvent.ACTION_DRAG_LOCATION -> {
+                        val from = dragItems.indexOf(category)
+                        if (from >= 0 && dragList.childCount > 0) {
+                            var target = dragList.childCount - 1
+                            for (i in 0 until dragList.childCount) {
+                                val child = dragList.getChildAt(i)
+                                if (event.y < child.top + child.height / 2f) {
+                                    target = i
+                                    break
+                                }
+                            }
+                            if (target != from) {
+                                val value = dragItems.removeAt(from)
+                                dragItems.add(target, value)
+                                val moved = dragList.getChildAt(from)
+                                dragList.removeViewAt(from)
+                                dragList.addView(moved, target)
+                                moved.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                            }
+                        }
+                        true
+                    }
+                    DragEvent.ACTION_DROP -> {
+                        categoryStore.replaceOrder(dragItems)
+                        true
+                    }
+                    DragEvent.ACTION_DRAG_ENDED -> {
+                        for (i in 0 until dragList.childCount) {
+                            dragList.getChildAt(i).animate()
+                                .alpha(1f)
+                                .scaleX(1f)
+                                .scaleY(1f)
+                                .setDuration(130L)
+                                .start()
+                        }
+                        true
+                    }
+                    else -> true
+                }
+            }
+            categoryCard.addView(dragList)
         }
         addCard(categoryCard)
 
@@ -318,7 +395,7 @@ class MainActivity : Activity() {
             card().apply {
                 addView(settingRow("悬浮窗权限", "允许 FloatClip 显示在其他应用上层", if (Settings.canDrawOverlays(this@MainActivity)) "已授权" else "打开", ::openOverlayPermission))
                 addView(divider())
-                addView(settingRow("一键粘贴", "点击剪贴板条目后直接写入当前输入框", if (PasteAccessibilityService.isConnected()) "已连接" else "设置", ::openAccessibilitySettings))
+                addView(settingRow("一键粘贴", "点击词条直接粘贴；启用后还可由系统无障碍服务托管悬浮层", if (PasteAccessibilityService.isConnected()) "已连接" else "设置", ::openAccessibilitySettings))
                 addView(divider())
                 val keepAlive = overlayPreferences.keepAliveEnabled()
                 addView(
@@ -329,7 +406,7 @@ class MainActivity : Activity() {
                     ) {
                         overlayPreferences.saveKeepAliveEnabled(!keepAlive)
                         if (overlayPreferences.overlayEnabled()) {
-                            startForegroundService(overlayServiceIntent)
+                            startOverlayRuntime()
                         }
                         render()
                     },
@@ -482,12 +559,30 @@ class MainActivity : Activity() {
         sectionTitle("后台运行")
         addCard(
             card().apply {
-                addView(infoRow("常驻通知", "Android 前台服务必须保留系统通知。当前已降为最低重要级、静默、无角标；完全隐藏会降低后台稳定性。"))
-                spacerInside(this, 8)
-                addView(
-                    compactTextAction("打开系统通知设置") { openNotificationSettings() },
-                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38)),
-                )
+                if (PasteAccessibilityService.isConnected()) {
+                    addView(infoRow("运行方式", "无障碍托管模式：一键粘贴服务由系统绑定，并同时托管悬浮层；FloatClip 自己不需要前台服务常驻通知。"))
+                    spacerInside(this, 8)
+                    addView(
+                        compactTextAction("打开无障碍设置") { openAccessibilitySettings() },
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38)),
+                    )
+                } else {
+                    addView(infoRow("运行方式", "标准前台服务模式：Android 要求显示常驻通知。启用一键粘贴后可切换到无障碍托管模式，并移除 FloatClip 的前台服务通知。"))
+                    spacerInside(this, 8)
+                    addView(
+                        LinearLayout(this@MainActivity).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            addView(
+                                compactTextAction("启用无障碍托管") { openAccessibilitySettings() },
+                                LinearLayout.LayoutParams(0, dp(38), 1f),
+                            )
+                            addView(
+                                compactTextAction("通知设置") { openNotificationSettings() },
+                                LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginStart = dp(7) },
+                            )
+                        },
+                    )
+                }
             },
         )
     }
@@ -999,11 +1094,17 @@ class MainActivity : Activity() {
             return
         }
         overlayPreferences.saveOverlayEnabled(true)
+        startOverlayRuntime()
+    }
+
+    private fun startOverlayRuntime() {
+        if (PasteAccessibilityService.ensureOverlayHosted()) return
         startForegroundService(overlayServiceIntent)
     }
 
     private fun stopOverlay() {
         overlayPreferences.saveOverlayEnabled(false)
+        PasteAccessibilityService.releaseOverlayHosted()
         stopService(overlayServiceIntent)
     }
 

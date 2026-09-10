@@ -54,6 +54,16 @@ class CategoryStore(context: Context) {
         return true
     }
 
+    fun replaceOrder(names: List<String>): Boolean {
+        val clean = names.map { it.trim().take(MAX_LENGTH) }
+            .filter { it.isNotEmpty() && it != DEFAULT_CATEGORY }
+            .distinct()
+        val current = categories().filterNot { it == DEFAULT_CATEGORY }
+        if (clean == current || clean.toSet() != current.toSet()) return false
+        persist(clean)
+        return true
+    }
+
     private fun readOrdered(): List<String>? {
         val raw = prefs.getString(KEY_ORDERED_CATEGORIES, null) ?: return null
         return runCatching {

@@ -2,7 +2,19 @@
 
 FloatClip is an Android 11 / vivo OriginOS-first floating clipboard utility focused on native-feeling overlay interaction, repeated paste workflows, local-first encrypted storage and fail-closed ROM-specific adaptation.
 
-Current source line: **0.5.1** (`versionCode=6`). The current published release is updated after the final clean-build/signing gate.
+Current source line: **0.5.2** (`versionCode=7`). The currently published release remains 0.5.1 until the final clean-build/signing/tag gate completes.
+
+## What 0.5.2 changes
+
+- Replaces the close-time delayed bubble insertion with one pre-created hidden destination bubble and a single 420 ms panel-to-bubble animator, avoiding a WindowManager surface insertion in the middle of the visible transition.
+- Removes double-tap-to-pin. Single tap has one meaning only (paste/copy), left swipe retains pin/delete, and long press opens extended actions.
+- Replaces the platform PopupMenu with an in-panel action sheet that follows the active FloatClip/OriginOS light/dark palette and exposes copy, pin/unpin, delete and category assignment.
+- Uses a 360 ms pressure-independent long-press recognizer with expanded motion tolerance and haptic confirmation so a normal light hold is reliable.
+- Replaces category up/down buttons with drag-handle ordering using Android's platform drag-and-drop API; the stored order is shared with the floating category strip.
+- Adds an accessibility-hosted overlay runtime: when one-key paste is enabled, the system-managed AccessibilityService binds and hosts the overlay runtime, allowing FloatClip to leave foreground-service state and remove its own persistent FGS notification.
+- Retains the foreground-service runtime as a fallback when Accessibility is disabled. Explicit Android/OriginOS Force stop still cannot be self-bypassed by an ordinary app.
+
+See `docs/INTERACTION_0.5.2.md` for the gesture/runtime model, prior-art review and device acceptance checklist.
 
 ## What 0.5.1 changes
 
@@ -57,7 +69,9 @@ Runtime diagnostics use the log tag `FloatClipOriginOS`.
 
 Android 10+ limits background clipboard access for normal apps. FloatClip uses its Accessibility integration as the clipboard-observation path when available and does not make the overlay window focusable just to read the clipboard.
 
-The floating overlay runs as a foreground service. Android requires a foreground-service notification; FloatClip minimizes that notification instead of attempting to hide it by violating the foreground-service contract.
+FloatClip now has two runtime paths. With one-key-paste Accessibility enabled, the system-managed AccessibilityService binds the overlay runtime and FloatClip can leave foreground-service state, so its own persistent FGS notification is removed. Without Accessibility, the overlay uses the standard foreground-service fallback and Android requires its notification.
+
+An explicit Force stop puts the package into Android's stopped state; neither runtime path is intended to bypass that user/system action. OriginOS autostart/background-power policy can also remain stricter than AOSP, so background survival is treated as best-effort rather than guaranteed.
 
 The target device is intentionally fixed on Android 11, so `targetSdk = 30` remains deliberate for this deployment line.
 
@@ -87,27 +101,14 @@ Release download pattern:
 
 The exact release SHA-256 and source/build evidence are recorded in `docs/STATUS.md` and `dist/release.env`.
 
-## Device acceptance for 0.5.1
+## Device acceptance for 0.5.2
 
-After overwrite-installing the candidate on the target vivo, verify:
-
-1. slow and fast floating-ball releases have visibly different inertia/travel;
-2. the ball does not feel strongly magnetized from the middle of the display;
-3. vertical release velocity naturally influences the final resting Y position;
-4. half-hide contains no jump or discontinuity;
-5. panel open/close has no blank-frame flash;
-6. repeated fixed/unfixed toggles cause no flash or position reset;
-7. opening FloatClip over an active input field does not force the keyboard closed;
-8. border/header empty areas can drag the panel without fighting row gestures;
-9. single/double/long-press/left-swipe interactions remain distinguishable during normal scrolling;
-10. category filters and manual category assignment work in both the app page and floating panel;
-11. normal-mode outside tap collapses without touching the underlying app;
-12. fixed mode allows repeated paste while the underlying app remains interactive;
-13. exact supported OriginOS build still reports ROM lock `MATCHED`.
+After overwrite-installing the candidate on the target vivo, verify the ten checks in `docs/INTERACTION_0.5.2.md`, especially: continuous close motion with no twitch, single tap never pinning, reliable light long-press, themed action sheet, drag-to-reorder categories, notification-free accessibility-hosted runtime, and foreground-service fallback when Accessibility is disabled. Explicit Force stop remains an expected hard stop.
 
 ## Project documentation
 
 - `docs/STATUS.md` — current continuation point, build/release evidence and device acceptance state.
+- `docs/INTERACTION_0.5.2.md` — current gesture, close-transition, background-runtime and prior-art decisions.
 - `docs/INTERACTION_0.5.0.md` — 0.5.0 motion, transition and gesture model.
 - `SECURITY.md` — local vault, portable backup, sync and signing security model.
 - `docs/ARCHITECTURE.md` — standalone and enhanced-integration architecture.

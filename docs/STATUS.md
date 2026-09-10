@@ -2,6 +2,21 @@
 
 Last updated: 2026-09-11
 
+## 0.5.2 gesture / close-transition / background-runtime candidate
+
+0.5.2 addresses the September 11 device feedback on 0.5.1. The current implementation removes double-tap pinning, installs a pressure-independent 360 ms long press with haptic feedback, replaces the legacy PopupMenu with a palette-aware in-panel action sheet, changes custom-category ordering to drag handles, and rewrites panel dismissal so the destination bubble surface exists before the visible close animation begins.
+
+The runtime model is also split. With the existing one-key-paste AccessibilityService enabled, the system-managed accessibility component binds and hosts the overlay runtime, allowing FloatClip to leave foreground-service state and remove its own persistent foreground-service notification. Without Accessibility, FloatClip keeps the normal foreground-service fallback and its Android-required notification. Explicit Force stop remains an intentional hard stop and cannot be self-bypassed by an ordinary package. OriginOS autostart/background-power policy remains an OEM best-effort constraint.
+
+Prior art and the resulting design decisions are documented in `docs/INTERACTION_0.5.2.md`. The review included Android foreground/bound-service and AccessibilityService lifecycle documentation, common SYSTEM_ALERT_WINDOW + foreground-service overlay projects, accessibility-overlay projects, modern clipboard managers using IME/Accessibility/Shizuku combinations, and vivo vendor/system push. Vendor push explains how messaging notifications can arrive with an app process offline; it does not keep arbitrary third-party floating UI continuously resident.
+
+Initial implementation gates before the final source-version/document pass:
+
+- debug job `task-floatclip_debug-9fb2a8a9e8de4dae9477` — **BUILD SUCCESSFUL** — Artifact `artifact-23dcb381df344e1eada94348f170d4f3`;
+- lint job `task-floatclip_lint-3d67628a4cab459b8a80` — **BUILD SUCCESSFUL**, `No Issues Found` — Artifact `artifact-b38da955a272489e80105555e4de51c3`.
+
+The source line is now `versionName=0.5.2` / `versionCode=7`. Final clean-commit debug/lint, persistent-signer verification and release publication evidence are appended after the final gate.
+
 ## 0.5.1 device-feedback refinement
 
 0.5.1 addresses the September 9 late device screenshots/feedback without changing the encrypted-vault or sync security model. The implementation removes the visible outside dim layer, slows/softens panel dismissal, centers the title and removes the redundant chevron, persists the bubble's newest logical dock before expansion, adds adjustable motion sensitivity, adds best-effort service recovery, strengthens system-theme synchronization, and makes category order user-controlled.

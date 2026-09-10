@@ -267,3 +267,20 @@ Files:
 - `dist/release.env`
 - `dist/FloatClip-0.5.1-debug.apk`
 - `dist/FloatClip-0.5.1-debug.apk.sha256`
+
+## 2026-09-10T17:19:45.352278Z — UPDATE: Prepare FloatClip 0.5.2 interaction and background-runtime refinement
+
+Raised source version to 0.5.2 (versionCode 7). Replaced the delayed close-time bubble insertion with one pre-created hidden destination bubble driven by the same 420 ms transition as the panel, removed double-tap pinning, added a pressure-independent 360 ms long press with haptic confirmation, replaced the legacy PopupMenu with an in-panel palette-aware action sheet, and replaced category up/down controls with drag-handle ordering. Added a dual runtime strategy: when the existing one-key-paste AccessibilityService is enabled it binds and hosts the overlay runtime so FloatClip can leave foreground-service state and remove its own FGS notification; without Accessibility the standard foreground-service path remains as fallback. Explicit Force stop remains a hard stop. Initial implementation debug job task-floatclip_debug-9fb2a8a9e8de4dae9477 and lint job task-floatclip_lint-3d67628a4cab459b8a80 both succeeded; lint reported No Issues Found. Prior-art review and acceptance checks are recorded in docs/INTERACTION_0.5.2.md.
+
+Files:
+- `app/build.gradle.kts`
+- `app/src/main/java/com/floatclip/app/MainActivity.kt`
+- `app/src/main/java/com/floatclip/app/accessibility/PasteAccessibilityService.kt`
+- `app/src/main/java/com/floatclip/app/overlay/ClipboardOverlayService.kt`
+- `app/src/main/java/com/floatclip/app/overlay/OverlayKeepAliveReceiver.kt`
+- `app/src/main/java/com/floatclip/app/overlay/ui/SwipeRevealRow.kt`
+- `app/src/main/java/com/floatclip/app/prefs/CategoryStore.kt`
+- `app/src/main/res/values/strings.xml`
+- `docs/INTERACTION_0.5.2.md`
+- `docs/STATUS.md`
+- `README.md`

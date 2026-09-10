@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
 import android.provider.Settings
+import com.floatclip.app.accessibility.PasteAccessibilityService
 import com.floatclip.app.prefs.OverlayPreferences
 
 /** Best-effort service recovery for normal task removal, reboot and package replacement. */
@@ -21,6 +22,7 @@ object OverlayKeepAliveScheduler {
 
     fun startIfNeeded(context: Context) {
         if (!shouldRun(context)) return
+        if (PasteAccessibilityService.ensureOverlayHosted()) return
         runCatching {
             context.startForegroundService(Intent(context, ClipboardOverlayService::class.java))
         }

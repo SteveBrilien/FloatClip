@@ -1,6 +1,6 @@
 # FloatClip development status
 
-Last updated: 2026-09-10
+Last updated: 2026-09-11
 
 ## 0.5.1 device-feedback refinement
 
@@ -18,7 +18,17 @@ Release staging gates are complete:
 - release signing certificate SHA-256 is `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`, exactly reusing the 0.5.0 persistent identity;
 - `apksigner` verifies APK Signature Scheme v3 with one signer, and `zipalign -c` passes.
 
-Because the 0.5.0 signer is preserved, 0.5.1 can overwrite-install 0.5.0 normally. GitHub tag/Actions/Release and public-download checksum evidence are appended after publication.
+Because the 0.5.0 signer is preserved, 0.5.1 can overwrite-install 0.5.0 normally. Publication is complete and independently verified:
+
+- release staging commit / annotated tag target: `c3b21bc437c017df0aadf93aecb412e47ec889a2` / `v0.5.1`;
+- GitHub main workflow run `34502691296`: build **success**;
+- GitHub tag workflow run `34502710334`: build **success**, release **success**;
+- public GitHub Release asset size: `2,689,079` bytes;
+- public asset SHA-256: `a5bd45526903a15ebec12833fee68b49c0e6383af9e6659d1244057b11e8da58`;
+- public asset signing certificate SHA-256: `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`;
+- the public APK was downloaded back and verified byte-identical to the local preverified release asset.
+
+Download: `https://github.com/SteveBrilien/FloatClip/releases/download/v0.5.1/FloatClip-0.5.1-debug.apk`.
 
 ## 0.5.0 interaction/security release candidate
 

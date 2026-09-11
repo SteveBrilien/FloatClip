@@ -13,8 +13,8 @@ android {
         minSdk = 28
         // Deliberately locked to Android 11 behavior for the fixed OriginOS target device.
         targetSdk = 30
-        versionCode = 9
-        versionName = "0.5.4"
+        versionCode = 10
+        versionName = "0.5.5"
     }
 
     buildTypes {

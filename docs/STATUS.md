@@ -2,6 +2,13 @@
 
 Last updated: 2026-09-11
 
+## 0.5.5 visual polish and restored swipe candidate
+
+The user has confirmed that 0.5.4 no longer jitters. Its retained-window switching is now the device-accepted baseline.
+0.5.5 restores swipe pin/delete and keeps manual/automatic closure, moves navigation controls into the header, simplifies settings rows and search, and narrows the vertical menu with icons and entry-relative positioning.
+Source comparison confirms expandPanel/showRetainedPanel/collapsePanel/installBubbleTouch/hideBubbleAtEdge are byte-identical to 0.5.4.
+Version 0.5.5 / code 10. New menu and swipe device acceptance remains pending.
+
 ## 0.5.4 retained-window candidate
 
 User feedback reports 0.5.3 still jitters. See docs/INTERACTION_0.5.4.md.

@@ -4,6 +4,18 @@ All notable FloatClip development changes are recorded here.
 
 ## 2026-09-11
 
+### 0.5.5 visual polish and restored swipe actions
+- Restored swipe pin/unpin and delete with icon/label action cells in overlay and in-app history; kept right-swipe, front-tap, other-row and idle closure.
+- Preserved action clipping and DOWN ownership to prevent covered buttons receiving taps.
+- Kept the 0.5.4 retained-window/motion implementation unchanged after the user confirmed jitter was gone.
+- Replaced full-width navigation strips with header back/category icons and reduced heading size.
+- Made settings rows whole-row targets with plain status/chevron or switch controls, removing repeated blue button blocks.
+- Flattened cards and search; added keyboard search and an icon action; simplified selected navigation styling.
+- Kept long-press menus single-column, added line icons and a delete separator, narrowed width and positioned near the selected entry.
+- Version 0.5.5 / code 10; new visual/gesture acceptance remains pending.
+
+
+
 ### 0.5.4 retained windows and reduced UI
 - Replaced close-time window removal/cross-fade/scale with attached-window visibility and touchability switching.
 - Kept bubble dock coordinates unchanged on close; removed delayed post-close edge-hide and ignored sub-slop bubble MOVE events.

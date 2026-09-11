@@ -16,6 +16,7 @@ import android.provider.Settings
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.os.PowerManager
+import com.floatclip.app.overlay.ui.EntrySwipeActions
 import com.floatclip.app.overlay.ui.EntryGestureRow
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
@@ -154,14 +155,42 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun headerIcon(icon: Int, label: String, action: () -> Unit): View =
+        ImageView(this).apply {
+            setImageResource(icon)
+            imageTintList = ColorStateList.valueOf(colors.primaryText)
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            contentDescription = label
+            background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(colors.actionBackground), null, null)
+            setOnClickListener { action() }
+        }
+
     private fun renderHeader() {
+        val nested = currentPage == PAGE_SETTINGS && settingsSection.isNotEmpty() ||
+            currentPage == PAGE_CLIPBOARD && categoryManagement
         val title = when (currentPage) {
             PAGE_CLIPBOARD -> if (categoryManagement) "分类" else "剪贴板"
             PAGE_SETTINGS -> settingsSection.ifEmpty { "设置" }
             else -> "FloatClip"
         }
-        content.addView(textView(title, 27f, true))
-        spacer(18)
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        if (nested) bar.addView(headerIcon(R.drawable.ic_chevron_left, "返回") {
+            settingsSection = ""
+            categoryManagement = false
+            render()
+        }, LinearLayout.LayoutParams(dp(40), dp(44)).apply { marginEnd = dp(4) })
+        bar.addView(textView(title, if (nested) 21f else 25f, true), LinearLayout.LayoutParams(0, dp(52), 1f))
+        if (currentPage == PAGE_CLIPBOARD && !categoryManagement) {
+            bar.addView(headerIcon(R.drawable.ic_folder, "管理分类") {
+                categoryManagement = true
+                render()
+            }, LinearLayout.LayoutParams(dp(44), dp(44)))
+        }
+        content.addView(bar)
+        spacer(14)
     }
 
     private fun renderStatusPage() {
@@ -196,8 +225,6 @@ class MainActivity : Activity() {
     }
 
     private fun renderCategoryManager() {
-        content.addView(compactTextAction("‹ 剪贴板") { categoryManagement = false; render() })
-        spacer(12)
         val categoryCard = card()
         val categoryInput = EditText(this).apply {
             hint = "新分类"
@@ -267,11 +294,13 @@ class MainActivity : Activity() {
 
     private fun renderClipboardPage() {
         if (categoryManagement) { renderCategoryManager(); return }
-        content.addView(compactTextAction("管理分类") { categoryManagement = true; render() })
-        spacer(12)
         content.addView(historyCategorySelector())
         spacer(9)
-        val searchCard = card()
+        val searchCard = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = roundedBackground(colors.fieldBackground, 13f)
+        }
         val search = EditText(this).apply {
             hint = "搜索内容或分类"
             isSingleLine = true
@@ -280,23 +309,22 @@ class MainActivity : Activity() {
             setSelection(text.length)
             setTextColor(colors.primaryText)
             setHintTextColor(colors.secondaryText)
-            background = roundedBackground(colors.fieldBackground, 13f)
-            setPadding(dp(13), 0, dp(13), 0)
+            background = null
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setPadding(dp(13), 0, dp(6), 0)
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    searchQuery = text.toString().trim()
+                    render()
+                    true
+                } else false
+            }
         }
-        searchCard.addView(
-            LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                addView(search, LinearLayout.LayoutParams(0, dp(44), 1f))
-                addView(
-                    actionButton("搜索", false) {
-                        searchQuery = search.text?.toString().orEmpty().trim()
-                        render()
-                    },
-                    LinearLayout.LayoutParams(dp(74), dp(44)).apply { marginStart = dp(8) },
-                )
-            },
-        )
+        searchCard.addView(search, LinearLayout.LayoutParams(0, dp(48), 1f))
+        searchCard.addView(headerIcon(R.drawable.ic_search, "搜索") {
+            searchQuery = search.text?.toString().orEmpty().trim()
+            render()
+        }, LinearLayout.LayoutParams(dp(48), dp(48)))
         addCard(searchCard)
 
         val visibleHistory = clipStore.entries()
@@ -346,8 +374,6 @@ class MainActivity : Activity() {
 
     private fun renderSettingsPage() {
         if (settingsSection.isNotEmpty()) {
-            content.addView(compactTextAction("‹ 设置") { settingsSection = ""; render() })
-            spacer(12)
             when (settingsSection) {
                 "外观" -> renderAppearanceSettings()
                 "备份与恢复" -> renderBackupSettings()
@@ -593,7 +619,7 @@ class MainActivity : Activity() {
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(dp(12), dp(7), dp(12), dp(7))
+            setPadding(dp(12), dp(4), dp(12), dp(4))
             setBackgroundColor(colors.navigationBackground)
         }
         listOf("状态", "剪贴板", "设置").forEachIndexed { index, label ->
@@ -605,7 +631,7 @@ class MainActivity : Activity() {
                     gravity = Gravity.CENTER
                     setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
                     setTextColor(if (selected) colors.accent else colors.secondaryText)
-                    background = if (selected) roundedBackground(colors.selectedNavigationBackground, 14f) else null
+                    background = null
                     setOnClickListener {
                         if (currentPage != index) {
                             currentPage = index
@@ -814,7 +840,14 @@ class MainActivity : Activity() {
         spacerInside(item, 7)
         item.addView(textView("${entry.category}${if (entry.pinned) " · 已置顶" else ""}", 12f, false, colors.secondaryText))
         val wrapper = EntryGestureRow(this)
-        wrapper.bind(item)
+        wrapper.bind(item, EntrySwipeActions(this, entry.pinned,
+            onPin = { clipStore.togglePinned(entry.id); render(); notifyOverlayAppearanceChanged() },
+            onDelete = {
+                android.app.AlertDialog.Builder(this).setTitle("删除这条记录？")
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("删除") { _, _ -> clipStore.delete(entry.id); render(); notifyOverlayAppearanceChanged() }.show()
+            },
+        ), dp(132))
         wrapper.onSingleTap = {
             getSystemService(android.content.ClipboardManager::class.java)
                 .setPrimaryClip(ClipData.newPlainText("FloatClip", entry.text))
@@ -970,17 +1003,40 @@ class MainActivity : Activity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(4), 0, dp(4))
+            setPadding(dp(2), dp(5), dp(2), dp(5))
+            minimumHeight = dp(52)
+            background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(colors.actionBackground), null, null)
+            setOnClickListener { action() }
         }
         val labels = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(textView(title, 15f, false))
-            if (subtitle.isNotBlank()) addView(textView(subtitle, 12f, false, colors.secondaryText).apply { maxLines = 2 })
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp(if (subtitle.isBlank()) 44 else 58)
+            addView(textView(title, 15f, false))
+            if (subtitle.isNotBlank()) addView(textView(subtitle, 11.5f, false, colors.secondaryText).apply {
+                maxLines = 2
+                setPadding(0, dp(3), dp(8), 0)
+            })
         }
-        row.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(compactTextAction(actionLabel, action), LinearLayout.LayoutParams(dp(68), dp(36)))
+        row.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
+        if (actionLabel == "已开启" || actionLabel == "已关闭") {
+            row.addView(android.widget.Switch(this).apply {
+                isChecked = actionLabel == "已开启"
+                thumbTintList = ColorStateList.valueOf(if (isChecked) colors.accent else colors.secondaryText)
+                contentDescription = title
+                setOnCheckedChangeListener { _, _ -> action() }
+            }, LinearLayout.LayoutParams(-2, dp(44)))
+        } else {
+            if (actionLabel != "›" && actionLabel != "设置" && actionLabel != "打开") {
+                row.addView(textView(actionLabel, 12f, false, colors.secondaryText).apply {
+                    setPadding(dp(8), 0, dp(8), 0)
+                })
+            }
+            row.addView(ImageView(this).apply {
+                setImageResource(R.drawable.ic_chevron_right)
+                imageTintList = ColorStateList.valueOf(colors.secondaryText)
+                setPadding(dp(5), dp(5), dp(5), dp(5))
+            }, LinearLayout.LayoutParams(dp(24), dp(28)))
+        }
         return row
     }
 
@@ -1021,7 +1077,10 @@ class MainActivity : Activity() {
         textSize = 12.5f
         gravity = Gravity.CENTER
         setTextColor(colors.accent)
-        background = roundedBackground(colors.actionBackground, 11f)
+        minimumHeight = dp(40)
+        setPadding(dp(12), dp(8), dp(12), dp(8))
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        background = roundedBackground(colors.actionBackground, 10f)
         setOnClickListener { action() }
     }
 
@@ -1038,7 +1097,7 @@ class MainActivity : Activity() {
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1))
     }
 
-    private fun cardBackground(): GradientDrawable = roundedBackground(colors.cardBackground, 18f, true)
+    private fun cardBackground(): GradientDrawable = roundedBackground(colors.cardBackground, 14f)
 
     private fun roundedBackground(color: Int, radiusDp: Float, border: Boolean = false): GradientDrawable = GradientDrawable().apply {
         setColor(color)

@@ -46,6 +46,7 @@ import com.floatclip.app.prefs.CategoryStore
 import com.floatclip.app.prefs.OverlayPreferences
 import com.floatclip.app.overlay.ui.BorderDragFrameLayout
 import com.floatclip.app.overlay.ui.BubbleMotionController
+import com.floatclip.app.overlay.ui.EntrySwipeActions
 import com.floatclip.app.overlay.ui.EntryGestureRow
 import com.floatclip.app.theme.AdaptiveOverlayThemeProvider
 import com.floatclip.app.theme.OverlayPalette
@@ -796,7 +797,10 @@ class ClipboardOverlayService : Service() {
             setPadding(0, dp(5), 0, 0)
         })
 
-        wrapper.bind(front)
+        wrapper.bind(front, EntrySwipeActions(this, entry.pinned,
+            onPin = { store.togglePinned(entry.id); renderEntries() },
+            onDelete = { store.delete(entry.id); renderEntries() },
+        ), dp(132))
         wrapper.onSingleTap = {
             clipboard.writeText(entry.text)
             Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
@@ -806,7 +810,7 @@ class ClipboardOverlayService : Service() {
             store.togglePinned(entry.id)
             renderEntries()
         }
-        wrapper.onLongPress = { showEntryMenu(entry) }
+        wrapper.onLongPress = { showEntryMenu(entry, anchor = wrapper) }
         return wrapper.apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -815,7 +819,7 @@ class ClipboardOverlayService : Service() {
         }
     }
 
-    private fun showEntryMenu(entry: ClipEntry, choosingCategory: Boolean = false) {
+    private fun showEntryMenu(entry: ClipEntry, choosingCategory: Boolean = false, anchor: View? = null) {
         if (!panelOpen) return
         val panel = panelView ?: return
         dismissEntryActionLayer(animated = false)
@@ -833,22 +837,42 @@ class ClipboardOverlayService : Service() {
             isClickable = true
         }
         fun row(label: String, tint: Int = palette.primaryText, action: () -> Unit) {
-            sheet.addView(TextView(this).apply {
-                text = label
-                textSize = 15f
-                gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                setPadding(dp(16), dp(10), dp(16), dp(10))
-                setTextColor(tint)
-                minHeight = dp(48)
+            if (label == "删除") sheet.addView(View(this).apply {
+                setBackgroundColor(withAlpha(palette.secondaryText, 35))
+            }, LinearLayout.LayoutParams(-1, dp(1)).apply { setMargins(dp(10), dp(3), dp(10), dp(3)) })
+            val icon = when {
+                label == "复制" || label == "粘贴" -> R.drawable.ic_copy_paste
+                label.contains("置顶") -> R.drawable.ic_pin
+                label == "删除" -> R.drawable.ic_delete
+                label.contains("返回") -> R.drawable.ic_chevron_left
+                else -> R.drawable.ic_folder
+            }
+            sheet.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(10), 0, dp(12), 0)
+                minimumHeight = dp(48)
                 background = android.graphics.drawable.StateListDrawable().apply {
-                    addState(intArrayOf(android.R.attr.state_pressed), roundedBackground(withAlpha(ACCENT_BLUE, 35), 10f))
+                    addState(intArrayOf(android.R.attr.state_pressed), roundedBackground(withAlpha(ACCENT_BLUE, 35), 9f))
                     addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
                 }
+                addView(ImageView(this@ClipboardOverlayService).apply {
+                    setImageResource(icon)
+                    imageTintList = ColorStateList.valueOf(tint)
+                }, LinearLayout.LayoutParams(dp(19), dp(19)).apply { marginEnd = dp(12) })
+                addView(TextView(this@ClipboardOverlayService).apply {
+                    text = label
+                    textSize = 14f
+                    gravity = Gravity.CENTER_VERTICAL
+                    setTextColor(tint)
+                    setPadding(0, dp(10), 0, dp(10))
+                }, LinearLayout.LayoutParams(0, -2, 1f))
                 setOnClickListener { action() }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                contentDescription = label
+            }, LinearLayout.LayoutParams(-1, -2))
         }
         if (choosingCategory) {
-            row("‹ 返回") { showEntryMenu(entry) }
+            row("‹ 返回") { showEntryMenu(entry, anchor = anchor) }
             categoryStore.categories().distinct().forEach { category ->
                 row(if (category == entry.category) "✓  $category" else category,
                     if (category == entry.category) ACCENT_BLUE else palette.primaryText) {
@@ -873,7 +897,7 @@ class ClipboardOverlayService : Service() {
                 dismissEntryActionLayer(animated = false)
                 renderEntries()
             }
-            row("更改分类  ›") { showEntryMenu(entry, choosingCategory = true) }
+            row("更改分类  ›") { showEntryMenu(entry, choosingCategory = true, anchor = anchor) }
             row("删除", Color.rgb(218, 78, 78)) {
                 store.delete(entry.id)
                 dismissEntryActionLayer(animated = false)
@@ -887,11 +911,23 @@ class ClipboardOverlayService : Service() {
             background = roundedBackground(palette.panelBackground, 16f)
             addView(sheet)
         }
-        val availableHeight = (panel.height - dp(30)).coerceAtLeast(dp(120))
-        val desiredHeight = dp(sheet.childCount * 50 + 12)
-        layer.addView(scroll, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, min(availableHeight, desiredHeight), Gravity.BOTTOM,
-        ).apply { setMargins(dp(7), dp(7), dp(7), dp(7)) })
+        val menuWidth = min(dp(216), panel.width - dp(28))
+        val availableHeight = (panel.height - dp(24)).coerceAtLeast(dp(96))
+        sheet.measure(View.MeasureSpec.makeMeasureSpec(menuWidth, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        val menuHeight = min(availableHeight, sheet.measuredHeight)
+        val panelLocation = IntArray(2)
+        val anchorLocation = IntArray(2)
+        panel.getLocationOnScreen(panelLocation)
+        anchor?.getLocationOnScreen(anchorLocation)
+        val below = if (anchor != null) anchorLocation[1] - panelLocation[1] + anchor.height + dp(4) else dp(52)
+        val above = if (anchor != null) anchorLocation[1] - panelLocation[1] - menuHeight - dp(4) else dp(52)
+        val top = (if (below + menuHeight <= panel.height - dp(12)) below else above)
+            .coerceIn(dp(8), max(dp(8), panel.height - menuHeight - dp(12)))
+        layer.addView(scroll, FrameLayout.LayoutParams(menuWidth, menuHeight, Gravity.TOP or Gravity.END).apply {
+            topMargin = top
+            marginEnd = dp(10)
+        })
         panel.addView(layer, FrameLayout.LayoutParams(-1, -1))
         entryActionLayer = layer
     }

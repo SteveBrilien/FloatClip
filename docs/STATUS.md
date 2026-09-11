@@ -8,6 +8,12 @@ User feedback reports 0.5.3 still jitters. See docs/INTERACTION_0.5.4.md.
 This revision removes panel open/close transforms and keeps the panel/catcher surfaces attached but transparent and non-touchable while closed.
 Long-press actions are one vertical column; category selection is a separate vertical list. App navigation removes duplicate status/help blocks and unused sync UI.
 Version 0.5.4 / code 9. Manual visual and touch-through acceptance remains pending.
+- Clean source: `505ce76749e48e2bb2358700b9efb00783e48305`.
+- Lint: `task-floatclip_lint-db176bbeb3404afab000`, succeeded, No issues found.
+- Debug: `task-floatclip_debug-27c81a18cdc244eeae3b`, succeeded, clean source recorded.
+- APK: `dist/FloatClip-0.5.4-debug.apk`, 2,709,559 bytes; SHA-256 `ed2d0ff970076d0cf438597a631042aaf641a1940b268862e8f6690fbdef9288`.
+- Persistent signer unchanged: `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`.
+- Signature v3, alignment and package version checked. Publication in progress.
 
 ## 0.5.3 interaction repair candidate
 

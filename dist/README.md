@@ -2,7 +2,17 @@
 
 This directory contains the preverified APK used for GitHub Releases.
 
-## Current release: FloatClip 0.5.3
+## Current release: FloatClip 0.5.4
+
+- APK: `FloatClip-0.5.4-debug.apk`
+- SHA-256: `ed2d0ff970076d0cf438597a631042aaf641a1940b268862e8f6690fbdef9288`
+- Signing certificate SHA-256: `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`
+- Source commit: `505ce76749e48e2bb2358700b9efb00783e48305`
+- Package: `com.floatclip.app`, versionCode 9, versionName 0.5.4, minSdk 28, targetSdk 30.
+- Clean debug/lint passed; lint: No issues found. APK v3 signature and alignment verified.
+- Same signer as 0.5.3, supports overwrite installation. Device visual acceptance remains pending.
+
+## Previous release: FloatClip 0.5.3
 
 - APK: `FloatClip-0.5.3-debug.apk`
 - SHA-256: `3e84643eca4e630c18e0f6e5245859890174bf3921a0c1f204cd8d04eb6cd758`

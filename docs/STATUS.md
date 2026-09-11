@@ -8,6 +8,12 @@ The user has confirmed that 0.5.4 no longer jitters. Its retained-window switchi
 0.5.5 restores swipe pin/delete and keeps manual/automatic closure, moves navigation controls into the header, simplifies settings rows and search, and narrows the vertical menu with icons and entry-relative positioning.
 Source comparison confirms expandPanel/showRetainedPanel/collapsePanel/installBubbleTouch/hideBubbleAtEdge are byte-identical to 0.5.4.
 Version 0.5.5 / code 10. New menu and swipe device acceptance remains pending.
+- Clean source: `e3ea73872136e61afadb4252b766645569bf5012`.
+- Lint `task-floatclip_lint-5b586bda9cbe432f82ac`: succeeded, 0 errors / 1 ViewConstructor warning (programmatic-only EntrySwipeActions).
+- Debug `task-floatclip_debug-d35bdca230d94877afee`: succeeded, clean source recorded.
+- APK `dist/FloatClip-0.5.5-debug.apk`: 2,734,508 bytes; SHA-256 `2d1678990249b8071abf0af9f5ca38cc7ccb010d823c4e9dba7d229dce000ae3`.
+- Signer unchanged: `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`.
+- Signature, alignment and version checked. Publication in progress.
 
 ## 0.5.4 retained-window candidate
 

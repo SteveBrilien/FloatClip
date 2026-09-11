@@ -13,7 +13,11 @@ Version 0.5.4 / code 9. Manual visual and touch-through acceptance remains pendi
 - Debug: `task-floatclip_debug-27c81a18cdc244eeae3b`, succeeded, clean source recorded.
 - APK: `dist/FloatClip-0.5.4-debug.apk`, 2,709,559 bytes; SHA-256 `ed2d0ff970076d0cf438597a631042aaf641a1940b268862e8f6690fbdef9288`.
 - Persistent signer unchanged: `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`.
-- Signature v3, alignment and package version checked. Publication in progress.
+- Signature v3, alignment and package version checked.
+- Published `v0.5.4` targets `44e7b2fcb73154816a69f22fcc962974d9141ded`; release workflow `34548202164` succeeded.
+- Public APK was downloaded again and verified byte-identical, with the same signer and versionCode 9 / versionName 0.5.4.
+- Download: https://github.com/SteveBrilien/FloatClip/releases/download/v0.5.4/FloatClip-0.5.4-debug.apk
+- Manual device acceptance remains pending; no on-device jitter or touch-through pass is claimed.
 
 ## 0.5.3 interaction repair candidate
 

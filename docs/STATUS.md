@@ -13,7 +13,11 @@ Version 0.5.5 / code 10. New menu and swipe device acceptance remains pending.
 - Debug `task-floatclip_debug-d35bdca230d94877afee`: succeeded, clean source recorded.
 - APK `dist/FloatClip-0.5.5-debug.apk`: 2,734,508 bytes; SHA-256 `2d1678990249b8071abf0af9f5ca38cc7ccb010d823c4e9dba7d229dce000ae3`.
 - Signer unchanged: `89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3`.
-- Signature, alignment and version checked. Publication in progress.
+- Signature, alignment and version checked.
+- Published tag `v0.5.5` targets `c0ad8894f2bfbd260e3c5c4577f3815ff0f79609`; GitHub workflow `34549701460` succeeded.
+- Public APK was downloaded again; SHA-256, signer and versionCode 10 / versionName 0.5.5 match.
+- Download: https://github.com/SteveBrilien/FloatClip/releases/download/v0.5.5/FloatClip-0.5.5-debug.apk
+- New visual/swipe acceptance is pending manual overwrite installation.
 
 ## 0.5.4 retained-window candidate
 

@@ -6,9 +6,13 @@
 
 用户已同意推进验证阶段，并在 2026-10-18 明确选择 Wi-Fi 为主。实机检查中当前 Windows 未识别到蓝牙设备，用户指出电脑可能只有外接 Wi-Fi 网卡。蓝牙因此只作为可选能力，不能作为所有设备的共同前提。现有局域网实际可达时优先复用；两端都有可用经典蓝牙时才启用 RFCOMM；Wi-Fi Direct 在两端兼容且验证保留上网后作为候选。蓝牙发现不能成为局域网发现或配对的必备条件。网络隔离且没有其他可用直连通道时，需要另选共同网络、增加硬件或另行设计中继；当前尚未实现网络回退或中继。
 
+## 小主机测力设备网络约束
+
+用户于 2026-10-18 明确：OrangePi 有线 LAN 连接测力相关设备，而非路由器。按仪器专网处理，不扫描、探测、调整该网段、网关或路由，不把小主机作为 FloatClip 中继。旧路由器拓扑仅为历史记录。当前 LAN P0 验证仅使用已存在的 Windows ↔ 手机热点；小主机仅提供已恢复的远程 ADB。
+
 ## 本轮开发范围
 
-新增独立的 nearby-probe Android 测试模块，包名 com.floatclip.probe，以及 Windows 端蓝牙测试工具。仅传递程序生成的测试文字，验证 Unicode、原始空白、分帧、摘要、双向 ACK 和往返耗时。使用系统安全 RFCOMM，不提供不安全连接降级。
+新增独立的 nearby-probe Android 测试模块，包名 com.floatclip.probe，以及 Windows 端 LAN / 蓝牙测试工具。仅传递程序生成的测试文字，验证 Unicode、原始空白、分帧、摘要、双向 ACK 和往返耗时。LAN 使用固定证书指纹的 TLS 1.2 与单次随机邀请；可选蓝牙使用系统安全 RFCOMM，两者均不提供不安全连接降级。
 
 这不是正式同步协议或正式客户端。本轮不接入真实系统剪贴板，不迁移历史，不改 FloatClip 主应用覆盖层或稳定签名。Wi-Fi Direct 只做能力识别，不自动建立网络或改变路由。后续在硬件实测后决定通道策略。
 
@@ -84,7 +88,7 @@
 
 已修正旧连接断开/超时与新连接启动之间的取消竞态，防止旧会话取消新会话。此部分完成源码审查和编译，仍需实机快速断连/重连回归。
 
-下一步是按设备能力分别安排验收：有蓝牙的 Windows 做真实 RFCOMM 联测；当前无可识别蓝牙的 Windows 先验证局域网可达条件，并单独规划网络传输原型。不能把协议自测标为蓝牙实机通过。
+以上为 0.1.0 阶段记录。LAN 原型已在下节新增；蓝牙互通仍需有蓝牙适配器的 Windows 验收。
 
 
 ## Windows 双击启动问题跟进
@@ -102,7 +106,7 @@
 - 原 PowerShell -List 在没有 Bluetooth PnP 类时输出底层设备查询错误。已改为明确的无设备提示；当前机器实测完成且没有底层查询堆栈。无配对地址时另给出配对提示。
 - Android 冷启动 Status ok，耗时约 706 ms，取得 App 进程；UiAutomator 返回 null root，因此本次不声明完整 UI 验收通过。测试后已返回 ChatGPT。
 - USB ADB 当前已授权可用。用户随后要求修复手机到小主机的通道；通过已授权 USB 恢复经典 TCP 5555 后，原 balanced / auto 的 supervisor 自动经 Azure 重建正式 SSH carrier。已在小主机多次核对 device、V2115A 和 PD2115，不修改隧道版本、不启用 FRP 自动回退、不添加公网端口映射。
-- 当前 PC 无可识别蓝牙，不能完成双向 RFCOMM。外接 Wi-Fi 不保证同时提供蓝牙；后续通道选择必须允许纯有线/纯 Wi-Fi 的 Windows。当前 P0 仍只有蓝牙传输，LAN/Wi-Fi Direct/中继尚未实现。
+- 当前 PC 无可识别蓝牙，不能完成双向 RFCOMM。外接 Wi-Fi 不保证同时提供蓝牙；后续通道选择必须允许纯有线/纯 Wi-Fi 的 Windows。该盘点时的 0.1.0 P0 只有蓝牙传输；随后新增的 LAN 原型见下节。Wi-Fi Direct/中继仍未实现。
 
 
 ## Wi-Fi 主通道与后续范围
@@ -112,3 +116,32 @@
 后续先实现复用现有网络的独立 LAN 测试通道，再验证普通 Wi-Fi / 有线混合网络、校园隔离与 Wi-Fi Direct。局域网直连和 Wi-Fi Direct 都可以不依赖蓝牙；Wi-Fi Direct 的支持与并发上网仍须针对这张网卡实测。本轮没有启用 Wi-Fi Direct，没有改网络连接、DNS、代理、默认路由或 Windows 网络过滤配置。远控禁用 netsh，网卡盘点采用只读 PowerShell 查询，未修改该限制。
 
 更新后的 Windows P0 包为 31,933,039 字节，SHA-256 `4ec123f09590159dcc727b45622c067172121df11785c295eeb2c961d6b314df`；EXE 与已完成实机测试的启动修复版相同，增加了已在无蓝牙设备环境验证的 PowerShell 友好提示。交互错误恢复测试用无效地址触发参数错误后继续自检成功，错误日志写入成功；此项不代表蓝牙 socket 已验证。
+
+
+## LAN P0 0.1.1 实现与验收门禁（2026-10-18 21:54）
+
+已实现 Android 监听 / Windows 主动连接的独立 LAN 测试通道，仅复用当前用户选择的私有 IPv4；当前实机路径限定为 Windows ↔ 手机已有热点，不涉及 OrangePi 测力有线网。没有建立 Wi-Fi Direct、热点、路由或网络过滤规则。
+
+- Android Keystore 保存独立 RSA 2048 密钥；Windows 严格匹配从手机取得的证书 SHA-256，使用 TLS 1.2。TLS 内另校验 32 字节高熵单次邀请，以认证本次连接者。
+- 邀请监听 90 秒，只接受一个连接；读超时 10 秒，会话最长 30 秒。完成、失败、停止或 Activity 切后台均关闭监听与会话；关闭策略已实现，仍需 UI 生命周期实测。
+- 两端各校验 10 条生成文字及 ACK，沿用 FCP0 帧语义。没有真实剪贴板、文件、持久配对身份、发现、撤销、自动重连或多节点转发。
+- debug APK 提供同一 LAN 核心的 instrumentation；windows/Test-LanProbe.ps1 准备 valid、wrong-pin、wrong-invitation、drop-handshake、valid-retry 五种实测。邀请仅在调用 ADB 的进程内存传递，不写 logcat 或报告；此路径不能证明后台服务能力。
+
+构建与当前设备证据：
+
+| 检查 | 当前结果 |
+| --- | --- |
+| Android 0.1.1-p0 构建/lint | 通过，lint 0 错误 / 0 警告；任务 task-floatclip_nearby_p0_build-f85db6a0b4ec43cdada4 |
+| Android APK | 2,514,226 字节；SHA-256 3941af37a79ec5948c7765e99fadec6a76c655caeab5558cd9b8e152730707e6；保持独立 P0 签名 |
+| C# 编译与协议 | 通过；任务 task-floatclip_nearby_windows_test-75ffa788cb71454faa46 |
+| Win10 LTSB 2016 运行 | LAN 版 EXE --self-test 和 PowerShell -SelfTest 均通过 |
+| Android 覆盖安装 | 0.1.1 首版已安装；TLS 实测暴露 Keystore 授权问题。修复版已构建、下载并校验，等待 vivo 对本次更新的系统安全确认 |
+| 五类真实 LAN 收发/拒绝/重连 | 待本人完成安装验证后执行；未取得 PASS 证据 |
+| LAN 手动 UI 与后台关闭 | 待执行，不以 instrumentation 代替 UI 验收 |
+| 对上网、吞吐和耗电影响 | 尚未测量；当前仅确认未改变网络配置，不能承诺零影响 |
+
+LAN Windows 工具已放入当前电脑 Downloads/FloatClip-NearbyProbe-LAN-P0/FloatClip-NearbyProbe。安装请求停在正常系统安全验证入口；不关闭 vivo 安装保护、不修改系统安全设置，也不读取或代填锁屏凭据。
+
+TLS 实测修正：首版手机端返回 Conscrypt RSA internal error。Android 官方 KeyGenParameterSpec.Builder 对 TLS 指出需要允许 DIGEST_NONE，RSA TLS 服务还可能需要 raw/PKCS#1 操作。修复版授权 TLS 所需摘要/填充，使用新独立测试别名并限制 KeyManager 仅选择该身份，防止旧测试证书参与选择；保持指纹核验和 TLS 1.2，不提供明文或接受任意证书的回退。依据：https://developer.android.com/reference/android/security/keystore/KeyGenParameterSpec.Builder 。修复是否闭环以更新后的真机收发为准。
+
+最终 Windows ZIP：31,941,733 字节；SHA-256 `05811a45bab191430247d8e198b567dc9a3bee52f95ca7f47650e216309c853f`；任务 `task-floatclip_nearby_windows_package-8d78da4c47c346acbdd6`。

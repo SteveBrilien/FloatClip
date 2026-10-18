@@ -1,9 +1,61 @@
 # FloatClip near-field P0 (Windows)
 
-This is a foreground, generated-data Bluetooth test. It is not the production
+This is a generated-data LAN / Bluetooth test. It is not the production
 clipboard client. It never reads/writes the clipboard, edits routing/DNS/proxy
 settings, opens an IP listener, or transfers user files. No administrator rights
-are required. Both sides must use this P0 UUID/protocol, not a serial COM profile.
+are required. Bluetooth uses the P0 service UUID. LAN uses pinned TLS and a one-use invitation.
+
+## LAN over an existing Wi-Fi / Ethernet network
+
+1. Keep the phone and PC on a mutually reachable network (the phone's existing
+   hotspot also works). In **FloatClip 连接测试**, select the phone's private
+   Wi-Fi/hotspot/Ethernet IPv4 address and tap the LAN listen button.
+2. Keep the app in the foreground. The invitation expires after 90 seconds.
+   Copy the displayed address, port, certificate SHA-256 and one-use invitation.
+3. Double-click the EXE, enter `lan`, and fill those fields. Or run:
+
+   ```powershell
+   .\FloatClip.NearbyProbe.exe --lan-connect PRIVATE_IP 46237 CERT_SHA256 INVITATION
+   .\Start-NearbyProbe.ps1 -Lan -HostAddress PRIVATE_IP -Port 46237 -CertificatePin CERT_SHA256 -Invitation INVITATION
+   ```
+
+4. A pinned TLS 1.2 session authenticates the phone certificate. A random 32-byte
+   invitation, sent inside TLS, authenticates the connecting test client. Take
+   the fingerprint and invitation directly from the selected phone. The key
+   stays in Android Keystore. A wrong pin/invitation fails; no plaintext fallback.
+5. Both ends verify ten generated probes in each direction, then close. The
+   invitation is single-use; start a new listener for another test. Backgrounding
+   the phone, stopping the test, expiry or a 30-second session limit closes it.
+
+This LAN P0 binds only an existing private IPv4 address on a Wi-Fi, hotspot or
+Ethernet interface. It does not create Wi-Fi Direct groups or edit networking,
+proxy settings, routing or Windows network filters. It currently implements
+Android listener -> Windows connector, with no PC-to-PC or real-content sync.
+
+The LAN greeting inside TLS is four bytes `FCL1`, followed by the 32 raw invite
+bytes; the server accepts with one byte `1`. Then each round is Android PROBE,
+Windows ACK, Windows PROBE, Android ACK using the existing FCP0 frame.
+Persistent product identities, revocation, discovery and automatic reconnect
+remain later work.
+
+The debug APK includes `LanProbeInstrumentation` to exercise this same server
+without navigating the UI. It emits readiness to the invoking ADB session and
+never writes invitations to logcat. The bounded listener still expires. The
+harness does not establish background-service support.
+
+
+For an authorized USB ADB debug session, the packaged `Test-LanProbe.ps1`
+starts the same-app instrumentation and runs valid, wrong-pin,
+wrong-invitation, early-disconnect and valid-retry cases. For example:
+
+```powershell
+.\Test-LanProbe.ps1 -AdbPath C:\Android\platform-tools\adb.exe -Serial USB_SERIAL -PhoneAddress PRIVATE_IP
+```
+
+It captures invitation credentials in memory, prints only case results, and
+writes generated-data evidence to `lan-acceptance.json`. It force-stops only
+`com.floatclip.probe` between cases. Installing the debug APK and authorizing
+ADB remain prerequisites. This harness is separate from manual UI acceptance.
 
 ## Test with an Android phone
 

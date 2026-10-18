@@ -260,6 +260,7 @@ namespace FloatClip.NearbyProbe
             Console.WriteLine("Double-click to open the interactive console, or use:");
             Console.WriteLine("  --interactive");
             Console.WriteLine("  --self-test [Java vector directory]");
+            Console.WriteLine("  --lan-connect PRIVATE_IP PORT CERT_SHA256 INVITATION");
             Console.WriteLine("  --connect AA:BB:CC:DD:EE:FF [count]");
             return 0;
         }
@@ -271,14 +272,15 @@ namespace FloatClip.NearbyProbe
                 try { Console.OutputEncoding = new UTF8Encoding(false); }
                 catch (IOException) { }
             }
-            Console.WriteLine("FloatClip 蓝牙连接测试 P0");
+            Console.WriteLine("FloatClip 局域网 / 蓝牙连接测试 P0");
             Console.WriteLine("这版是控制台测试工具。窗口会保持打开，只收发生成的测试文字。");
-            Console.WriteLine("先在系统蓝牙设置完成配对；手机打开测试 App，选择此电脑并点击等待连接。");
+            Console.WriteLine("Wi-Fi：手机选择局域网地址并等待连接，电脑输入 lan。蓝牙是可选测试。");
+            Console.WriteLine("蓝牙：先在系统设置完成配对；手机选择此电脑并点击等待连接。");
             Console.WriteLine("手机地址可在另一个 PowerShell 窗口运行 .\\Start-NearbyProbe.ps1 -List 查看。");
-            Console.WriteLine("输入 test 运行本地自检，输入手机蓝牙地址开始连接，输入 q 退出。");
+            Console.WriteLine("输入 lan 测试局域网，test 自检，蓝牙地址测试蓝牙，q 退出。");
             while (true)
             {
-                Console.Write("\n手机地址 / test / q > ");
+                Console.Write("\nlan / test / 蓝牙地址 / q > ");
                 string input = Console.ReadLine();
                 if (input == null || String.Equals(input.Trim(), "q", StringComparison.OrdinalIgnoreCase)) return 0;
                 input = input.Trim();
@@ -286,6 +288,15 @@ namespace FloatClip.NearbyProbe
                 try
                 {
                     if (String.Equals(input, "test", StringComparison.OrdinalIgnoreCase)) SelfTest(null);
+                    else if (String.Equals(input, "lan", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Console.Write("手机局域网 IPv4 > "); string host = Console.ReadLine();
+                        Console.Write("端口（回车为46237）> "); string portText = Console.ReadLine();
+                        Console.Write("手机显示的证书 SHA-256 > "); string pin = Console.ReadLine();
+                        Console.Write("手机显示的一次性邀请 > "); string invite = Console.ReadLine();
+                        if (host == null || portText == null || pin == null || invite == null) return 0;
+                        LanProbe.Run(host.Trim(), String.IsNullOrWhiteSpace(portText) ? 46237 : Int32.Parse(portText), pin.Trim(), invite.Trim());
+                    }
                     else Run(input, 10);
                 }
                 catch (Exception error) { ReportFailure(error); }
@@ -300,6 +311,7 @@ namespace FloatClip.NearbyProbe
                 if (args.Length == 0) return Console.IsInputRedirected ? Usage() : Interactive();
                 if (args.Length == 1 && args[0] == "--interactive") return Interactive();
                 if (args.Length == 1 && args[0] == "--help") return Usage();
+                if (args.Length == 5 && args[0] == "--lan-connect") return LanProbe.Run(args[1], Int32.Parse(args[2]), args[3], args[4]);
                 if (args.Length >= 2 && args[0] == "--connect") return Run(args[1], args.Length >= 3 ? Int32.Parse(args[2]) : 10);
                 throw new ArgumentException("Unknown command");
             }

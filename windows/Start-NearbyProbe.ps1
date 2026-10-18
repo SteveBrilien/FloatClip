@@ -1,6 +1,11 @@
 param(
     [switch]$List,
     [switch]$SelfTest,
+    [switch]$Lan,
+    [string]$HostAddress,
+    [ValidateRange(1024, 65535)][int]$Port = 46237,
+    [string]$CertificatePin,
+    [string]$Invitation,
     [string]$PeerAddress,
     [ValidateRange(1, 50)][int]$Count = 10
 )
@@ -23,9 +28,11 @@ if ($List) {
     return
 }
 if (-not ('FloatClip.NearbyProbe.Probe' -as [type])) {
-    Add-Type -Path (Join-Path $PSScriptRoot 'FloatClip.NearbyProbe\Probe.cs')
+    Add-Type -Path @((Join-Path $PSScriptRoot 'FloatClip.NearbyProbe\Probe.cs'),
+        (Join-Path $PSScriptRoot 'FloatClip.NearbyProbe\LanProbe.cs'))
 }
 if ($SelfTest) { [FloatClip.NearbyProbe.Probe]::SelfTest($null); return }
-if (-not $PeerAddress) { throw 'Use -List, -SelfTest, or -PeerAddress AA:BB:CC:DD:EE:FF' }
+if ($Lan) { [FloatClip.NearbyProbe.LanProbe]::Run($HostAddress, $Port, $CertificatePin, $Invitation); return }
+if (-not $PeerAddress) { throw 'Use -SelfTest, -Lan -HostAddress IP -CertificatePin SHA256 -Invitation TOKEN, or -List/-PeerAddress' }
 $code = [FloatClip.NearbyProbe.Probe]::Run($PeerAddress, $Count)
 if ($code -ne 0) { throw "Probe failed: $code" }

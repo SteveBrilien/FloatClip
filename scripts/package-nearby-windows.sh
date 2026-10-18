@@ -18,7 +18,7 @@ dest=root/'analysis/nearby-p0/FloatClip-NearbyProbe-Windows-P0.zip'
 with zipfile.ZipFile(dest,'w',compression=zipfile.ZIP_DEFLATED) as z:
     for p in (root/'analysis/nearby-p0/windows-publish').iterdir():
         if p.is_file(): z.write(p,'FloatClip-NearbyProbe/'+p.name)
-    for name in ['Start-NearbyProbe.ps1','Start-NearbyProbe.cmd','README.md','README.zh-CN.txt','FloatClip.NearbyProbe/Probe.cs']:
+    for name in ['Test-LanProbe.ps1','Start-NearbyProbe.ps1','Start-NearbyProbe.cmd','README.md','README.zh-CN.txt','FloatClip.NearbyProbe/Probe.cs','FloatClip.NearbyProbe/LanProbe.cs']:
         z.write(root/'windows'/name,'FloatClip-NearbyProbe/'+name)
 print(json.dumps({'file':dest.name,'bytes':dest.stat().st_size,'sha256':hashlib.sha256(dest.read_bytes()).hexdigest()}))
 PY

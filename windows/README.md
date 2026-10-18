@@ -34,6 +34,20 @@ no separate .NET SDK or downloaded third-party Bluetooth package. A compiled
 console tool can instead use `--connect ADDRESS` / `--self-test`. Its actual
 Win10/Win11 execution is a separate device acceptance requirement.
 
+## Double-click and error diagnosis
+
+Double-clicking the EXE now opens an interactive console. Enter `test` for a
+local protocol self-test, a phone Bluetooth address to connect, or `q` to exit.
+The interactive console stays open after connection failures. The previous
+build printed usage and immediately returned exit code 0 when launched without
+arguments, which made a double-click look like a crash.
+
+`Start-NearbyProbe.cmd` also holds the console open if the EXE fails before its
+managed entry point. Command-line `--connect` and `--self-test` keep their exit
+codes. Exceptions include stack traces, the failing socket option name, and an
+error log under `%LOCALAPPDATA%\FloatClip\NearbyProbe\Logs`. Logs do not read
+clipboard data. These startup fixes do not establish Windows hardware acceptance.
+
 ## Protocol and security boundary
 
 - UUID: `db7aa0e6-0ccd-47d0-b749-80f17b9bfc21` (P0-only; not a permanent product ABI).

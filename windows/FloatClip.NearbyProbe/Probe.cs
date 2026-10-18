@@ -149,9 +149,9 @@ namespace FloatClip.NearbyProbe
             [DllImport("ws2_32.dll")] private static extern int send(IntPtr s, byte[] buffer, int length, int flags);
             [DllImport("ws2_32.dll")] private static extern int closesocket(IntPtr s);
             private static IOException Error(string action) { return new IOException(action + " failed, Winsock " + WSAGetLastError()); }
-            private void Option(int level, int option, int value)
+            private void Option(int level, int option, int value, string name)
             {
-                if (setsockopt(handle, level, option, ref value, 4) != 0) throw Error("setsockopt");
+                if (setsockopt(handle, level, option, ref value, 4) != 0) throw Error("setsockopt(" + name + ")");
             }
             public NativeBluetooth(ulong address)
             {
@@ -161,10 +161,10 @@ namespace FloatClip.NearbyProbe
                 try
                 {
                     handle = socket(32, 1, 3); if (handle == new IntPtr(-1)) throw Error("socket");
-                    Option(3, unchecked((int)0x80000001), 1); // SO_BTH_AUTHENTICATE
-                    Option(3, 2, 1);                         // SO_BTH_ENCRYPT
-                    Option(0xffff, 0x1005, 10000);           // SO_SNDTIMEO
-                    Option(0xffff, 0x1006, 10000);           // SO_RCVTIMEO
+                    Option(3, unchecked((int)0x80000001), 1, "SO_BTH_AUTHENTICATE"); // SO_BTH_AUTHENTICATE
+                    Option(3, 2, 1, "SO_BTH_ENCRYPT");                         // SO_BTH_ENCRYPT
+                    Option(0xffff, 0x1005, 10000, "SO_SNDTIMEO");           // SO_SNDTIMEO
+                    Option(0xffff, 0x1006, 10000, "SO_RCVTIMEO");           // SO_RCVTIMEO
                     BthAddress target = new BthAddress { Family = 32, Address = address, Service = Service, Port = 0 };
                     using (Timer timer = new Timer(delegate(object state) { CloseSocket(); }, null, 15000, Timeout.Infinite))
                     {
@@ -234,16 +234,76 @@ namespace FloatClip.NearbyProbe
             }
             Console.WriteLine("PASS: C# framing, truncation, integrity, native layout" + (String.IsNullOrEmpty(javaVectors) ? "" : ", Java byte-for-byte interoperability") + "; no radio hardware exercised.");
         }
+
+        private static void ReportFailure(Exception error)
+        {
+            Console.Error.WriteLine(error.ToString());
+            try
+            {
+                string directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "FloatClip", "NearbyProbe", "Logs");
+                Directory.CreateDirectory(directory);
+                string path = Path.Combine(directory, "error-" + DateTime.UtcNow.ToString("yyyyMMddTHHmmssfff") +
+                    "-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".log");
+                File.WriteAllText(path, "UTC: " + DateTime.UtcNow.ToString("O") + Environment.NewLine +
+                    "OS: " + Environment.OSVersion + Environment.NewLine +
+                    "Process bits: " + (IntPtr.Size * 8) + Environment.NewLine +
+                    "Runtime: " + Environment.Version + Environment.NewLine + error, new UTF8Encoding(false));
+                Console.Error.WriteLine("Error log: " + path);
+            }
+            catch (Exception logError) { Console.Error.WriteLine("Could not save error log: " + logError.Message); }
+        }
+
+        private static int Usage()
+        {
+            Console.WriteLine("FloatClip Bluetooth P0 - generated test data only.");
+            Console.WriteLine("Double-click to open the interactive console, or use:");
+            Console.WriteLine("  --interactive");
+            Console.WriteLine("  --self-test [Java vector directory]");
+            Console.WriteLine("  --connect AA:BB:CC:DD:EE:FF [count]");
+            return 0;
+        }
+
+        private static int Interactive()
+        {
+            if (!Console.IsOutputRedirected)
+            {
+                try { Console.OutputEncoding = new UTF8Encoding(false); }
+                catch (IOException) { }
+            }
+            Console.WriteLine("FloatClip 蓝牙连接测试 P0");
+            Console.WriteLine("这版是控制台测试工具。窗口会保持打开，只收发生成的测试文字。");
+            Console.WriteLine("先在系统蓝牙设置完成配对；手机打开测试 App，选择此电脑并点击等待连接。");
+            Console.WriteLine("手机地址可在另一个 PowerShell 窗口运行 .\\Start-NearbyProbe.ps1 -List 查看。");
+            Console.WriteLine("输入 test 运行本地自检，输入手机蓝牙地址开始连接，输入 q 退出。");
+            while (true)
+            {
+                Console.Write("\n手机地址 / test / q > ");
+                string input = Console.ReadLine();
+                if (input == null || String.Equals(input.Trim(), "q", StringComparison.OrdinalIgnoreCase)) return 0;
+                input = input.Trim();
+                if (input.Length == 0) continue;
+                try
+                {
+                    if (String.Equals(input, "test", StringComparison.OrdinalIgnoreCase)) SelfTest(null);
+                    else Run(input, 10);
+                }
+                catch (Exception error) { ReportFailure(error); }
+            }
+        }
+
         public static int Main(string[] args)
         {
             try
             {
                 if (args.Length > 0 && args[0] == "--self-test") { SelfTest(args.Length > 1 ? args[1] : null); return 0; }
-                if (args.Length == 0) { Console.WriteLine("Use --self-test [Java vector directory], or --connect AA:BB:CC:DD:EE:FF [count]"); return 0; }
+                if (args.Length == 0) return Console.IsInputRedirected ? Usage() : Interactive();
+                if (args.Length == 1 && args[0] == "--interactive") return Interactive();
+                if (args.Length == 1 && args[0] == "--help") return Usage();
                 if (args.Length >= 2 && args[0] == "--connect") return Run(args[1], args.Length >= 3 ? Int32.Parse(args[2]) : 10);
                 throw new ArgumentException("Unknown command");
             }
-            catch (Exception e) { Console.Error.WriteLine(e.Message); return 1; }
+            catch (Exception e) { ReportFailure(e); return 1; }
         }
     }
 }

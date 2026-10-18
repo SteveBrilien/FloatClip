@@ -6,6 +6,11 @@ FloatClip 蓝牙连接测试 P0
 使用条件：Windows 电脑有经典蓝牙功能，手机安装并打开“FloatClip 连接测试”。
 先在系统蓝牙设置里完成手机与电脑的配对。
 
+更新：双击 FloatClip.NearbyProbe.exe 会进入交互界面，输入 test 自检，
+输入手机地址连接，输入 q 退出。失败后窗口保持打开，并保存错误日志。
+也可以双击 Start-NearbyProbe.cmd；若 EXE 尚未启动就失败，此入口会停留并显示错误。
+错误日志：%LOCALAPPDATA%\FloatClip\NearbyProbe\Logs。
+
 1. 手机上选择这台电脑，点击“等待所选设备连接”。
 2. 在本文件所在目录打开 Windows PowerShell，运行：
    .\Start-NearbyProbe.ps1 -List

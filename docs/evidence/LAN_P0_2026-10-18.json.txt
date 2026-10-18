@@ -1,0 +1,101 @@
+{
+  "utc": "2026-10-18T14:04:24.0396185Z",
+  "phoneAddress": "192.168.144.222",
+  "port": 46237,
+  "tests": [
+    {
+      "case": "valid",
+      "result": "PASS",
+      "clientExit": 0,
+      "phonePassed": true,
+      "outgoingRttMs": [
+        62.8,
+        43.2,
+        20,
+        12.4,
+        15.4,
+        13.6,
+        12.3,
+        8.1,
+        12.1,
+        7.5
+      ],
+      "phoneEvents": [
+        "LAN TLSv1.2 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 + one-use invitation authenticated",
+        "LAN TX/RX 1/10 verified; RTT 26.9 ms",
+        "LAN TX/RX 2/10 verified; RTT 50.3 ms",
+        "LAN TX/RX 3/10 verified; RTT 42.8 ms",
+        "LAN TX/RX 4/10 verified; RTT 15.1 ms",
+        "LAN TX/RX 5/10 verified; RTT 14.8 ms",
+        "LAN TX/RX 6/10 verified; RTT 16.0 ms",
+        "LAN TX/RX 7/10 verified; RTT 11.7 ms",
+        "LAN TX/RX 8/10 verified; RTT 8.6 ms",
+        "LAN TX/RX 9/10 verified; RTT 8.2 ms",
+        "LAN TX/RX 10/10 verified; RTT 8.8 ms",
+        "PASS LAN: 10 outgoing + 10 incoming generated probes"
+      ]
+    },
+    {
+      "case": "wrong-pin",
+      "result": "PASS",
+      "clientExit": 1,
+      "phonePassed": false,
+      "outgoingRttMs": [],
+      "phoneEvents": [
+        "LAN failed: SSLProtocolException: Read error: ssl=0xb400007622ec8188: Failure in SSL library, usually a protocol error"
+      ]
+    },
+    {
+      "case": "wrong-invitation",
+      "result": "PASS",
+      "clientExit": 1,
+      "phonePassed": false,
+      "outgoingRttMs": [],
+      "phoneEvents": [
+        "LAN failed: IOException: LAN invitation rejected"
+      ]
+    },
+    {
+      "case": "drop-handshake",
+      "result": "PASS",
+      "clientExit": -1,
+      "phonePassed": false,
+      "outgoingRttMs": [],
+      "phoneEvents": [
+        "LAN failed: SSLHandshakeException: connection closed"
+      ]
+    },
+    {
+      "case": "valid-retry",
+      "result": "PASS",
+      "clientExit": 0,
+      "phonePassed": true,
+      "outgoingRttMs": [
+        13.6,
+        12.7,
+        12,
+        12.2,
+        103.3,
+        16.7,
+        20.9,
+        12.7,
+        16.3,
+        11.6
+      ],
+      "phoneEvents": [
+        "LAN TLSv1.2 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 + one-use invitation authenticated",
+        "LAN TX/RX 1/10 verified; RTT 101.7 ms",
+        "LAN TX/RX 2/10 verified; RTT 17.6 ms",
+        "LAN TX/RX 3/10 verified; RTT 11.3 ms",
+        "LAN TX/RX 4/10 verified; RTT 11.2 ms",
+        "LAN TX/RX 5/10 verified; RTT 15.5 ms",
+        "LAN TX/RX 6/10 verified; RTT 101.8 ms",
+        "LAN TX/RX 7/10 verified; RTT 20.0 ms",
+        "LAN TX/RX 8/10 verified; RTT 12.1 ms",
+        "LAN TX/RX 9/10 verified; RTT 11.8 ms",
+        "LAN TX/RX 10/10 verified; RTT 11.2 ms",
+        "PASS LAN: 10 outgoing + 10 incoming generated probes"
+      ]
+    }
+  ]
+}

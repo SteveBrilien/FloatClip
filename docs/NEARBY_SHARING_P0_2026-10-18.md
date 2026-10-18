@@ -118,7 +118,7 @@
 更新后的 Windows P0 包为 31,933,039 字节，SHA-256 `4ec123f09590159dcc727b45622c067172121df11785c295eeb2c961d6b314df`；EXE 与已完成实机测试的启动修复版相同，增加了已在无蓝牙设备环境验证的 PowerShell 友好提示。交互错误恢复测试用无效地址触发参数错误后继续自检成功，错误日志写入成功；此项不代表蓝牙 socket 已验证。
 
 
-## LAN P0 0.1.1 实现与验收门禁（2026-10-18 21:54）
+## LAN P0 0.1.1 实现与真机验收（2026-10-18）
 
 已实现 Android 监听 / Windows 主动连接的独立 LAN 测试通道，仅复用当前用户选择的私有 IPv4；当前实机路径限定为 Windows ↔ 手机已有热点，不涉及 OrangePi 测力有线网。没有建立 Wi-Fi Direct、热点、路由或网络过滤规则。
 
@@ -135,13 +135,19 @@
 | Android APK | 2,514,226 字节；SHA-256 3941af37a79ec5948c7765e99fadec6a76c655caeab5558cd9b8e152730707e6；保持独立 P0 签名 |
 | C# 编译与协议 | 通过；任务 task-floatclip_nearby_windows_test-75ffa788cb71454faa46 |
 | Win10 LTSB 2016 运行 | LAN 版 EXE --self-test 和 PowerShell -SelfTest 均通过 |
-| Android 覆盖安装 | 0.1.1 首版已安装；TLS 实测暴露 Keystore 授权问题。修复版已构建、下载并校验，等待 vivo 对本次更新的系统安全确认 |
-| 五类真实 LAN 收发/拒绝/重连 | 待本人完成安装验证后执行；未取得 PASS 证据 |
+| Android 覆盖安装 | 修复版已成功覆盖安装；通过 pm path + sha256sum 核对手机已安装 APK 与最终产物哈希完全一致 |
+| 五类真实 LAN 收发/拒绝/重连 | 全部通过：valid、wrong-pin、wrong-invitation、drop-handshake、valid-retry；Windows 退出码 0，两次成功会话均双向各 10 条生成文字及 ACK 全量校验 |
 | LAN 手动 UI 与后台关闭 | 待执行，不以 instrumentation 代替 UI 验收 |
 | 对上网、吞吐和耗电影响 | 尚未测量；当前仅确认未改变网络配置，不能承诺零影响 |
 
-LAN Windows 工具已放入当前电脑 Downloads/FloatClip-NearbyProbe-LAN-P0/FloatClip-NearbyProbe。安装请求停在正常系统安全验证入口；不关闭 vivo 安装保护、不修改系统安全设置，也不读取或代填锁屏凭据。
+LAN Windows 工具已放入当前电脑 Downloads/FloatClip-NearbyProbe-LAN-P0/FloatClip-NearbyProbe。覆盖安装经正常系统安全确认完成；未关闭 vivo 安装保护、未修改系统安全设置，也未读取或代填锁屏凭据。
 
-TLS 实测修正：首版手机端返回 Conscrypt RSA internal error。Android 官方 KeyGenParameterSpec.Builder 对 TLS 指出需要允许 DIGEST_NONE，RSA TLS 服务还可能需要 raw/PKCS#1 操作。修复版授权 TLS 所需摘要/填充，使用新独立测试别名并限制 KeyManager 仅选择该身份，防止旧测试证书参与选择；保持指纹核验和 TLS 1.2，不提供明文或接受任意证书的回退。依据：https://developer.android.com/reference/android/security/keystore/KeyGenParameterSpec.Builder 。修复是否闭环以更新后的真机收发为准。
+TLS 实测修正：首版手机端返回 Conscrypt RSA internal error。Android 官方 KeyGenParameterSpec.Builder 对 TLS 指出需要允许 DIGEST_NONE，RSA TLS 服务还可能需要 raw/PKCS#1 操作。修复版授权 TLS 所需摘要/填充，使用新独立测试别名并限制 KeyManager 仅选择该身份，防止旧测试证书参与选择；保持指纹核验和 TLS 1.2，不提供明文或接受任意证书的回退。依据：https://developer.android.com/reference/android/security/keystore/KeyGenParameterSpec.Builder 。更新后已通过上述五类实机验收；实际协商 TLSv1.2 / TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256。
 
 最终 Windows ZIP：31,941,733 字节；SHA-256 `05811a45bab191430247d8e198b567dc9a3bee52f95ca7f47650e216309c853f`；任务 `task-floatclip_nearby_windows_package-8d78da4c47c346acbdd6`。
+
+验收证据：[LAN_P0_2026-10-18.json.txt](evidence/LAN_P0_2026-10-18.json.txt)。Windows 两次成功会话共 20 个消息 ACK RTT：7.5–103.3 ms，中位数约 13.15 ms；这只是当前手机热点下的小消息样本，不包括建连耗时，不代表文件吞吐、校园隔离场景或零网络影响。实测时 Windows ADB 使用手机热点 TCP 5555，USB 设备已不在列表中；该事实不等于已实施一整套物理拔线耐久测试。
+
+## Remote ADB 收尾复核
+
+LAN 五类验收通过后，曾观察到正式 25555 注册消失，而 Windows 热点 TCP ADB 与手机 5555 正常。Android exit-info 明确记录 Termux 被 single-cleaner 结束；没有证据表明是 FloatClip、TLS 或新的 selector 故障。打开 Termux 并运行已有 adb-on 后，2.2.18 balanced/auto 经 Azure 恢复；正式设备为 V2115A/PD2115、transport_id720，fresh adb-status 显示 control/up、adb_data_plane/up、identity 正确。已返回 ChatGPT，临时状态与 UI dump 文件已删除。本次没有更改清理策略或电池权限；不能承诺 Termux 被系统清理/强制结束后还能自行常驻。测力设备有线网未参与诊断。

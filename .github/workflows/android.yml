@@ -35,7 +35,11 @@ jobs:
           dotnet-version: '10.0.402'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '12266719'
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
 
       - name: Install Android 35 toolchain
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.1'

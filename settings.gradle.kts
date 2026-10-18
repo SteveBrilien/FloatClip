@@ -16,3 +16,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "FloatClip"
 include(":app")
+
+// Independent, synthetic near-field validation; does not modify the installed app.
+include(":nearby-probe")

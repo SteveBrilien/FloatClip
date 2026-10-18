@@ -29,6 +29,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.402'
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
@@ -40,8 +45,22 @@ jobs:
 
       - name: Build and lint
         run: |
+          bash scripts/create-nearby-debug-key.sh
           chmod +x ./gradlew
-          ./gradlew :app:assembleDebug :app:lintDebug --no-daemon --stacktrace
+          ./gradlew :app:assembleDebug :app:lintDebug :nearby-probe:assembleDebug :nearby-probe:lintDebug --no-daemon --stacktrace
+
+      - name: Test near-field wire compatibility
+        run: |
+          bash scripts/test-nearby-wire.sh
+          dotnet run --project windows/FloatClip.NearbyProbe -c Release -- --self-test analysis/nearby-p0/wire-tests/vectors
+
+      - name: Upload nearby probe CI APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FloatClip-nearby-probe-ci-only
+          path: nearby-probe/build/outputs/apk/debug/nearby-probe-debug.apk
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload CI APK
         uses: actions/upload-artifact@v4

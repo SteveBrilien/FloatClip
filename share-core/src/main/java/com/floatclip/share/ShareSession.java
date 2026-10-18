@@ -19,6 +19,7 @@ public final class ShareSession implements AutoCloseable {
         void file(Offer offer,File local,boolean outgoing);
         void notice(String message);
         void closed();
+        default void failure(Exception problem) { }
     }
     private final Socket socket; private final File cache; private final Events events;
     private final Object writing=new Object(), state=new Object();
@@ -137,7 +138,7 @@ public final class ShareSession implements AutoCloseable {
         try {
             Frame f;
             while(!closed.get() && (f=ShareWire.read(socket.getInputStream()))!=null) handle(f);
-        } catch(Exception e) { if(!closed.get()) events.notice("连接已结束，请重新连接"); }
+        } catch(Exception e) { if(!closed.get()) { events.failure(e); events.notice("连接已结束，请重新连接"); } }
         finally { close(); }
     }
     private void handle(Frame f) throws Exception {

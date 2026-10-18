@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "channel": "share-preview",
+  "version": "0.3.0",
+  "notes": "附近设备发现、首次核对并记住设备；新增网络诊断、蓝白主题优化和检查更新。共享预览版，最终手机包与两端联合验收待完成。",
+  "android": {
+    "build": 4,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-2e52683ee7294aaa8015463f8038df34/FloatClip-Share-0.3.0-preview.apk?exp=0&sig=59ad6c718a538e204fb0c0c96ea28f0e88f282f599e1e1361b31ba77776c0d7c",
+    "sha256": "dcaee2e1e8d9f46a4f34c7d1438cf58ba1aec343e2e15cca095c4638110823bb",
+    "bytes": 2770019
+  },
+  "windows": {
+    "build": 4,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-61123033851043d89a66e15a084900f1/FloatClip-Share-Windows-0.3.0.zip?exp=0&sig=5d0994c809dc08af6a992c4a5338b121e4ad81b2c9703e1cca84e5a06b5dcc4c",
+    "sha256": "6c9fb6cdc6fbc41add6c976e4e5b9866d8b6f80d4341d0af2a51f6b741120257",
+    "bytes": 58851630
+  }
+}

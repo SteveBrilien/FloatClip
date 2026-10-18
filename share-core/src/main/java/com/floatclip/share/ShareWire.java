@@ -28,10 +28,12 @@ public final class ShareWire {
     }
     public static void write(OutputStream raw, Frame f) throws IOException {
         validate(f.type, f.data.length);
-        DataOutputStream out=new DataOutputStream(raw);
+        ByteArrayOutputStream packet=new ByteArrayOutputStream(58+f.data.length);
+        DataOutputStream out=new DataOutputStream(packet);
         out.writeInt(0x46435331); out.writeByte(1); out.writeByte(f.type);
         out.writeLong(f.id.getMostSignificantBits()); out.writeLong(f.id.getLeastSignificantBits());
         out.writeInt(f.data.length); out.write(digest(f.data)); out.write(f.data); out.flush();
+        raw.write(packet.toByteArray()); raw.flush();
     }
     public static Frame read(InputStream raw) throws IOException {
         DataInputStream in=new DataInputStream(raw);

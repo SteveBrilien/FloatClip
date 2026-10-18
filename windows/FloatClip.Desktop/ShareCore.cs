@@ -31,7 +31,7 @@ public static class Wire
     }
     public static void WriteInt(Stream s,long value,int count) { for(int i=count-1;i>=0;i--) s.WriteByte((byte)((ulong)value>>(i*8))); }
     public static long ReadInt(Stream s,int count) { ulong value=0; for(int i=0;i<count;i++){ int b=s.ReadByte(); if(b<0) throw new EndOfStreamException(); value=(value<<8)|(uint)b; } return unchecked((long)value); }
-    public static byte[] ReadBytes(Stream s,int count) { byte[] data=new byte[count]; s.ReadExactly(data); return data; }
+    public static byte[] ReadBytes(Stream s,int count) { byte[] data=new byte[count]; int offset=0; while(offset<count) { int n=s.Read(data,offset,count-offset); if(n==0) throw new EndOfStreamException(); offset+=n; } return data; }
     static void Validate(int type,int size)
     {
         if(type<1 || type>7 || size<0 || size>MaxText || ((type==Ack || type==End) && size!=32) ||
@@ -40,8 +40,10 @@ public static class Wire
     }
     public static void Write(Stream s,Frame f)
     {
-        Validate(f.Type,f.Data.Length); WriteInt(s,0x46435331,4); s.WriteByte(1); s.WriteByte((byte)f.Type);
-        s.Write(Convert.FromHexString(f.Id.ToString("N"))); WriteInt(s,f.Data.Length,4); s.Write(Digest(f.Data)); s.Write(f.Data); s.Flush();
+        Validate(f.Type,f.Data.Length); using var packet=new MemoryStream(58+f.Data.Length);
+        WriteInt(packet,0x46435331,4); packet.WriteByte(1); packet.WriteByte((byte)f.Type);
+        packet.Write(Convert.FromHexString(f.Id.ToString("N"))); WriteInt(packet,f.Data.Length,4); packet.Write(Digest(f.Data)); packet.Write(f.Data);
+        s.Write(packet.GetBuffer(),0,(int)packet.Length); s.Flush();
     }
     public static Frame? Read(Stream s)
     {
@@ -81,6 +83,7 @@ public sealed class Session : IDisposable
     public Action<Offer,string,bool>? File;
     public Action<string>? Notice;
     public Action? Closed;
+    public Action<string>? Failure;
     public Session(Stream stream,Action closeSocket,string cache)
     {
         this.stream=stream; this.closeSocket=closeSocket; this.cache=cache; Directory.CreateDirectory(cache);
@@ -151,7 +154,7 @@ public sealed class Session : IDisposable
     void ReadLoop()
     {
         try { Frame? frame; while(closed==0 && (frame=Wire.Read(stream))!=null) Handle(frame); }
-        catch { if(closed==0) Notice?.Invoke("连接已结束，请重新连接"); }
+        catch(Exception e) { if(closed==0) { Failure?.Invoke(e.GetType().Name+": "+e.Message); Notice?.Invoke("连接已结束，请重新连接"); } }
         finally { Dispose(); }
     }
     void Handle(Frame f)
@@ -220,7 +223,7 @@ public sealed class Session : IDisposable
 
 public static class LanClient
 {
-    public static Session Connect(string invitation,string cache)
+    public static Session Connect(string invitation,string cache,IPAddress? local=null,int interfaceIndex=0)
     {
         if(invitation.Length>400 || !Uri.TryCreate(invitation.Trim(),UriKind.Absolute,out var uri) || uri.Scheme!="floatclip" || uri.Host!="v1") throw new IOException("邀请格式不正确");
         string[] fields=uri.AbsolutePath.Trim('/').Split('/');
@@ -232,6 +235,10 @@ public static class LanClient
         var client=new TcpClient(AddressFamily.InterNetwork){NoDelay=true};
         var deadline=new Timer(_=>client.Dispose(),null,15000,Timeout.Infinite);
         try {
+            if(local!=null) {
+                client.Client.Bind(new IPEndPoint(local,0));
+                if(OperatingSystem.IsWindows() && interfaceIndex>0) client.Client.SetSocketOption(SocketOptionLevel.IP,(SocketOptionName)31 /* IP_UNICAST_IF */,IPAddress.HostToNetworkOrder(interfaceIndex));
+            }
             client.Connect(ip,port);
             var tls=new SslStream(client.GetStream(),false,(_,cert,_,_)=>cert!=null && CryptographicOperations.FixedTimeEquals(SHA256.HashData(cert.GetRawCertData()),pin));
             tls.ReadTimeout=10000; tls.WriteTimeout=10000; tls.AuthenticateAsClient("FloatClip LAN P0",null,SslProtocols.Tls12,false);

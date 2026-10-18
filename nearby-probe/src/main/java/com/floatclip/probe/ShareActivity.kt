@@ -27,6 +27,13 @@ class ShareActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("share-ui", MODE_PRIVATE) }
     private val io = Executors.newSingleThreadExecutor()
     private lateinit var transport: LanShare
+    private var pair: LanPair? = null
+    private var discovering = false
+    private var pairDialog: AlertDialog? = null
+    private val trust by lazy { getSharedPreferences("share-pairs", MODE_PRIVATE) }
+    private var updateBusy = false
+    private var updateMessage = "当前版本 0.3.0 · 共享预览通道"
+    private var release: ShareUpdates.Release? = null
     private var session: ShareSession? = null
     private var invitation = ""
     private var phase = "未连接"
@@ -57,7 +64,7 @@ class ShareActivity : Activity() {
         cache.listFiles()?.filter { it.lastModified() < System.currentTimeMillis() - 86400000L || it.name.endsWith(".part") }?.forEach { it.delete() }
         build()
     }
-    override fun onStart() { super.onStart(); foreground = true }
+    override fun onStart() { super.onStart(); foreground = true; if(!picker && session==null && pair==null && invitation.isEmpty()) addresses().let { ips -> (prefs.getString("address",null)?.takeIf { it in ips } ?: ips.firstOrNull())?.let { listen(it) } } }
     override fun onResume() { super.onResume(); if(::body.isInitialized) render() }
     override fun onStop() {
         foreground = false
@@ -81,7 +88,7 @@ class ShareActivity : Activity() {
     private fun build() {
         palette()
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(p.bg); fitsSystemWindows = true }
-        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(24),dp(24),dp(24),dp(8)) }
+        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(20),dp(18),dp(20),dp(6)) }
         val brand = text("F", 22, Color.WHITE, true).apply { gravity = Gravity.CENTER; background = shape(c("#2563EB"),14); layoutParams = LinearLayout.LayoutParams(dp(44),dp(44)) }
         header.addView(brand)
         val titles = column().apply { setPadding(dp(12),0,0,0); addView(text("FloatClip",24,p.text,true)); addView(text("跨设备，轻松共享",12,p.muted)) }
@@ -89,7 +96,7 @@ class ShareActivity : Activity() {
         header.addView(text("预览版",11,p.blue).apply { background=shape(p.tint,20); setPadding(dp(10),dp(6),dp(10),dp(6)) })
         root.addView(header)
         val scroll=ScrollView(this).apply { isFillViewport=true; clipToPadding=false }
-        body=column().apply { setPadding(dp(24),dp(12),dp(24),dp(24)) }
+        body=column().apply { setPadding(dp(20),dp(12),dp(20),dp(20)) }
         scroll.addView(body)
         root.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
         nav=LinearLayout(this).apply { setPadding(dp(16),dp(8),dp(16),dp(12)); setBackgroundColor(p.card) }
@@ -110,7 +117,7 @@ class ShareActivity : Activity() {
     }
     private fun connection(parent: LinearLayout) {
         val row=column()
-        connectionTitleView=text(if(session!=null) "●  已加密连接" else if(invitation.isNotEmpty()) "●  等待设备连接" else "○  未连接",15,if(session!=null || invitation.isNotEmpty())p.blue else p.muted,true); row.addView(connectionTitleView)
+        connectionTitleView=text(if(session!=null) "●  已加密连接" else if(discovering || invitation.isNotEmpty()) "●  可被附近设备发现" else "○  未连接",15,if(session!=null || discovering || invitation.isNotEmpty())p.blue else p.muted,true); row.addView(connectionTitleView)
         statusView=text(status,12,p.muted).apply { setPadding(0,dp(7),0,0) }; row.addView(statusView)
         parent.addView(row)
     }
@@ -121,7 +128,7 @@ class ShareActivity : Activity() {
             addView(text("发送文字",17,p.text,true))
             val editor=EditText(this@ShareActivity).apply {
                 hint="输入内容，或从剪贴板粘贴"; setHintTextColor(p.muted); setTextColor(p.text); textSize=15f
-                minLines=4; maxLines=8; gravity=Gravity.TOP; background=shape(p.bg,12)
+                minLines=3; maxLines=7; gravity=Gravity.TOP; background=shape(p.bg,12)
                 setPadding(dp(14),dp(12),dp(14),dp(12)); setText(draft)
                 addTextChangedListener(object: TextWatcher {
                     override fun beforeTextChanged(s: CharSequence?,start: Int,count: Int,after: Int) { }
@@ -177,35 +184,49 @@ class ShareActivity : Activity() {
         }
     }
     private fun devicesPage() {
-        section("设备", "通过当前网络建立临时连接")
+        section("连接设备", "同一 Wi-Fi 或手机热点，无需复制链接")
         card {
             connection(this)
             if(session!=null) {
-                addView(text("本次连接有效，切到后台会断开",12,p.muted).apply { setPadding(0,dp(14),0,0) })
+                addView(text("现在可以共享文字和文件",14,p.text).apply { setPadding(0,dp(16),0,0) })
+                button("返回共享",true) { tab=0; render() }
                 button("断开连接",false) { disconnect(); render() }
             } else {
+                addView(text("1  在 Windows 打开「设备」\n2  点击发现的手机\n3  首次核对两端识别码并允许",15,p.text).apply { setLineSpacing(dp(8).toFloat(),1f); setPadding(0,dp(18),0,dp(8)) })
                 val ips=addresses()
-                val selector=Spinner(this@ShareActivity)
-                selector.adapter=object:ArrayAdapter<String>(this@ShareActivity,android.R.layout.simple_spinner_dropdown_item,ips.ifEmpty { listOf("未发现可用网络") }) {
-                    override fun getView(position:Int,convertView:View?,parent:ViewGroup):View = super.getView(position,convertView,parent).apply { (this as TextView).setTextColor(p.text) }
-                    override fun getDropDownView(position:Int,convertView:View?,parent:ViewGroup):View = super.getDropDownView(position,convertView,parent).apply { (this as TextView).setTextColor(p.text); setBackgroundColor(p.card) }
-                }
-                addView(text("此手机的局域网地址",12,p.muted).apply { setPadding(0,dp(18),0,dp(6)) })
-                addView(selector,LinearLayout.LayoutParams(-1,dp(44)))
-                button(if(invitation.isEmpty()) "生成连接邀请" else "重新生成邀请",true) {
-                    val ip=ips.getOrNull(selector.selectedItemPosition)
-                    if(ip==null) note("先连接 Wi-Fi 或开启热点，再重新打开设备页") else listen(ip)
-                }
-                if(invitation.isNotEmpty()) {
-                    addView(text("邀请 90 秒有效，仅使用一次",12,p.muted))
-                    button("复制邀请",false) {
-                        getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("FloatClip 连接邀请",invitation)); note("邀请已复制，在 Windows 的设备页粘贴")
+                var selected=prefs.getString("address",null)?.takeIf { it in ips } ?: ips.firstOrNull()
+                if(ips.size>1) {
+                    val selector=Spinner(this@ShareActivity)
+                    selector.adapter=object:ArrayAdapter<String>(this@ShareActivity,android.R.layout.simple_spinner_dropdown_item,ips) {
+                        override fun getView(position:Int,convertView:View?,parent:ViewGroup):View = super.getView(position,convertView,parent).apply { (this as TextView).setTextColor(p.text) }
+                        override fun getDropDownView(position:Int,convertView:View?,parent:ViewGroup):View = super.getDropDownView(position,convertView,parent).apply { (this as TextView).setTextColor(p.text); setBackgroundColor(p.card) }
                     }
-                    button("取消邀请",false) { disconnect(); render() }
+                    selector.setSelection(ips.indexOf(selected).coerceAtLeast(0))
+                    selector.onItemSelectedListener=object:AdapterView.OnItemSelectedListener {
+                        override fun onNothingSelected(parent:AdapterView<*>?) { }
+                        override fun onItemSelected(parent:AdapterView<*>?,view:View?,position:Int,id:Long) { selected=ips[position]; prefs.edit().putString("address",selected).apply() }
+                    }
+                    addView(selector,LinearLayout.LayoutParams(-1,dp(48)))
+                }
+                addView(text(if(discovering) "发现窗口 90 秒 · ${selected.orEmpty()}" else "手机保持前台，记住的设备可直接重连",12,p.muted))
+                button(if(discovering) "重新允许连接" else "允许附近设备连接",true) {
+                    selected?.let { listen(it) } ?: note("请先连接 Wi-Fi 或开启热点")
+                }
+                if(discovering) button("暂停发现",false) { disconnect("发现已暂停"); render() }
+                button("备用：使用邀请链接",false) { selected?.let { listen(it,false) } ?: note("没有可用网络") }
+                if(invitation.isNotEmpty()) button("复制备用邀请",false) {
+                    getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("FloatClip 连接邀请",invitation)); note("已复制备用邀请")
                 }
             }
         }
-        card { addView(text("Windows 如何连接",16,p.text,true)); addView(text("打开 FloatClip → 设备 → 粘贴此手机的邀请 → 连接。",14,p.muted).apply { setPadding(0,dp(10),0,0) }) }
+        card {
+            addView(text("已记住的设备",17,p.text,true))
+            addView(text("${trust.all.size} 台 · 首次确认后，下次无需再核对",13,p.muted).apply { setPadding(0,dp(8),0,0) })
+            if(trust.all.isNotEmpty()) button("移除所有设备授权",false) {
+                AlertDialog.Builder(android.view.ContextThemeWrapper(this@ShareActivity,if(dark) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert)).setTitle("移除设备授权？").setMessage("所有已记住的电脑都需要重新配对。")
+                    .setNegativeButton("取消",null).setPositiveButton("移除") { _,_ -> disconnect(); trust.edit().clear().apply(); render() }.show()
+            }
+        }
     }
     private fun settingsPage() {
         section("设置", "按你的习惯，保持简单")
@@ -220,33 +241,68 @@ class ShareActivity : Activity() {
             addView(text("共享方式",17,p.text,true)); addView(text("前台手动共享 · 加密直连",14,p.muted).apply { setPadding(0,dp(10),0,dp(4)) })
             addView(text("文件速度上限 2 MiB/s；暂不自动同步系统剪贴板。",12,p.muted))
             button("清理接收缓存",false) {
-                if(session!=null) note("请先断开连接") else AlertDialog.Builder(this@ShareActivity).setTitle("清理缓存？").setMessage("已另存的文件不受影响。")
+                if(session!=null) note("请先断开连接") else AlertDialog.Builder(android.view.ContextThemeWrapper(this@ShareActivity,if(dark) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert)).setTitle("清理缓存？").setMessage("已另存的文件不受影响。")
                     .setNegativeButton("取消",null).setPositiveButton("清理") { _,_ -> cache.listFiles()?.forEach { it.delete() }; inbox.clear(); render() }.show()
             }
         }
         card {
-            addView(text("FloatClip Share",16,p.text,true)); addView(text("0.2.0 预览版",12,p.muted))
+            addView(text("FloatClip Share",16,p.text,true)); addView(text(updateMessage,13,p.muted).apply { setPadding(0,dp(8),0,0) })
+            button(if(updateBusy) "正在检查…" else "检查更新",false) { checkUpdate() }
+            release?.let { value -> button(if(value.build>ShareUpdates.BUILD) "下载 ${value.version} 更新" else "下载当前版本",true) { openDownload(value.url) } }
             button("连接诊断",false) { startActivity(Intent(this@ShareActivity,ProbeActivity::class.java)) }
         }
     }
-    private fun listen(ip: String) {
+    private fun listen(ip: String, nearby: Boolean = true) {
         disconnect(); val generation=epoch
-        transport=LanShare(cache,object:LanShare.Events {
-            override fun invitation(code:String)=ui { if(generation==epoch && foreground) { invitation=code; status="等待 Windows 连接"; phase="等待连接"; render() } }
-            override fun connected(value:ShareSession)=ui { if(generation==epoch) { session=value; invitation=""; phase="已连接"; status="临时设备 · TLS 加密直连"; render() } else value.close() }
-            override fun stopped(message:String)=ui { if(generation==epoch) { invitation=""; session=null; status=message; render() } }
-        },object:ShareSession.Events {
+        val messages=object:ShareSession.Events {
             override fun text(id:UUID,value:String,outgoing:Boolean)=ui { if(generation==epoch) { add(Received(text=value,outgoing=outgoing)); note(if(outgoing) "文字已送达" else "收到文字"); if(tab==0) contentChanged() } }
             override fun offered(value:ShareWire.Offer)=ui { if(generation==epoch) { offer=value; if(tab==0) contentChanged() else note("收到文件请求，请前往共享页") } }
             override fun progress(id:UUID,name:String,done:Long,total:Long,outgoing:Boolean)=ui { if(generation==epoch) { progress="${if(outgoing) "发送" else "接收"} $name · ${if(total==0L) 100 else done*100/total}%"; if(::progressView.isInitialized) progressView.text=progress } }
             override fun file(value:ShareWire.Offer,local:File,outgoing:Boolean)=ui { if(generation==epoch) { add(Received(file=if(outgoing) null else local,name=value.name,text=null,outgoing=outgoing)); progress="${value.name} · 已校验完成"; if(outgoing && local.name.startsWith("out-")) local.delete(); if(tab==0) contentChanged() } }
             override fun notice(message:String)=ui { if(generation==epoch) { progress=message; if(::progressView.isInitialized) progressView.text=message } }
-            override fun closed()=ui { if(generation==epoch) { session=null; invitation=""; offer=null; status="连接已结束"; if(::connectionTitleView.isInitialized) connectionTitleView.text="○  未连接"; if(::statusView.isInitialized) statusView.text=status; contentChanged() } }
-        })
-        phase="准备连接"; status="正在生成邀请"; transport.listen(ip); render()
+            override fun closed()=ui { if(generation==epoch) { session=null; invitation=""; offer=null; pairDialog?.dismiss(); pairDialog=null; pair?.close(); pair=null; discovering=false; status="连接已结束，前往设备页重连"; if(::connectionTitleView.isInitialized) connectionTitleView.text="○  未连接"; if(::statusView.isInitialized) statusView.text=status; contentChanged() } }
+        }
+        phase="准备连接"; status=if(nearby) "正在允许附近设备连接" else "正在生成备用邀请"
+        if(nearby) {
+            val service=LanPair(cache,trust,object:LanPair.Events {
+                override fun available(address:String)=ui { if(generation==epoch && foreground) { discovering=true; status="在 Windows 点击此手机即可连接"; render() } }
+                override fun verify(code:String,answer:java.util.function.Consumer<Boolean>)=ui {
+                    if(generation!=epoch || !foreground) { answer.accept(false); return@ui }
+                    pairDialog=AlertDialog.Builder(android.view.ContextThemeWrapper(this@ShareActivity,if(dark) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert)).setTitle("允许 Windows 连接？")
+                        .setMessage("核对两端的识别码是否完全相同：\n\n$code\n\n确认后记住此电脑；以后可以直接重连。")
+                        .setNegativeButton("拒绝") { _,_ -> answer.accept(false) }
+                        .setPositiveButton("相同，允许") { _,_ -> answer.accept(true) }
+                        .setOnCancelListener { answer.accept(false) }.show()
+                }
+                override fun connected(value:ShareSession)=ui { if(generation==epoch && foreground) { pairDialog?.dismiss(); pairDialog=null; session=value; discovering=false; status="已记住设备 · 加密直连"; tab=0; render() } else value.close() }
+                override fun stopped(message:String)=ui { if(generation==epoch) { pairDialog?.dismiss(); pairDialog=null; pair=null; discovering=false; session=null; status=message; render() } }
+            },messages)
+            pair=service; service.listen(ip)
+        } else {
+            transport=LanShare(cache,object:LanShare.Events {
+                override fun invitation(code:String)=ui { if(generation==epoch && foreground) { invitation=code; status="备用邀请 90 秒有效"; render() } }
+                override fun connected(value:ShareSession)=ui { if(generation==epoch && foreground) { session=value; invitation=""; status="临时设备 · 加密直连"; tab=0; render() } else value.close() }
+                override fun stopped(message:String)=ui { if(generation==epoch) { invitation=""; session=null; status=message; render() } }
+            },messages)
+            transport.listen(ip)
+        }
+        render()
     }
     private fun disconnect(message:String="添加设备，开始共享") {
-        epoch++; if(::transport.isInitialized) transport.close(); session=null; invitation=""; offer=null; phase="未连接"; status=message
+        epoch++; pairDialog?.dismiss(); pairDialog=null; pair?.close(); pair=null; discovering=false; if(::transport.isInitialized) transport.close(); session=null; invitation=""; offer=null; phase="未连接"; status=message
+    }
+    private fun checkUpdate() {
+        if(updateBusy) return
+        updateBusy=true; updateMessage="正在检查更新…"; release=null; render()
+        Thread {
+            try {
+                val found=ShareUpdates.check()
+                ui { updateBusy=false; release=found; updateMessage=(if(found.build>ShareUpdates.BUILD) "发现新版本 ${found.version}" else "已是最新版本 ${ShareUpdates.VERSION}")+"\n"+found.notes; if(tab==2) render() }
+            } catch(_:Exception) { ui { updateBusy=false; updateMessage="检查失败，请确认网络后重试"; if(tab==2) render() } }
+        }.start()
+    }
+    private fun openDownload(url:String) {
+        try { startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url))) } catch(_:Exception) { note("没有可用浏览器，请稍后重试") }
     }
     private fun contentChanged() {
         if(tab==0 && currentFocus is EditText) {
@@ -290,7 +346,7 @@ class ShareActivity : Activity() {
     private fun section(title:String,subtitle:String) { body.addView(text(title,26,p.text,true)); body.addView(text(subtitle,13,p.muted).apply { setPadding(0,dp(6),0,dp(16)) }) }
     private fun card(content:LinearLayout.()->Unit) { body.addView(column().apply { background=shape(p.card,18,true); setPadding(dp(18),dp(18),dp(18),dp(18)); content() },LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(14) }) }
     private fun LinearLayout.button(label:String,primary:Boolean,click:()->Unit) { addView(action(label,primary,click),LinearLayout.LayoutParams(-1,dp(46)).apply { topMargin=dp(12) }) }
-    private fun action(label:String,primary:Boolean,click:()->Unit)=Button(this).apply { text=label; isAllCaps=false; textSize=14f; setTextColor(if(primary) Color.WHITE else p.blue); background=shape(if(primary)c("#2563EB") else p.tint,12); setOnClickListener { click() } }
+    private fun action(label:String,primary:Boolean,click:()->Unit)=Button(this).apply { text=label; isAllCaps=false; textSize=14f; setTextColor(if(primary) Color.WHITE else p.blue); background=android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(c("#302563EB")),shape(if(primary)c("#2563EB") else p.tint,12),null); setOnClickListener { click() } }
     private fun column()=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
     private fun text(value:String,sp:Int,color:Int,bold:Boolean=false)=TextView(this).apply { text=value; textSize=sp.toFloat(); setTextColor(color); if(bold) typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL) }
     private fun shape(color:Int,radius:Int,border:Boolean=false)=GradientDrawable().apply { setColor(color); cornerRadius=dp(radius).toFloat(); if(border) setStroke(dp(1),p.line) }

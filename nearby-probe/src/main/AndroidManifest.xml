@@ -9,9 +9,9 @@
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
     <application android:allowBackup="false" android:fullBackupContent="@xml/backup_rules" android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@drawable/ic_floatclip" android:label="FloatClip Share"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@style/Theme.FloatClip.Light">
         <activity android:name=".ProbeActivity" android:exported="false" />
-        <activity android:name=".ShareActivity" android:exported="true" android:launchMode="singleTask" android:configChanges="uiMode|orientation|screenSize">
+        <activity android:name=".ShareActivity" android:exported="true" android:launchMode="singleTask" android:configChanges="uiMode|orientation|screenSize" android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

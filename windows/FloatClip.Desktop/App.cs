@@ -74,6 +74,8 @@ public sealed class MainWindow : Window
         Resources=(ResourceDictionary)XamlReader.Parse(ResourcesXaml);
         SetResourceReference(BackgroundProperty,"Bg");
         layout=(Grid)XamlReader.Parse(LayoutXaml); Content=layout;
+        Part<TextBlock>("AppVersion").Text=ShareUpdates.Version+" 预览版";
+        Part<TextBlock>("UpdateStatus").Text="当前版本 "+ShareUpdates.Version+" · 共享预览通道";
         draft=Part<TextBox>("Draft"); invite=Part<TextBox>("Invitation"); inbox=Part<StackPanel>("Inbox");
         status=Part<TextBlock>("Status"); deviceStatus=Part<TextBlock>("DeviceStatus"); notice=Part<TextBlock>("Notice");
         progress=Part<TextBlock>("TransferStatus"); progressBar=Part<ProgressBar>("TransferProgress");
@@ -128,7 +130,7 @@ public sealed class MainWindow : Window
         theme=mode is "dark" or "light" ? mode : "system";
         bool dark=theme=="dark";
         if(theme=="system") { try { dark=(int?)Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize","AppsUseLightTheme",1)==0; } catch { } }
-        var colors=dark ? new[]{"#0D1424","#152139","#EAF0FA","#A2B2CA","#2B3B54","#60A5FA","#20375B"} : new[]{"#F5F8FC","#FFFFFF","#18243A","#61718A","#E1E8F2","#2563EB","#EAF1FF"};
+        var colors=dark ? new[]{"#0C1422","#162235","#EDF3FC","#A9B8CD","#2D3C52","#8DBBFF","#243B5A"} : new[]{"#F4F7FC","#FFFFFF","#19283F","#596C85","#DFE7F2","#245DCE","#EBF2FF"};
         string[] keys={"Bg","Card","Text","Muted","Line","Accent","Tint"};
         for(int i=0;i<keys.Length;i++) Resources[keys[i]]=new SolidColorBrush((Color)ColorConverter.ConvertFromString(colors[i]));
         if(layout!=null) {
@@ -179,9 +181,9 @@ public sealed class MainWindow : Window
         Part<TextBlock>("UpdateStatus").Text="正在检查更新…"; Part<Button>("DownloadUpdate").Visibility=Visibility.Collapsed;
         try {
             var found=await ShareUpdates.Check(); if(closing) return; updateRelease=found;
-            Part<TextBlock>("UpdateStatus").Text=(found.Build>ShareUpdates.Build ? "发现新版本 "+found.Version : "已是最新版本 "+ShareUpdates.Version)+"\n"+found.Notes;
+            Part<TextBlock>("UpdateStatus").Text=(found.Build>ShareUpdates.Build ? "发现新版本 "+found.Version : found.Build==ShareUpdates.Build ? "已是最新版本 "+ShareUpdates.Version : "当前版本 "+ShareUpdates.Version+"，更新源尚未收录此预览包")+"\n"+found.Notes;
             Part<Button>("DownloadUpdate").Content=found.Build>ShareUpdates.Build ? "下载 "+found.Version+" 更新" : "下载当前版本";
-            Part<Button>("DownloadUpdate").Visibility=Visibility.Visible;
+            Part<Button>("DownloadUpdate").Visibility=found.Build>=ShareUpdates.Build ? Visibility.Visible : Visibility.Collapsed;
         } catch { if(!closing) Part<TextBlock>("UpdateStatus").Text="检查失败，请确认网络后重试"; }
         finally { checkingUpdate=false; }
     }
@@ -246,7 +248,7 @@ public sealed class MainWindow : Window
       <Border Background="{DynamicResource Card}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0"><Grid Margin="18,30,18,20"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <StackPanel><Border Background="#2563EB" CornerRadius="13" Width="44" Height="44" HorizontalAlignment="Left"><TextBlock Text="F" FontWeight="SemiBold" FontSize="26" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Text="FloatClip" FontSize="23" FontWeight="SemiBold" Margin="0,14,0,4"/><TextBlock Text="跨设备，轻松共享" Foreground="{DynamicResource Muted}" FontSize="12"/></StackPanel>
         <StackPanel Grid.Row="1" Margin="0,34,0,0"><Button x:Name="NavShare" Content="共享" HorizontalContentAlignment="Left" Margin="0,0,0,8"/><Button x:Name="NavDevices" Content="设备" HorizontalContentAlignment="Left" Margin="0,0,0,8"/><Button x:Name="NavSettings" Content="设置" HorizontalContentAlignment="Left"/></StackPanel>
-        <TextBlock Grid.Row="3" Text="0.3.0 预览版" FontSize="11" Foreground="{DynamicResource Muted}"/>
+        <TextBlock Grid.Row="3" x:Name="AppVersion" Text="预览版" FontSize="11" Foreground="{DynamicResource Muted}"/>
       </Grid></Border>
       <Grid Grid.Column="1" Margin="32,28,32,16"><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <ScrollViewer x:Name="SharePage" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="0,0,10,0">
@@ -276,7 +278,7 @@ public sealed class MainWindow : Window
         <ScrollViewer x:Name="SettingsPage" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,0,10,0"><TextBlock Text="设置" FontSize="28" FontWeight="SemiBold"/><TextBlock Text="按你的习惯，保持简单" Foreground="{DynamicResource Muted}" Margin="0,7,0,20"/>
           <Border Style="{DynamicResource CardStyle}"><StackPanel><TextBlock Text="外观" FontSize="18" FontWeight="SemiBold"/><StackPanel Orientation="Horizontal" Margin="0,16,0,0"><Button x:Name="ThemeSystem" Content="跟随系统" Margin="0,0,10,0"/><Button x:Name="ThemeLight" Content="浅色" Margin="0,0,10,0"/><Button x:Name="ThemeDark" Content="深色"/></StackPanel></StackPanel></Border>
           <Border Style="{DynamicResource CardStyle}"><StackPanel><TextBlock Text="共享方式" FontSize="18" FontWeight="SemiBold"/><TextBlock Text="前台手动共享 · 加密直连" Foreground="{DynamicResource Muted}" Margin="0,14,0,8"/><TextBlock Text="文件速度上限 2 MiB/s；暂不自动同步系统剪贴板。" TextWrapping="Wrap" Foreground="{DynamicResource Muted}"/><Button x:Name="ClearCache" Content="清理接收缓存" HorizontalAlignment="Left" Margin="0,18,0,0"/></StackPanel></Border>
-          <Border Style="{DynamicResource CardStyle}"><StackPanel><TextBlock Text="版本与更新" FontSize="18" FontWeight="SemiBold"/><TextBlock x:Name="UpdateStatus" Text="当前版本 0.3.0 · 共享预览通道" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" Margin="0,12,0,14"/><StackPanel Orientation="Horizontal"><Button x:Name="CheckUpdates" Content="检查更新" Margin="0,0,10,0"/><Button x:Name="DownloadUpdate" Content="下载更新" Style="{DynamicResource Primary}" Visibility="Collapsed"/></StackPanel></StackPanel></Border>
+          <Border Style="{DynamicResource CardStyle}"><StackPanel><TextBlock Text="版本与更新" FontSize="18" FontWeight="SemiBold"/><TextBlock x:Name="UpdateStatus" Text="共享预览通道" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" Margin="0,12,0,14"/><StackPanel Orientation="Horizontal"><Button x:Name="CheckUpdates" Content="检查更新" Margin="0,0,10,0"/><Button x:Name="DownloadUpdate" Content="下载更新" Style="{DynamicResource Primary}" Visibility="Collapsed"/></StackPanel></StackPanel></Border>
         </StackPanel></ScrollViewer>
         <TextBlock x:Name="Notice" Grid.Row="1" Text="添加设备，开始共享" Foreground="{DynamicResource Muted}" FontSize="12" Margin="0,12,0,0" TextTrimming="CharacterEllipsis"/>
       </Grid>

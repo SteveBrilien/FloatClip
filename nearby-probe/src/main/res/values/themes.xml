@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.FloatClip.Light" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#245DCE</item>
+        <item name="android:colorControlActivated">#245DCE</item>
+        <item name="android:colorControlHighlight">#252563EB</item>
+        <item name="android:textColorPrimary">#19283F</item>
+        <item name="android:textColorSecondary">#596C85</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowBackground">#F4F7FC</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+    <style name="Theme.FloatClip.Dark" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#8DBBFF</item>
+        <item name="android:colorControlActivated">#8DBBFF</item>
+        <item name="android:colorControlHighlight">#408DBBFF</item>
+        <item name="android:textColorPrimary">#EDF3FC</item>
+        <item name="android:textColorSecondary">#A9B8CD</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowBackground">#0C1422</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+</resources>

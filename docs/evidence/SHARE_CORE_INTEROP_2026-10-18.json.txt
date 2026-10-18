@@ -1,0 +1,9 @@
+{
+  "result": "PASS",
+  "scope": "Java/C# loopback protocol; no TLS or device UI",
+  "textDirections": 2,
+  "fileBytesEach": 1048593,
+  "sha256": "4127c61cb879e78b603e0b3e807c6a4127b1ec5a56630c8fb6a279043649e99a",
+  "rejected": true,
+  "error": null
+}

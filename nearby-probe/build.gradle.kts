@@ -11,8 +11,8 @@ android {
         applicationId = "com.floatclip.probe"
         minSdk = 28
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.1.1-p0"
+        versionCode = 3
+        versionName = "0.2.0-preview"
     }
     signingConfigs {
         getByName("debug") {
@@ -25,3 +25,5 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 }
+
+dependencies { implementation(project(":share-core")) }

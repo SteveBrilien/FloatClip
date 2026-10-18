@@ -19,3 +19,5 @@ include(":app")
 
 // Independent, synthetic near-field validation; does not modify the installed app.
 include(":nearby-probe")
+
+include(":share-core")

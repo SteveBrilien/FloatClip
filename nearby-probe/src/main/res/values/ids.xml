@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="detail_back" type="id" />
+    <item name="page_title" type="id" />
+    <item name="nav_container" type="id" />
+    <item name="nav_share" type="id" />
+    <item name="nav_devices" type="id" />
+    <item name="nav_settings" type="id" />
+    <item name="share_editor" type="id" />
+    <item name="menu_trust" type="id" />
+    <item name="menu_help" type="id" />
+    <item name="menu_appearance" type="id" />
+    <item name="menu_cache" type="id" />
+    <item name="menu_updates" type="id" />
+    <item name="menu_sharing" type="id" />
+    <item name="menu_advanced" type="id" />
+    <item name="theme_light" type="id" />
+    <item name="theme_dark" type="id" />
+    <item name="theme_system" type="id" />
+    <item name="check_updates" type="id" />
+</resources>

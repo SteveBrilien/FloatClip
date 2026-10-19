@@ -11,7 +11,7 @@
         android:icon="@drawable/ic_floatclip" android:label="FloatClip Share"
         android:theme="@style/Theme.FloatClip.Light">
         <activity android:name=".ProbeActivity" android:exported="false" />
-        <activity android:name=".ShareActivity" android:exported="true" android:launchMode="singleTask" android:configChanges="uiMode|orientation|screenSize" android:windowSoftInputMode="adjustResize">
+        <activity android:name=".ShareActivity" android:exported="true" android:enableOnBackInvokedCallback="true" android:launchMode="singleTask" android:configChanges="uiMode|orientation|screenSize" android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

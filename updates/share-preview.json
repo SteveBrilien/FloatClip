@@ -1,18 +1,18 @@
 {
   "schema": 1,
   "channel": "share-preview",
-  "version": "0.3.1",
-  "notes": "0.3.1 共享预览候选：统一手机底栏、深浅色主题、输入与卡片规范，桌面同步配色。尚未进行本轮真机视觉及双端验收；原配对超时与 TUN 兼容性仍待明天验证。",
+  "version": "0.4.0",
+  "notes": "0.4.0 共享预览：修复 Android 11 启动闪退；手机采用紧凑顶栏、分组菜单与多级详情页，返回及主题切换保留文字草稿。Windows 仅同步版本。7 项 SDK 30 启动/导航测试和 239 项通信核心断言通过；新 UI 未再次真机验收，配对超时与 Clash TUN 仍待双端验证。",
   "android": {
-    "build": 5,
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-c9d30d0e3f2b4cd4b8cc80351987e157/FloatClip-Share-0.3.1-preview.apk?exp=0&sig=10f582b6f5b459b17f3737d99b810fcfc7269c84aec6ae7e8b7e7ed7c45bfe22",
-    "sha256": "4f117d04aa9cd3f7843d14131cfa21fe7ad63a97cfb24d1c3d3b5bbc75b06011",
-    "bytes": 2831339
+    "build": 8,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-2f6494a5bcd2495090b9893796bb6a9d/FloatClip-Share-0.4.0-preview.apk?exp=0&sig=e4caf33da719be1783312ad9a6ebc0222332a0e40320a97e937f645e282acefe",
+    "sha256": "c33ee8849ae6a7d399d5928e971367b8901ea77a657599394022b877c0bf9062",
+    "bytes": 2644367
   },
   "windows": {
-    "build": 5,
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-57779c81b3894a2f988ed84d6ea962bb/FloatClip-Share-Windows-0.3.1.zip?exp=0&sig=99cd2065418c0556e3a180496fb9ead5765582d7d324311f95df470af16d3abc",
-    "sha256": "2282a93d8ec0085c08a9fb78932ad3285d15fbebcfe2a2b2fe0679cdc9878a63",
-    "bytes": 58851908
+    "build": 8,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-04c0314403a54d10b81324871cdf7510/FloatClip-Share-Windows-0.4.0.zip?exp=0&sig=df12aa27ddc26ee1150bb8152d6c9df1a89ad57eba452beecc888b89f7c01084",
+    "sha256": "4b19f992facb00fe21a6efb1f403de8b33923e5a46f69a6ff15430fa123e34f1",
+    "bytes": 58851923
   }
 }

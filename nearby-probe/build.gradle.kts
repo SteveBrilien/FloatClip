@@ -11,8 +11,8 @@ android {
         applicationId = "com.floatclip.probe"
         minSdk = 28
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.3.1-preview"
+        versionCode = 8
+        versionName = "0.4.0-preview"
     }
     signingConfigs {
         getByName("debug") {
@@ -24,6 +24,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
-dependencies { implementation(project(":share-core")) }
+dependencies {
+    implementation(project(":share-core"))
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+}

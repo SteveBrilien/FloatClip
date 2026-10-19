@@ -10,8 +10,8 @@ import android.graphics.drawable.Drawable
 
 /** Shared visual tokens. Geometry uses a 4 dp grid; controls have a 48 dp minimum target. */
 internal object ShareDesign {
-    const val PAGE = 20
-    const val CARD = 20
+    const val PAGE = 16
+    const val CARD = 16
     const val CONTROL = 12
     const val TARGET = 48
     data class Palette(val bg: Int, val card: Int, val text: Int, val muted: Int,

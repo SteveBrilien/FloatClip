@@ -44,7 +44,14 @@ class ShareActivity : Activity() {
     private var progress = ""
     private var draft = ""
     private var tab = 0
-    private var backupExpanded = false
+    private enum class Detail { ROOT, APPEARANCE, CACHE, UPDATES, HELP, ADVANCED, TRUST, SHARING }
+    private var detail = Detail.ROOT
+    private val backStack = ArrayDeque<Pair<Detail, Int>>()
+    private var renderedDetail = Detail.ROOT
+    private var transition = 0
+    private var keyboardVisible = false
+    private lateinit var header: LinearLayout
+    private lateinit var bottom: LinearLayout
     private var renderedTab = -1
     private lateinit var scroller: ScrollView
     private lateinit var uiContext: Context
@@ -69,7 +76,14 @@ class ShareActivity : Activity() {
         super.onCreate(state)
         cache.listFiles()?.filter { it.lastModified() < System.currentTimeMillis() - 86400000L || it.name.endsWith(".part") }?.forEach { it.delete() }
         build()
+        if (Build.VERSION.SDK_INT >= 33) {
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT) {
+                if (!goBack()) finish()
+            }
+        }
     }
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() { if (!goBack()) super.onBackPressed() }
     override fun onStart() { super.onStart(); foreground = true; if(!picker && session==null && pair==null && invitation.isEmpty()) addresses().let { ips -> (prefs.getString("address",null)?.takeIf { it in ips } ?: ips.firstOrNull())?.let { listen(it) } } }
     override fun onResume() { super.onResume(); if(::body.isInitialized) render() }
     override fun onStop() {
@@ -98,8 +112,8 @@ class ShareActivity : Activity() {
         if(Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
         if(Build.VERSION.SDK_INT >= 30) {
             window.setDecorFitsSystemWindows(false)
-            val mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-            window.insetsController?.setSystemBarsAppearance(if(dark) 0 else mask, mask)
+            // Android 11 PhoneWindow dereferences an uncreated DecorView here.
+            // Apply icon appearance through the attached view's insets callback below.
         } else {
             @Suppress("DEPRECATION")
             window.decorView.systemUiVisibility = if(dark) 0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
@@ -109,42 +123,34 @@ class ShareActivity : Activity() {
         val oldScroll = if(::scroller.isInitialized) scroller.scrollY else 0
         palette()
         root = column().apply { setBackgroundColor(p.bg); fitsSystemWindows = Build.VERSION.SDK_INT < 30; isFocusableInTouchMode=true }
-        val header = LinearLayout(uiContext).apply { gravity=Gravity.CENTER_VERTICAL; setPadding(dp(20),dp(12),dp(20),dp(12)) }
-        header.addView(ImageView(uiContext).apply { setImageResource(R.drawable.ic_floatclip); importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO },LinearLayout.LayoutParams(dp(36),dp(36)))
-        val titles=column().apply {
-            setPadding(dp(12),0,0,0)
-            addView(text("FloatClip",20,p.text,true))
-            addView(text("随手分享，自在连接",12,p.muted).apply { setPadding(0,dp(3),0,0) })
-        }
-        header.addView(titles,LinearLayout.LayoutParams(0,-2,1f))
-        header.addView(text("PREVIEW",10,p.blue,true).apply { background=shape(p.tint,8); setPadding(dp(8),dp(6),dp(8),dp(6)); contentDescription="共享预览版" })
+        header = LinearLayout(uiContext).apply { gravity=Gravity.CENTER_VERTICAL; setPadding(dp(12),dp(4),dp(12),dp(4)) }
         root.addView(header)
         scroller=ScrollView(uiContext).apply { isFillViewport=true; clipToPadding=false; isVerticalScrollBarEnabled=false }
-        body=column().apply { setPadding(dp(20),dp(12),dp(20),dp(24)) }
+        body=column().apply { setPadding(dp(16),dp(8),dp(16),dp(24)) }
         scroller.addView(body)
         root.addView(scroller,LinearLayout.LayoutParams(-1,0,1f))
-        val bottom=column().apply { setBackgroundColor(p.card) }
+        bottom=column().apply { id=R.id.nav_container; setBackgroundColor(p.card) }
         bottom.addView(View(uiContext).apply { setBackgroundColor(p.line) },LinearLayout.LayoutParams(-1,dp(1)))
         nav=LinearLayout(uiContext).apply { gravity=Gravity.CENTER; setPadding(dp(12),dp(8),dp(12),dp(8)) }
         bottom.addView(nav)
         root.addView(bottom)
         root.addOnLayoutChangeListener { _,left,_,right,_,oldLeft,_,oldRight,_ ->
             if(right-left != oldRight-oldLeft) {
-                val gutter=maxOf(dp(20),(right-left-dp(640))/2+dp(20))
-                header.setPadding(gutter,dp(12),gutter,dp(12))
-                body.setPadding(gutter,dp(12),gutter,dp(24))
+                val gutter=maxOf(dp(16),(right-left-dp(640))/2+dp(16))
+                header.setPadding(maxOf(dp(12),gutter-dp(4)),dp(4),maxOf(dp(12),gutter-dp(4)),dp(4))
+                body.setPadding(gutter,dp(8),gutter,dp(24))
                 val navGutter=maxOf(dp(12),(right-left-dp(480))/2)
                 nav.setPadding(navGutter,nav.paddingTop,navGutter,nav.paddingBottom)
             }
         }
-        if(Build.VERSION.SDK_INT >= 30) root.setOnApplyWindowInsetsListener { _,insets ->
+        if(Build.VERSION.SDK_INT >= 30) root.setOnApplyWindowInsetsListener { view,insets ->
             val appearance=WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-            window.insetsController?.setSystemBarsAppearance(if(dark) 0 else appearance,appearance)
+            view.windowInsetsController?.setSystemBarsAppearance(if(dark) 0 else appearance,appearance)
             val bars=insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
             val ime=insets.getInsets(WindowInsets.Type.ime())
-            val keyboard=insets.isVisible(WindowInsets.Type.ime())
-            root.setPadding(bars.left,bars.top,bars.right,if(keyboard) ime.bottom else 0)
-            bottom.visibility=if(keyboard) View.GONE else View.VISIBLE
+            keyboardVisible=insets.isVisible(WindowInsets.Type.ime())
+            root.setPadding(bars.left,bars.top,bars.right,if(keyboardVisible) ime.bottom else if(detail!=Detail.ROOT) bars.bottom else 0)
+            bottom.visibility=if(keyboardVisible || detail!=Detail.ROOT) View.GONE else View.VISIBLE
             nav.setPadding(nav.paddingLeft,dp(8),nav.paddingRight,dp(8)+bars.bottom)
             insets
         }
@@ -155,50 +161,109 @@ class ShareActivity : Activity() {
         render()
         scroller.post { scroller.scrollTo(0,oldScroll) }
     }
+    private fun dismissKeyboard() {
+        val focused=currentFocus
+        (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+            .hideSoftInputFromWindow(focused?.windowToken ?: root.windowToken,0)
+        focused?.clearFocus()
+    }
+    private fun navigate(target: Detail) {
+        if(target==detail) return
+        dismissKeyboard()
+        backStack.addLast(detail to scroller.scrollY)
+        detail=target; transition=1; render()
+    }
+    private fun goBack(): Boolean {
+        if(backStack.isEmpty()) return false
+        val previous=backStack.removeLast(); detail=previous.first; transition=-1
+        render(); scroller.post { scroller.scrollTo(0,previous.second) }
+        return true
+    }
+    private fun switchTab(index: Int) {
+        dismissKeyboard(); backStack.clear(); detail=Detail.ROOT; tab=index; transition=0; render()
+    }
+    private fun screenTitle() = when(detail) {
+        Detail.ROOT -> listOf("共享","设备","设置")[tab]
+        Detail.APPEARANCE -> "外观"; Detail.CACHE -> "接收缓存"; Detail.UPDATES -> "版本与更新"
+        Detail.HELP -> "连接帮助"; Detail.ADVANCED -> "网络与备用连接"; Detail.TRUST -> "设备授权"; Detail.SHARING -> "共享说明"
+    }
+    private fun toolbar() {
+        header.removeAllViews()
+        if(detail==Detail.ROOT) {
+            header.addView(ImageView(uiContext).apply { setImageResource(R.drawable.ic_floatclip); importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO },LinearLayout.LayoutParams(dp(28),dp(28)).apply { marginStart=dp(4); marginEnd=dp(12) })
+        } else {
+            val back=FrameLayout(uiContext).apply {
+                id=R.id.detail_back; contentDescription="返回"; background=ripple(p.bg,24); buttonSemantics(this); setOnClickListener { goBack() }
+            }
+            back.addView(icon(ShareGlyph.CHEVRON,p.text).apply { rotation=180f },FrameLayout.LayoutParams(dp(22),dp(22),Gravity.CENTER))
+            header.addView(back,LinearLayout.LayoutParams(dp(48),dp(48)).apply { marginEnd=dp(4) })
+        }
+        header.addView(text(screenTitle(),if(detail==Detail.ROOT) 22 else 20,p.text,true).apply { id=R.id.page_title; isAccessibilityHeading=true },LinearLayout.LayoutParams(0,-2,1f))
+        if(detail==Detail.ROOT) {
+            val badge=FrameLayout(uiContext).apply { minimumHeight=dp(48); background=ripple(p.bg,12); contentDescription="版本与更新"; buttonSemantics(this); setOnClickListener { navigate(Detail.UPDATES) } }
+            badge.addView(text("预览版",11,p.blue,true).apply { background=shape(p.tint,8); setPadding(dp(8),dp(5),dp(8),dp(5)); importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO },FrameLayout.LayoutParams(-2,-2,Gravity.CENTER))
+            header.addView(badge,LinearLayout.LayoutParams(-2,dp(48)))
+        }
+    }
     private fun render() {
-        val scrollY=if(renderedTab==tab) scroller.scrollY else 0
-        body.removeAllViews(); nav.removeAllViews()
+        val scrollY=if(renderedTab==tab && renderedDetail==detail) scroller.scrollY else 0
+        body.animate().cancel(); body.alpha=1f; body.translationX=0f
+        body.removeAllViews(); nav.removeAllViews(); toolbar()
+        bottom.visibility=if(detail==Detail.ROOT && !keyboardVisible) View.VISIBLE else View.GONE
         listOf("共享" to ShareGlyph.SHARE,"设备" to ShareGlyph.DEVICES,"设置" to ShareGlyph.SETTINGS).forEachIndexed { i,(label,glyph) ->
             val selected=tab==i
             val item=column().apply {
+                id=listOf(R.id.nav_share,R.id.nav_devices,R.id.nav_settings)[i]
                 gravity=Gravity.CENTER; minimumHeight=dp(64); setPadding(dp(4),dp(2),dp(4),dp(2))
-                background=ripple(p.card,16); contentDescription=label; isSelected=selected
-                buttonSemantics(this)
-                setOnClickListener { if(tab!=i) { currentFocus?.clearFocus(); tab=i; render() } }
+                background=ripple(p.card,16); contentDescription=label; isSelected=selected; buttonSemantics(this)
+                setOnClickListener { if(tab!=i || detail!=Detail.ROOT) switchTab(i) }
             }
             val indicator=FrameLayout(uiContext).apply { if(selected) background=shape(p.tint,16); importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS }
             indicator.addView(icon(glyph,if(selected) p.blue else p.muted),FrameLayout.LayoutParams(dp(24),dp(24),Gravity.CENTER))
             item.addView(indicator,LinearLayout.LayoutParams(dp(60),dp(32)))
-            item.addView(text(label,12,if(selected) p.blue else p.muted,selected).apply { setPadding(0,dp(4),0,0); importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO })
+            item.addView(text(label,12,if(selected) p.blue else p.muted,selected).apply { gravity=Gravity.CENTER; setPadding(0,dp(4),0,0); importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO })
             nav.addView(item,LinearLayout.LayoutParams(0,-2,1f))
         }
-        when(tab) { 0 -> sharePage(); 1 -> devicesPage(); else -> settingsPage() }
-        renderedTab=tab
-        scroller.post { scroller.scrollTo(0,scrollY) }
+        when(detail) {
+            Detail.ROOT -> when(tab) { 0 -> sharePage(); 1 -> devicesPage(); else -> settingsPage() }
+            Detail.APPEARANCE -> appearancePage(); Detail.CACHE -> cachePage(); Detail.UPDATES -> updatesPage()
+            Detail.HELP -> helpPage(); Detail.ADVANCED -> advancedPage(); Detail.TRUST -> trustPage(); Detail.SHARING -> sharingPage()
+        }
+        renderedTab=tab; renderedDetail=detail
+        scroller.post { scroller.scrollTo(0,scrollY) }; root.requestApplyInsets()
+        if(transition!=0 && android.animation.ValueAnimator.areAnimatorsEnabled()) {
+            body.alpha=0.5f; body.translationX=dp(12).toFloat()*transition
+            body.animate().alpha(1f).translationX(0f).setDuration(160).start()
+        }
+        transition=0
     }
     private fun connection(parent: LinearLayout) {
         val active=session!=null || discovering || invitation.isNotEmpty()
         val row=LinearLayout(uiContext).apply { gravity=Gravity.CENTER_VERTICAL }
         val badge=FrameLayout(uiContext).apply { background=shape(p.tint,12) }
         badge.addView(icon(if(session!=null) ShareGlyph.SHIELD else ShareGlyph.DEVICES,p.blue),FrameLayout.LayoutParams(dp(24),dp(24),Gravity.CENTER))
-        row.addView(badge,LinearLayout.LayoutParams(dp(44),dp(44)).apply { marginEnd=dp(12) })
+        row.addView(badge,LinearLayout.LayoutParams(dp(36),dp(36)).apply { marginEnd=dp(12) })
         val details=column()
-        connectionTitleView=text(if(session!=null) "已加密连接" else if(active) "等待电脑连接" else "尚未连接",16,p.text,true)
+        connectionTitleView=text(if(session!=null) "已加密连接" else if(active) "等待电脑连接" else "尚未连接",15,p.text,true)
         details.addView(connectionTitleView)
-        statusView=text(status,13,p.muted).apply { setPadding(0,dp(5),0,0); accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE }
+        statusView=text(status,12,p.muted).apply { maxLines=2; ellipsize=android.text.TextUtils.TruncateAt.END; setPadding(0,dp(4),0,0); accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE }
         details.addView(statusView)
         row.addView(details,LinearLayout.LayoutParams(0,-2,1f)); parent.addView(row)
     }
     private fun sharePage() {
-        section("共享", "把内容送到你身边的设备")
-        card { connection(this); if(session==null) button("前往连接设备",false) { tab=1; render() } }
         card {
-            cardTitle("发送文字", "主动粘贴，确认后发送")
+            val row=LinearLayout(uiContext).apply { gravity=Gravity.CENTER_VERTICAL; minimumHeight=dp(48); background=ripple(p.card,12); contentDescription="查看连接设备"; buttonSemantics(this); setOnClickListener { switchTab(1) } }
+            row.addView(column().apply { connection(this) },LinearLayout.LayoutParams(0,-2,1f))
+            row.addView(icon(ShareGlyph.CHEVRON,p.muted),LinearLayout.LayoutParams(dp(18),dp(18)).apply { marginStart=dp(8) })
+            addView(row)
+        }
+        card {
+            addView(text("文字",16,p.text,true))
             val editor=EditText(uiContext).apply {
-                hint="输入或粘贴要分享的内容"; setHintTextColor(p.muted); setTextColor(p.text); textSize=15f
+                id=R.id.share_editor; hint="输入或粘贴文字"; setHintTextColor(p.muted); setTextColor(p.text); textSize=15f
                 gravity=Gravity.TOP
                 inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-                minLines=3; maxLines=7
+                minLines=2; maxLines=6
                 background=android.graphics.drawable.StateListDrawable().apply {
                     addState(intArrayOf(android.R.attr.state_focused),shape(p.bg,12,true,p.blue))
                     addState(intArrayOf(),shape(p.bg,12,true))
@@ -211,32 +276,22 @@ class ShareActivity : Activity() {
                     override fun afterTextChanged(s:Editable?) { }
                 })
             }
-            addView(editor,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(16) })
+            addView(editor,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(12) })
             val row=LinearLayout(uiContext).apply { gravity=Gravity.CENTER_VERTICAL }
             row.addView(action("粘贴",false) {
                 val cb=getSystemService(ClipboardManager::class.java)
                 val value=cb.primaryClip?.takeIf { it.itemCount>0 }?.getItemAt(0)?.text?.toString()
                 if(value==null) note("剪贴板中没有可用文字") else if(value.toByteArray(Charsets.UTF_8).size>ShareWire.MAX_TEXT) note("文字最多 64 KiB") else editor.setText(value)
             },LinearLayout.LayoutParams(0,-2,1f).apply { marginEnd=dp(12) })
-            row.addView(action("发送文字",true) {
+            row.addView(action("发送",true) {
                 val active=session; val value=draft
                 if(active==null) note("请先连接设备") else io.execute { try { active.sendText(value); ui { note("已发送，等待确认") } } catch(e:Exception) { ui { note("发送失败，请检查连接和文字长度") } } }
             },LinearLayout.LayoutParams(0,-2,2f))
             addView(row,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(12) })
         }
         card {
-            val row=LinearLayout(uiContext).apply { gravity=Gravity.CENTER_VERTICAL }
-            row.addView(icon(ShareGlyph.FILE,p.blue),LinearLayout.LayoutParams(dp(24),dp(24)).apply { marginEnd=dp(12) })
-            row.addView(column().apply { cardTitle("发送文件", "单个文件，最大 64 MiB") },LinearLayout.LayoutParams(0,-2,1f))
-            addView(row)
-            button("选择文件",false) {
-                if(session==null) note("请先连接设备") else {
-                    picker=true
-                    try { startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type="*/*"; addCategory(Intent.CATEGORY_OPENABLE) },41) }
-                    catch(e:Exception) { picker=false; note("无法打开文件选择器") }
-                }
-            }
-            progressView=text(progress,13,p.blue).apply { visibility=if(progress.isEmpty()) View.GONE else View.VISIBLE; setPadding(0,dp(12),0,0); accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE }
+            addView(settingRow("文件","单个文件，最大 64 MiB",ShareGlyph.FILE) { chooseFile() })
+            progressView=text(progress,12,p.blue).apply { visibility=if(progress.isEmpty()) View.GONE else View.VISIBLE; setPadding(0,dp(10),0,0); accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE }
             addView(progressView)
             if(progress.isNotEmpty() && session!=null) button("取消传输并断开",false) { disconnect(); render() }
         }
@@ -245,11 +300,11 @@ class ShareActivity : Activity() {
             button("接收文件",true) { try { session?.accept(pending.id); offer=null; progress="正在接收 ${pending.name}"; render() } catch(e:Exception) { note("无法接收：请检查空间或清理接收缓存") } }
             button("暂不接收",false) { try { session?.reject(pending.id) } catch(_:Exception) { }; offer=null; render() }
         } }
-        section("最近共享", "收到的内容，由你决定复制或保存",small=true)
+        section("最近共享", "",small=true)
         if(inbox.isEmpty()) card {
             addView(icon(ShareGlyph.SHARE,p.muted),LinearLayout.LayoutParams(dp(28),dp(28)).apply { gravity=Gravity.CENTER_HORIZONTAL; bottomMargin=dp(12) })
             addView(text("还没有共享内容",15,p.text,true).apply { gravity=Gravity.CENTER })
-            addView(text("连接设备后，试着发送第一条文字",13,p.muted).apply { gravity=Gravity.CENTER; setPadding(0,dp(6),0,dp(4)) })
+            addView(text("连接后，试着发送第一条文字",13,p.muted).apply { gravity=Gravity.CENTER; setPadding(0,dp(6),0,dp(4)) })
         }
         for(item in inbox.toList().asReversed()) card {
             addView(text(if(item.outgoing) "已送达" else if(item.file==null) "收到文字" else "收到文件",12,p.blue,true))
@@ -265,73 +320,59 @@ class ShareActivity : Activity() {
             }
         }
     }
+    private fun chooseFile() {
+        if(session==null) note("请先连接设备") else {
+            picker=true
+            try { startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type="*/*"; addCategory(Intent.CATEGORY_OPENABLE) },41) }
+            catch(e:Exception) { picker=false; note("无法打开文件选择器") }
+        }
+    }
     private fun devicesPage() {
-        section("设备", "同一 Wi-Fi 或手机热点，即可发现")
+        intro("同一 Wi-Fi 或手机热点，即可发现")
         card {
             connection(this)
             if(session!=null) {
-                button("开始共享",true) { tab=0; render() }
+                button("开始共享",true) { switchTab(0) }
                 button("断开连接",false) { disconnect(); render() }
             } else {
-                divider(this)
-                step(this,"1","电脑打开 FloatClip 的设备页")
-                step(this,"2","选择此手机，首次核对两端识别码")
-                addView(text("手机保持当前页面，记住的设备下次可直接连接。",13,p.muted).apply { setPadding(0,dp(8),0,0) })
                 button(if(discovering) "重新开放连接" else "允许附近设备连接",true) {
                     val ips=addresses(); (prefs.getString("address",null)?.takeIf { it in ips } ?: ips.firstOrNull())?.let { listen(it) } ?: note("请先连接 Wi-Fi 或开启热点")
                 }
                 if(discovering) button("暂停发现",false) { disconnect("发现已暂停"); render() }
-                addView(text(if(discovering) "本次发现窗口为 90 秒" else "仅在前台允许设备发现",12,p.muted).apply { gravity=Gravity.CENTER; setPadding(0,dp(12),0,0) })
+                addView(text(if(discovering) "90 秒发现窗口 · 保持手机前台" else "连接电脑时，保持手机前台",12,p.muted).apply { gravity=Gravity.CENTER; setPadding(0,dp(10),0,0) })
             }
         }
         card {
-            cardTitle("已记住的设备", "${trust.all.size} 台设备 · 首次确认后记住授权")
-            if(trust.all.isNotEmpty()) button("管理设备授权",false) {
-                dialog().setTitle("移除所有设备授权？").setMessage("所有已记住的电脑都需要重新配对。")
-                    .setNegativeButton("取消",null).setPositiveButton("移除授权") { _,_ -> disconnect(); trust.edit().clear().apply(); render() }.show()
-            } else addView(text("配对后会自动记录，无需每次核对识别码。",13,p.muted).apply { setPadding(0,dp(12),0,0) })
-        }
-        card {
-            addView(settingRow("连接帮助", "找不到设备时，再使用备用方式",ShareGlyph.DEVICES) { backupExpanded=!backupExpanded; render() })
-            if(backupExpanded) {
-                divider(this)
-                addView(text("校园网可能隔离设备，可让电脑连接手机热点。代理影响连接时，可在电脑设备页查看网络诊断。",13,p.muted))
-                val ips=addresses()
-                var selected=prefs.getString("address",null)?.takeIf { it in ips } ?: ips.firstOrNull()
-                if(ips.size>1) {
-                    addView(text("本机连接地址",13,p.text,true).apply { setPadding(0,dp(16),0,dp(4)) })
-                    val selector=Spinner(uiContext)
-                    selector.adapter=object:ArrayAdapter<String>(uiContext,android.R.layout.simple_spinner_dropdown_item,ips) {
-                        override fun getView(position:Int,convertView:View?,parent:ViewGroup):View = super.getView(position,convertView,parent).apply { (this as TextView).setTextColor(p.text) }
-                        override fun getDropDownView(position:Int,convertView:View?,parent:ViewGroup):View = super.getDropDownView(position,convertView,parent).apply { (this as TextView).setTextColor(p.text); setBackgroundColor(p.card) }
-                    }
-                    selector.setSelection(ips.indexOf(selected).coerceAtLeast(0))
-                    selector.onItemSelectedListener=object:AdapterView.OnItemSelectedListener {
-                        override fun onNothingSelected(parent:AdapterView<*>?) { }
-                        override fun onItemSelected(parent:AdapterView<*>?,view:View?,position:Int,id:Long) { selected=ips[position]; prefs.edit().putString("address",selected).apply() }
-                    }
-                    addView(selector,LinearLayout.LayoutParams(-1,dp(48)))
-                    button("使用此地址重新发现",false) { selected?.let { listen(it) } }
-                }
-                if(session==null) {
-                    button("生成备用邀请",false) { selected?.let { listen(it,false) } ?: note("没有可用网络") }
-                    if(invitation.isNotEmpty()) button("复制备用邀请",false) {
-                        getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("FloatClip 连接邀请",invitation)); note("已复制备用邀请")
-                    }
-                }
-                button("打开连接诊断",false) { startActivity(Intent(this@ShareActivity,ProbeActivity::class.java)) }
-            }
+            addView(settingRow("设备授权","",ShareGlyph.SHIELD,"${trust.all.size} 台",R.id.menu_trust) { navigate(Detail.TRUST) })
+            divider(this)
+            addView(settingRow("连接帮助","",ShareGlyph.DEVICES,rowId=R.id.menu_help) { navigate(Detail.HELP) })
         }
     }
     private fun settingsPage() {
-        section("设置", "让共享更合你的习惯")
         card {
-            cardTitle("外观", "浅色、深色，或跟随系统切换")
+            addView(settingRow("外观","",ShareGlyph.SUN,themeLabel(),R.id.menu_appearance) { navigate(Detail.APPEARANCE) })
+        }
+        card {
+            addView(settingRow("接收缓存","",ShareGlyph.FILE,size(cacheBytes()),R.id.menu_cache) { navigate(Detail.CACHE) })
+            divider(this)
+            addView(settingRow("版本与更新","",ShareGlyph.SYSTEM,if(release?.let { it.build>ShareUpdates.BUILD }==true) "有新版本" else ShareUpdates.VERSION,R.id.menu_updates) { navigate(Detail.UPDATES) })
+        }
+        card {
+            addView(settingRow("共享说明","",ShareGlyph.SHIELD,rowId=R.id.menu_sharing) { navigate(Detail.SHARING) })
+            divider(this)
+            addView(settingRow("连接帮助","",ShareGlyph.DEVICES,rowId=R.id.menu_help) { navigate(Detail.HELP) })
+        }
+        body.addView(text("FloatClip Share · ${ShareUpdates.VERSION} 预览版",12,p.muted).apply { gravity=Gravity.CENTER; setPadding(0,dp(12),0,dp(8)) })
+    }
+    private fun appearancePage() {
+        intro("选择适合你的显示方式")
+        card {
             val mode=prefs.getString("theme","system")
             listOf(Triple("system","跟随系统",ShareGlyph.SYSTEM),Triple("light","浅色模式",ShareGlyph.SUN),Triple("dark","深色模式",ShareGlyph.MOON)).forEachIndexed { index,(id,label,glyph) ->
-                if(index==0) space(this,12) else space(this,4)
+                if(index>0) space(this,4)
                 val selected=mode==id
                 val row=LinearLayout(uiContext).apply {
+                    this.id=when(id) { "light" -> R.id.theme_light; "dark" -> R.id.theme_dark; else -> R.id.theme_system }
                     gravity=Gravity.CENTER_VERTICAL; minimumHeight=dp(56); setPadding(dp(12),dp(10),dp(12),dp(10))
                     background=ripple(if(selected) p.tint else p.card,12)
                     contentDescription=label; buttonSemantics(this)
@@ -343,27 +384,102 @@ class ShareActivity : Activity() {
                     setOnClickListener { if(!selected) { prefs.edit().putString("theme",id).apply(); build() } }
                 }
                 row.addView(icon(glyph,if(selected) p.blue else p.muted),LinearLayout.LayoutParams(dp(22),dp(22)).apply { marginEnd=dp(12) })
-                row.addView(text(label,14,if(selected) p.blue else p.text,selected).apply { importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO },LinearLayout.LayoutParams(0,-2,1f))
+                row.addView(text(label,15,if(selected) p.blue else p.text,selected).apply { importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO },LinearLayout.LayoutParams(0,-2,1f))
                 row.addView(TextView(uiContext).apply { text=if(selected) "●" else "○"; textSize=20f; setTextColor(if(selected) p.blue else p.muted); importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO },LinearLayout.LayoutParams(dp(24),-2))
                 addView(row)
             }
         }
+    }
+    private fun cacheBytes()=cache.listFiles()?.sumOf { it.length() } ?: 0L
+    private fun themeLabel()=when(prefs.getString("theme","system")) { "light" -> "浅色"; "dark" -> "深色"; else -> "跟随系统" }
+    private fun cachePage() {
         card {
-            cardTitle("共享偏好", "前台手动共享 · 加密直连")
-            addView(text("文件传输上限 2 MiB/s，剪贴板内容由你主动粘贴。",13,p.muted).apply { setPadding(0,dp(12),0,0) })
-            divider(this)
-            addView(settingRow("清理接收缓存", "已另存的文件不受影响",ShareGlyph.FILE) {
+            addView(text(size(cacheBytes()),28,p.text,true))
+            addView(text("接收与发送的临时缓存",13,p.muted).apply { setPadding(0,dp(8),0,0) })
+        }
+        card {
+            addView(text("已另存的文件会保留。清理后，尚未另存的接收文件将无法从最近共享中打开。",14,p.muted))
+            button("清理缓存",false) {
                 if(session!=null) note("请先断开连接") else dialog().setTitle("清理接收缓存？").setMessage("尚未另存的接收文件将被清理。")
                     .setNegativeButton("取消",null).setPositiveButton("清理") { _,_ -> cache.listFiles()?.forEach { it.delete() }; inbox.clear(); render() }.show()
-            })
+            }
         }
+    }
+    private fun updatesPage() {
         card {
-            cardTitle("版本与更新", "FloatClip Share ${ShareUpdates.VERSION} · 预览版")
-            addView(text(updateMessage,13,p.muted).apply { setPadding(0,dp(12),0,0); accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE })
-            button(if(updateBusy) "正在检查…" else "检查更新",false) { checkUpdate() }.isEnabled=!updateBusy
+            cardTitle("FloatClip Share", "${ShareUpdates.VERSION} · 共享预览版")
+            addView(text(updateMessage,13,p.muted).apply { setPadding(0,dp(14),0,0); accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE })
+            button(if(updateBusy) "正在检查…" else "检查更新",false) { checkUpdate() }.apply { id=R.id.check_updates; isEnabled=!updateBusy }
             release?.takeIf { it.build>=ShareUpdates.BUILD }?.let { value -> button(if(value.build>ShareUpdates.BUILD) "下载 ${value.version} 更新" else "下载当前版本",true) { openDownload(value.url) } }
         }
-        body.addView(text("FloatClip · 让内容自由流动",12,p.muted).apply { gravity=Gravity.CENTER; setPadding(0,dp(8),0,dp(8)) })
+        intro("检查后，由你决定是否下载和安装。")
+    }
+    private fun trustPage() {
+        card {
+            cardTitle("已授权 ${trust.all.size} 台设备", "首次核对识别码后自动记住")
+            addView(text("记住的设备可直接重连；移除授权后，需要再次核对识别码。",14,p.muted).apply { setPadding(0,dp(14),0,0) })
+            if(trust.all.isNotEmpty()) button("移除所有设备授权",false) {
+                dialog().setTitle("移除所有设备授权？").setMessage("所有已记住的电脑都需要重新配对。")
+                    .setNegativeButton("取消",null).setPositiveButton("移除授权") { _,_ -> disconnect(); trust.edit().clear().apply(); render() }.show()
+            }
+        }
+    }
+    private fun helpPage() {
+        card {
+            step(this,"1","手机保持 FloatClip 前台")
+            step(this,"2","在电脑设备页查找手机")
+            step(this,"3","首次核对两端识别码后允许")
+        }
+        card {
+            addView(text("找不到设备时",16,p.text,true))
+            addView(text("确认两端连接同一 Wi-Fi。校园网隔离设备时，可让电脑连接手机热点。",14,p.muted).apply { setPadding(0,dp(10),0,0) })
+            divider(this)
+            addView(settingRow("网络与备用连接","选择地址、邀请链接与诊断",ShareGlyph.DEVICES,rowId=R.id.menu_advanced) { navigate(Detail.ADVANCED) })
+        }
+    }
+    private fun advancedPage() {
+        val ips=addresses()
+        var selected=prefs.getString("address",null)?.takeIf { it in ips } ?: ips.firstOrNull()
+        card {
+            cardTitle("连接地址", "仅在默认连接方式不可用时调整")
+            if(ips.size>1) {
+                val selector=Spinner(uiContext)
+                selector.adapter=object:ArrayAdapter<String>(uiContext,android.R.layout.simple_spinner_dropdown_item,ips) {
+                    override fun getView(position:Int,convertView:View?,parent:ViewGroup):View = super.getView(position,convertView,parent).apply { (this as TextView).setTextColor(p.text) }
+                    override fun getDropDownView(position:Int,convertView:View?,parent:ViewGroup):View = super.getDropDownView(position,convertView,parent).apply { (this as TextView).setTextColor(p.text); setBackgroundColor(p.card) }
+                }
+                selector.setSelection(ips.indexOf(selected).coerceAtLeast(0))
+                selector.onItemSelectedListener=object:AdapterView.OnItemSelectedListener {
+                    override fun onNothingSelected(parent:AdapterView<*>?) { }
+                    override fun onItemSelected(parent:AdapterView<*>?,view:View?,position:Int,id:Long) { selected=ips[position]; prefs.edit().putString("address",selected).apply() }
+                }
+                addView(selector,LinearLayout.LayoutParams(-1,dp(48)).apply { topMargin=dp(12) })
+            } else addView(text(selected ?: "暂无可用 Wi-Fi 或热点地址",14,p.muted).apply { setPadding(0,dp(12),0,0) })
+            button("使用此地址重新发现",false) { selected?.let { listen(it) } ?: note("请先连接 Wi-Fi 或开启热点") }
+        }
+        card {
+            cardTitle("备用邀请", "附近发现不可用时使用，90 秒有效")
+            if(session==null) {
+                button("生成邀请链接",false) { selected?.let { listen(it,false) } ?: note("没有可用网络") }
+                if(invitation.isNotEmpty()) button("复制邀请链接",true) {
+                    getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("FloatClip 连接邀请",invitation)); note("已复制备用邀请")
+                }
+            } else addView(text("请先断开当前连接",13,p.muted).apply { setPadding(0,dp(12),0,0) })
+        }
+        card {
+            addView(text("代理影响连接时，可在电脑设备页查看网络诊断。",14,p.muted))
+            button("打开连接诊断",false) { startActivity(Intent(this@ShareActivity,ProbeActivity::class.java)) }
+        }
+    }
+    private fun sharingPage() {
+        card {
+            cardTitle("由你主动分享", "文字粘贴和文件选择均由你发起")
+            addView(text("内容加密直传。收到文字后手动复制，收到文件先确认接收，再选择保存位置。",14,p.muted).apply { setPadding(0,dp(14),0,0) })
+        }
+        card {
+            cardTitle("保持前台连接", "离开应用会暂停，系统文件选择期间除外")
+            addView(text("空闲 3 分钟或连接满 10 分钟后需重新连接。单个文件最大 64 MiB，传输上限 2 MiB/s。",14,p.muted).apply { setPadding(0,dp(14),0,0) })
+        }
     }
     private fun listen(ip: String, nearby: Boolean = true) {
         disconnect(); val generation=epoch
@@ -387,14 +503,14 @@ class ShareActivity : Activity() {
                         .setPositiveButton("相同，允许") { _,_ -> answer.accept(true) }
                         .setOnCancelListener { answer.accept(false) }.show()
                 }
-                override fun connected(value:ShareSession)=ui { if(generation==epoch && foreground) { pairDialog?.dismiss(); pairDialog=null; session=value; discovering=false; status="已记住设备 · 加密直连"; tab=0; render() } else value.close() }
+                override fun connected(value:ShareSession)=ui { if(generation==epoch && foreground) { pairDialog?.dismiss(); pairDialog=null; session=value; discovering=false; status="已记住设备 · 加密直连"; switchTab(0) } else value.close() }
                 override fun stopped(message:String)=ui { if(generation==epoch) { pairDialog?.dismiss(); pairDialog=null; pair=null; discovering=false; session=null; status=message; render() } }
             },messages)
             pair=service; service.listen(ip)
         } else {
             transport=LanShare(cache,object:LanShare.Events {
                 override fun invitation(code:String)=ui { if(generation==epoch && foreground) { invitation=code; status="备用邀请 90 秒有效"; render() } }
-                override fun connected(value:ShareSession)=ui { if(generation==epoch && foreground) { session=value; invitation=""; status="临时设备 · 加密直连"; tab=0; render() } else value.close() }
+                override fun connected(value:ShareSession)=ui { if(generation==epoch && foreground) { session=value; invitation=""; status="临时设备 · 加密直连"; switchTab(0) } else value.close() }
                 override fun stopped(message:String)=ui { if(generation==epoch) { invitation=""; session=null; status=message; render() } }
             },messages)
             transport.listen(ip)
@@ -410,15 +526,15 @@ class ShareActivity : Activity() {
         Thread {
             try {
                 val found=ShareUpdates.check()
-                ui { updateBusy=false; release=found; updateMessage=(if(found.build>ShareUpdates.BUILD) "发现新版本 ${found.version}" else if(found.build==ShareUpdates.BUILD) "已是最新版本 ${ShareUpdates.VERSION}" else "当前版本 ${ShareUpdates.VERSION}，更新源尚未收录此预览包")+"\n"+found.notes; if(tab==2) render() }
-            } catch(_:Exception) { ui { updateBusy=false; updateMessage="检查失败，请确认网络后重试"; if(tab==2) render() } }
+                ui { updateBusy=false; release=found; updateMessage=(if(found.build>ShareUpdates.BUILD) "发现新版本 ${found.version}" else if(found.build==ShareUpdates.BUILD) "已是最新版本 ${ShareUpdates.VERSION}" else "当前版本 ${ShareUpdates.VERSION}，更新源尚未收录此预览包")+"\n"+found.notes; if(tab==2 || detail==Detail.UPDATES) render() }
+            } catch(_:Exception) { ui { updateBusy=false; updateMessage="检查失败，请确认网络后重试"; if(tab==2 || detail==Detail.UPDATES) render() } }
         }.start()
     }
     private fun openDownload(url:String) {
         try { startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url))) } catch(_:Exception) { note("没有可用浏览器，请稍后重试") }
     }
     private fun contentChanged() {
-        if(tab==0 && currentFocus is EditText) {
+        if(tab==0 && detail==Detail.ROOT && currentFocus is EditText) {
             if(::statusView.isInitialized) { statusView.text="有新的共享状态 · 点击查看"; statusView.setOnClickListener { currentFocus?.clearFocus(); render() } }
         } else render()
     }
@@ -456,15 +572,16 @@ class ShareActivity : Activity() {
     private fun addresses():List<String> = try { Collections.list(NetworkInterface.getNetworkInterfaces()).filter {
         it.isUp && (it.name.startsWith("wlan") || it.name.startsWith("eth") || it.name.startsWith("ap") || it.name.startsWith("en"))
     }.flatMap { Collections.list(it.inetAddresses) }.filter { it is Inet4Address && it.isSiteLocalAddress }.mapNotNull { it.hostAddress }.distinct().sorted() } catch(_:Exception) { emptyList() }
+    private fun intro(value:String) { body.addView(text(value,13,p.muted).apply { setPadding(dp(2),dp(4),dp(2),dp(16)) }) }
     private fun section(title:String,subtitle:String,small:Boolean=false) {
-        body.addView(text(title,if(small) 18 else 28,p.text,true).apply { if(small) setPadding(0,dp(8),0,0) })
-        body.addView(text(subtitle,13,p.muted).apply { setPadding(0,dp(6),0,dp(20)) })
+        body.addView(text(title,if(small) 17 else 22,p.text,true).apply { setPadding(dp(2),dp(4),0,dp(12)) })
+        if(subtitle.isNotEmpty()) intro(subtitle)
     }
     private fun card(content:LinearLayout.()->Unit) {
-        body.addView(column().apply { background=shape(p.card,ShareDesign.CARD,true); setPadding(dp(20),dp(20),dp(20),dp(20)); content() },LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(16) })
+        body.addView(column().apply { background=shape(p.card,ShareDesign.CARD,true); elevation=dp(1).toFloat(); setPadding(dp(16),dp(16),dp(16),dp(16)); content() },LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(12) })
     }
     private fun LinearLayout.cardTitle(title:String,subtitle:String) {
-        addView(text(title,17,p.text,true))
+        addView(text(title,16,p.text,true))
         addView(text(subtitle,13,p.muted).apply { setPadding(0,dp(6),0,0) })
     }
     private fun LinearLayout.button(label:String,primary:Boolean,click:()->Unit):Button {
@@ -485,13 +602,18 @@ class ShareActivity : Activity() {
         background=android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(if(primary) c("#40FFFFFF") else c("#252563EB")),states,shape(Color.WHITE,ShareDesign.CONTROL))
         setOnClickListener { click() }
     }
-    private fun settingRow(title:String,subtitle:String,glyph:ShareGlyph,click:()->Unit):View {
+    private fun settingRow(title:String,subtitle:String,glyph:ShareGlyph,value:String?=null,rowId:Int=View.NO_ID,click:()->Unit):View {
         val row=LinearLayout(uiContext).apply {
-            gravity=Gravity.CENTER_VERTICAL; minimumHeight=dp(56); setPadding(0,dp(6),0,dp(6))
-            background=ripple(p.card,12); contentDescription="$title，$subtitle"; buttonSemantics(this); setOnClickListener { click() }
+            id=rowId; gravity=Gravity.CENTER_VERTICAL; minimumHeight=dp(56); setPadding(0,dp(6),0,dp(6))
+            background=ripple(p.card,12); contentDescription=listOfNotNull(title,subtitle.takeIf { it.isNotEmpty() },value).joinToString("，"); buttonSemantics(this); setOnClickListener { click() }
         }
         row.addView(icon(glyph,p.muted),LinearLayout.LayoutParams(dp(22),dp(22)).apply { marginEnd=dp(12) })
-        row.addView(column().apply { importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS; addView(text(title,14,p.text,true)); addView(text(subtitle,12,p.muted).apply { setPadding(0,dp(5),0,0) }) },LinearLayout.LayoutParams(0,-2,1f))
+        row.addView(column().apply {
+            importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            addView(text(title,15,p.text,true))
+            if(subtitle.isNotEmpty()) addView(text(subtitle,12,p.muted).apply { setPadding(0,dp(5),0,0) })
+        },LinearLayout.LayoutParams(0,-2,1f))
+        if(value!=null) row.addView(text(value,13,p.muted).apply { maxLines=1; ellipsize=android.text.TextUtils.TruncateAt.END; maxEms=9; importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO },LinearLayout.LayoutParams(-2,-2).apply { marginStart=dp(8) })
         row.addView(icon(ShareGlyph.CHEVRON,p.muted),LinearLayout.LayoutParams(dp(18),dp(18)).apply { marginStart=dp(8) })
         return row
     }
@@ -500,7 +622,7 @@ class ShareActivity : Activity() {
         row.addView(text(number,12,p.blue,true).apply { gravity=Gravity.CENTER; background=shape(p.tint,14) },LinearLayout.LayoutParams(dp(28),dp(28)).apply { marginEnd=dp(12) })
         row.addView(text(label,14,p.text),LinearLayout.LayoutParams(0,-2,1f)); parent.addView(row)
     }
-    private fun divider(parent:LinearLayout) { parent.addView(View(uiContext).apply { setBackgroundColor(p.line) },LinearLayout.LayoutParams(-1,dp(1)).apply { topMargin=dp(16); bottomMargin=dp(12) }) }
+    private fun divider(parent:LinearLayout) { parent.addView(View(uiContext).apply { setBackgroundColor(p.line) },LinearLayout.LayoutParams(-1,dp(1)).apply { topMargin=dp(8); bottomMargin=dp(8) }) }
     private fun space(parent:LinearLayout,height:Int) { parent.addView(View(uiContext),LinearLayout.LayoutParams(1,dp(height))) }
     private fun buttonSemantics(view:View) {
         view.isFocusable=true; view.isClickable=true

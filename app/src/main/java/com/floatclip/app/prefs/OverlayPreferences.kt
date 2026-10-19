@@ -101,7 +101,7 @@ class OverlayPreferences(context: Context) {
         const val DEFAULT_BUBBLE_ALPHA_PERCENT = 76
         const val DEFAULT_EDGE_HIDE_PERCENT = 38
         const val DEFAULT_BUBBLE_MOTION_SENSITIVITY_PERCENT = 65
-        const val DEFAULT_PANEL_ALPHA_PERCENT = 88
+        const val DEFAULT_PANEL_ALPHA_PERCENT = 96
         const val DEFAULT_PANEL_WIDTH_DP = 352
         const val DEFAULT_PANEL_HEIGHT_DP = 430
 

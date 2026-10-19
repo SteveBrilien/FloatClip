@@ -1,39 +1,68 @@
 {
   "product": "FloatClip",
-  "designRevision": "2026.10-blue-1",
-  "releaseTrain": "2026.10.20",
+  "designRevision": "2026.10-blue-2",
+  "releaseTrain": "2026.10.20-unified",
   "versions": {
-    "android": "0.4.0",
-    "windows": "0.4.0",
-    "web": "0.2.0"
+    "android": "0.6.0",
+    "windows": "0.6.0",
+    "web": "0.6.0"
   },
   "capabilities": {
     "web": [
       "manual-clipboard",
+      "clipboard-library",
+      "source-device-boards",
+      "search-pin-category",
+      "clipboard-backup",
+      "encrypted-local-storage",
       "file-64mib",
       "webrtc-direct",
       "encrypted-node-relay",
       "password-login",
+      "offline-local-access",
       "pwa-install",
       "update-check"
     ],
     "android": [
       "manual-clipboard",
+      "clipboard-library",
+      "source-device-boards",
+      "search-pin-category",
+      "clipboard-backup",
+      "native-keystore-vault",
+      "original-overlay",
+      "original-accessibility-paste",
+      "original-encrypted-backup",
       "file-64mib",
-      "lan-tls",
-      "trusted-device",
+      "web-v1",
+      "webrtc-direct",
+      "encrypted-node-relay",
+      "password-login",
+      "offline-native-tools",
+      "lan-compatibility",
       "update-check"
     ],
     "windows": [
       "manual-clipboard",
+      "clipboard-library",
+      "source-device-boards",
+      "search-pin-category",
+      "clipboard-backup",
+      "native-dpapi-vault",
       "file-64mib",
-      "lan-tls",
-      "trusted-device",
+      "web-v1",
+      "webrtc-direct",
+      "encrypted-node-relay",
+      "password-login",
+      "offline-native-tools",
+      "lan-compatibility",
       "update-check"
     ]
   },
   "pending": [
-    "native-web-protocol-adapter",
+    "persistent-peer-trust-web-v1",
+    "automatic-reconnect",
+    "web-push",
     "ble-discovery",
     "bluetooth-rfcomm",
     "wifi-direct-concurrency"
@@ -59,6 +88,53 @@
       "android": "implemented",
       "windows": "implemented",
       "web": "implemented"
+    },
+    "clipboard-library": {
+      "android": "implemented",
+      "windows": "implemented",
+      "web": "implemented"
+    },
+    "source-device-boards": {
+      "android": "implemented",
+      "windows": "implemented",
+      "web": "implemented"
+    },
+    "search-pin-category": {
+      "android": "implemented",
+      "windows": "implemented",
+      "web": "implemented"
+    },
+    "clipboard-backup": {
+      "android": "implemented",
+      "windows": "implemented",
+      "web": "implemented"
+    },
+    "web-v1-interoperability": {
+      "android": "implemented",
+      "windows": "implemented",
+      "web": "implemented"
     }
+  },
+  "nativeHost": {
+    "bridge": 1,
+    "androidPackage": "com.floatclip.app",
+    "windowsRuntime": "Microsoft Edge WebView2",
+    "legacyProtocol": "FCP2/FCS1",
+    "minimumVersion": "0.6.0"
+  },
+  "downloads": {
+    "windows": {
+      "version": "0.6.0",
+      "build": 12,
+      "url": "https://mcp.wmy-cloud.cn/artifacts/pub-d65ee49ccca24e39b49f3d4ad115779a/FloatClip-Windows-0.6.0.zip?exp=0&sig=77d00148aa129bc55a313a60349e4b30561479c419cf911e17da4b030ee5c4d9",
+      "sha256": "691e4a8d6bac9ffb482222a3a6f733ab44faedaa10c7818020cc7b52db91dc1e",
+      "bytes": 59266873,
+      "status": "available"
+    }
+  },
+  "distribution": {
+    "android": "awaiting-original-signature",
+    "windows": "available",
+    "web": "available"
   }
 }

@@ -1,3 +1,4 @@
+import type {Device} from './clipboard.ts';
 import {DataSession,type Channel,type SessionEvents} from './session.ts';
 import {initialPeer,type PeerState} from './peer.ts';
 import {identity,keys,Cipher,type Identity} from './relay-crypto.ts';
@@ -22,7 +23,7 @@ class EncryptedChannel implements Channel {
 export class RelayPeer {
  state={...initialPeer};session:DataSession|null=null;private socket:WebSocket|null=null;private epoch=0;
  private room='';private token='';private timer:ReturnType<typeof setTimeout>|null=null;
- constructor(private label:string,private onState:(s:PeerState)=>void,private events:SessionEvents){}
+ constructor(private label:string,private onState:(s:PeerState)=>void,private events:SessionEvents,private device?:Device){}
  private patch(change:Partial<PeerState>){this.state={...this.state,...change};this.onState(this.state);}
  private async api(value:Record<string,unknown>){
   const response=await apiFetch('/api/pair',{method:'POST',body:JSON.stringify({...value,mode:'relay'})});
@@ -50,7 +51,7 @@ export class RelayPeer {
      ...this.events,
      ready:(ready,peer)=>{if(epoch!==this.epoch)return;this.patch({phase:ready?'ready':'verifying',peer,message:ready?'经小主机加密转发':'核对两端识别码'});},
      closed:()=>{if(epoch!==this.epoch)return;this.close(false);this.events.closed();}
-    },this.label);
+    },this.label,this.device);
     for(const data of pending)socket.onmessage?.({data} as MessageEvent);
     if(this.timer)clearTimeout(this.timer);this.timer=setTimeout(()=>{if(epoch===this.epoch)this.fail('连接已满 10 分钟，请重新配对');},600000);
    }catch{if(epoch===this.epoch)this.fail('无法核对连接身份，请重新配对');}

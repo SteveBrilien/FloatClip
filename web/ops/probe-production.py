@@ -12,12 +12,19 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
-async def probe(origin, username, password):
+async def probe(origin, username, password=None, local_tokens=None):
     headers = {'Origin':origin}
     async with aiohttp.ClientSession() as a, aiohttp.ClientSession() as b:
         clients = [a,b]
         accounts = []
-        for client in clients:
+        for index, client in enumerate(clients):
+            if local_tokens:
+                from yarl import URL
+                client.cookie_jar.update_cookies({'__Host-floatclip':local_tokens[index]}, response_url=URL(origin))
+                async with client.get(origin+'/api/auth') as r:
+                    assert r.status==200, 'Local probe session failed'
+                    accounts.append(await r.json())
+                continue
             async with client.post(origin+'/api/auth',json={'username':username,'password':password,'remember':True},headers=headers) as r:
                 assert r.status==200, 'Login failed'
                 account = await r.json()
@@ -32,6 +39,12 @@ async def probe(origin, username, password):
                 assert r.status==200, 'Public application resource failed'
         async with a.get(origin+'/api/auth') as r:
             assert r.status==200 and (await r.json())['user']==username
+        async with a.get(origin+'/api/version') as r:
+            assert r.status==200
+            release=await r.json()
+            assert release['versions']['web']==accounts[0]['version']
+            if release.get('distribution',{}).get('android')=='awaiting-original-signature':
+                assert 'android' not in release.get('downloads',{})
         private=[ec.generate_private_key(ec.SECP256R1()) for _ in range(2)]
         public=[base64.b64encode(k.public_key().public_bytes(serialization.Encoding.X962,serialization.PublicFormat.UncompressedPoint)).decode() for k in private]
         async with a.post(origin+'/api/pair',json={'op':'create','mode':'relay','key':public[0]},headers=ah) as r:
@@ -92,11 +105,31 @@ async def probe(origin, username, password):
                 assert r.status==200
             async with client.get(origin+'/api/auth') as r:
                 assert r.status==401
-    return {'https':True,'account_login':True,'remember_days':30,'install_resources':True,
+    return {'https':True,'account_login':not bool(local_tokens),'authenticated_api':True,
+            'local_probe_sessions':2 if local_tokens else 0,'remember_days':None if local_tokens else 30,'install_resources':True,
             'wss_pairing':True,'encrypted_text':True,'encrypted_file_bytes':len(data),'file_sha256':True,
             'logout_revoked':True,'browser_ui_tested':False}
 
 
 if __name__=='__main__':
-    import getpass
-    print(json.dumps(asyncio.run(probe('https://clip.wmy-cloud.cn',input('Account: '),getpass.getpass())),ensure_ascii=False))
+    import getpass, argparse, sys, time, secrets
+    from pathlib import Path
+    parser=argparse.ArgumentParser(description='Owner-operated HTTPS acceptance; never prints credentials')
+    parser.add_argument('--local-state',help='Owner node state directory: create two 5-minute probe sessions and always remove them; does not test password login')
+    args=parser.parse_args()
+    if not args.local_state:
+        print(json.dumps(asyncio.run(probe('https://clip.wmy-cloud.cn',input('Account: '),getpass.getpass())),ensure_ascii=False))
+    else:
+        sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+        from server.app import Store, digest
+        state=Path(args.local_state).resolve()
+        config=json.loads((state/'node-config.json').read_text())
+        tokens=[secrets.token_hex(32) for _ in range(2)]
+        store=Store(state/'node.sqlite3')
+        try:
+            for token in tokens:
+                store.db.execute('INSERT INTO sessions VALUES (?,?,?,?)',(digest(token),secrets.token_hex(32),time.time()+300,time.time()))
+            print(json.dumps(asyncio.run(probe(config['origin'],config['username'],local_tokens=tokens)),ensure_ascii=False))
+        finally:
+            for token in tokens:store.db.execute('DELETE FROM sessions WHERE token=?',(digest(token),))
+            store.db.close()

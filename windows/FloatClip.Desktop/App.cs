@@ -22,7 +22,10 @@ public static class Program
         try {
             if(args.Length==4 && args[0]=="--qa-nearby") { Acceptance.RunNearby(args[1],args[2],args[3]); return; }
             if(args.Length==3 && args[0]=="--qa") { Acceptance.Run(args[1],args[2]); return; }
-            var app=new Application(); var window=new MainWindow();
+            var app=new Application();
+            if(args.Length==0) { app.Run(new UnifiedWindow()); return; }
+            if(args.Length==1 && args[0]=="--clipboard") { app.Run(new LocalClipboardWindow(new ClipboardVault())); return; }
+            var window=new MainWindow();
             if(args.Length==3 && args[0]=="--capture") {
                 window.SetTheme(args[1],false);
                 window.ContentRendered+=(_,_)=>window.Dispatcher.BeginInvoke(new Action(()=>{

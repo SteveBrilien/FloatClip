@@ -781,25 +781,34 @@ class ClipboardOverlayService : Service() {
                 palette.rowCornerRadiusDp,
             )
         }
-        front.addView(TextView(this).apply {
-            text = entry.text
-            maxLines = 3
-            textSize = 14.5f
-            setTextColor(palette.primaryText)
+        front.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(TextView(this@ClipboardOverlayService).apply {
+                text = entry.text
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                textSize = 14.5f
+                setTextColor(palette.primaryText)
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            if (entry.pinned) addView(ImageView(this@ClipboardOverlayService).apply {
+                setImageResource(R.drawable.ic_pin)
+                imageTintList = ColorStateList.valueOf(ACCENT_BLUE)
+                contentDescription = "已置顶"
+            }, LinearLayout.LayoutParams(dp(17), dp(17)).apply { marginStart = dp(10) })
         })
-        front.addView(TextView(this).apply {
-            text = buildString {
-                append(entry.category)
-                if (entry.pinned) append(" · 已置顶")
-            }
-            textSize = 11.3f
-            setTextColor(if (entry.pinned) ACCENT_BLUE else palette.secondaryText)
-            setPadding(0, dp(5), 0, 0)
-        })
+        if (entry.category != CategoryStore.DEFAULT_CATEGORY) {
+            front.addView(TextView(this).apply {
+                text = entry.category
+                textSize = 11.3f
+                setTextColor(palette.secondaryText)
+                setPadding(0, dp(5), 0, 0)
+            })
+        }
 
-        wrapper.bind(front, EntrySwipeActions(this, entry.pinned,
+        wrapper.bind(front, EntrySwipeActions(this, entry.pinned, palette.isDark,
             onPin = { store.togglePinned(entry.id); renderEntries() },
-            onDelete = { store.delete(entry.id); renderEntries() },
+            onDelete = { showEntryMenu(entry, confirmingDelete = true, anchor = wrapper) },
         ), dp(132))
         wrapper.onSingleTap = {
             clipboard.writeText(entry.text)
@@ -819,7 +828,10 @@ class ClipboardOverlayService : Service() {
         }
     }
 
-    private fun showEntryMenu(entry: ClipEntry, choosingCategory: Boolean = false, anchor: View? = null) {
+    private fun showEntryMenu(
+        entry: ClipEntry, choosingCategory: Boolean = false,
+        confirmingDelete: Boolean = false, anchor: View? = null,
+    ) {
         if (!panelOpen) return
         val panel = panelView ?: return
         dismissEntryActionLayer(animated = false)
@@ -837,14 +849,14 @@ class ClipboardOverlayService : Service() {
             isClickable = true
         }
         fun row(label: String, tint: Int = palette.primaryText, action: () -> Unit) {
-            if (label == "删除") sheet.addView(View(this).apply {
+            if (label == "删除" || label == "确认删除") sheet.addView(View(this).apply {
                 setBackgroundColor(withAlpha(palette.secondaryText, 35))
             }, LinearLayout.LayoutParams(-1, dp(1)).apply { setMargins(dp(10), dp(3), dp(10), dp(3)) })
             val icon = when {
                 label == "复制" || label == "粘贴" -> R.drawable.ic_copy_paste
                 label.contains("置顶") -> R.drawable.ic_pin
-                label == "删除" -> R.drawable.ic_delete
-                label.contains("返回") -> R.drawable.ic_chevron_left
+                label == "删除" || label == "确认删除" -> R.drawable.ic_delete
+                label.contains("返回") || label == "取消" -> R.drawable.ic_chevron_left
                 else -> R.drawable.ic_folder
             }
             sheet.addView(LinearLayout(this).apply {
@@ -871,7 +883,20 @@ class ClipboardOverlayService : Service() {
                 contentDescription = label
             }, LinearLayout.LayoutParams(-1, -2))
         }
-        if (choosingCategory) {
+        if (confirmingDelete) {
+            sheet.addView(TextView(this).apply {
+                text = "删除这条记录？"
+                textSize = 14f
+                setTextColor(palette.primaryText)
+                setPadding(dp(14), dp(10), dp(10), dp(6))
+            })
+            row("取消") { dismissEntryActionLayer() }
+            row("确认删除", Color.rgb(218, 78, 78)) {
+                store.delete(entry.id)
+                dismissEntryActionLayer(animated = false)
+                renderEntries()
+            }
+        } else if (choosingCategory) {
             row("‹ 返回") { showEntryMenu(entry, anchor = anchor) }
             categoryStore.categories().distinct().forEach { category ->
                 row(if (category == entry.category) "✓  $category" else category,
@@ -899,9 +924,7 @@ class ClipboardOverlayService : Service() {
             }
             row("更改分类  ›") { showEntryMenu(entry, choosingCategory = true, anchor = anchor) }
             row("删除", Color.rgb(218, 78, 78)) {
-                store.delete(entry.id)
-                dismissEntryActionLayer(animated = false)
-                renderEntries()
+                showEntryMenu(entry, confirmingDelete = true, anchor = anchor)
             }
         }
         val scroll = ScrollView(this).apply {

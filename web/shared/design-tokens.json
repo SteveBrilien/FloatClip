@@ -1,5 +1,5 @@
 {
-  "revision": "2026.10-blue-1",
+  "revision": "2026.10-blue-2",
   "primary": "#2563EB",
   "light": {
     "background": "#F4F7FC",
@@ -34,6 +34,7 @@
   ],
   "minimumTouchTarget": 44,
   "navigation": [
+    "剪贴板",
     "共享",
     "设备",
     "设置"

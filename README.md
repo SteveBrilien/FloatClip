@@ -1,8 +1,24 @@
+# FloatClip 0.6.0 统一版
+
+Android 原版剪贴板与悬浮球、Windows 客户端、iPad PWA 使用同一共享入口。剪贴板按来源设备分组，支持分类、搜索、置顶、复制、备份和再次发送。
+
+- PWA：https://clip.wmy-cloud.cn
+- [三端产品与兼容规范](docs/SHARE_PRODUCT_CONTRACT_2026-10-20.md)
+- [实施范围与迁移方案](docs/UNIFIED_0.6.0_PLAN.md)
+- Android 主模块：app（com.floatclip.app）；nearby-probe 保留为旧 LAN 测试 / 兼容源码。
+- Windows：windows/FloatClip.Desktop；新共享界面需要 Microsoft WebView2 Runtime，提供离线本机工具和旧 LAN 入口。
+
+发行状态：Windows / PWA 0.6.0；Android 0.6.0 构建、迁移测试和 lint 已通过，等待原发布签名，未发布覆盖升级包。请保留手机原版和数据。详见 [本次验证与发布状态](docs/RELEASE_0.6.0.md)。
+
+以下为原版手机应用的保留资料。
+
+---
+
 # FloatClip
 
 FloatClip is an Android 11 / vivo OriginOS-first floating clipboard utility focused on native-feeling overlay interaction, repeated paste workflows, local-first encrypted storage and fail-closed ROM-specific adaptation.
 
-Current published release: **0.5.2** (`versionCode=7`). The stable-signed APK passed clean build/lint/signing gates and public round-trip verification.
+Current published release: **0.5.5** (`versionCode=10`). The **0.5.6** source is under device acceptance; its normal debug signing certificate cannot overwrite the stable-signed installation.
 
 ## What 0.5.2 changes
 
@@ -14,7 +30,7 @@ Current published release: **0.5.2** (`versionCode=7`). The stable-signed APK pa
 - Adds an accessibility-hosted overlay runtime: when one-key paste is enabled, the system-managed AccessibilityService binds and hosts the overlay runtime, allowing FloatClip to leave foreground-service state and remove its own persistent FGS notification.
 - Retains the foreground-service runtime as a fallback when Accessibility is disabled. Explicit Android/OriginOS Force stop still cannot be self-bypassed by an ordinary app.
 
-See `docs/INTERACTION_0.5.2.md` for the gesture/runtime model, prior-art review and device acceptance checklist.
+See `docs/NATIVE_FLOATINGBALL_UX_PLAN_2026-09-29.md` for the current native-ball study, interaction contract, permission boundary, implementation route and device acceptance gates. Earlier gesture/runtime decisions are in `docs/INTERACTION_0.5.2.md`.
 
 ## What 0.5.1 changes
 

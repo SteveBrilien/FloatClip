@@ -196,14 +196,25 @@ class MainActivity : Activity() {
     private fun renderStatusPage() {
         val enabled = overlayPreferences.overlayEnabled()
         addCard(card().apply {
-            addView(textView("悬浮剪贴板", 18f, true))
-            spacerInside(this, 6)
-            addView(textView(if (enabled) "已开启" else "已关闭", 13f, false, colors.secondaryText))
-            spacerInside(this, 16)
-            addView(actionButton(if (enabled) "关闭悬浮球" else "开启悬浮球", !enabled) {
-                if (enabled) stopOverlay() else startOverlay()
-                render()
-            }, LinearLayout.LayoutParams(-1, dp(48)))
+            addView(LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(textView("悬浮球", 17f, true))
+                    addView(textView(
+                        when {
+                            enabled -> "运行中"
+                            !Settings.canDrawOverlays(this@MainActivity) -> "需要悬浮窗权限"
+                            else -> "未开启"
+                        }, 12.5f, false, colors.secondaryText,
+                    ).apply { setPadding(0, dp(4), 0, 0) })
+                }, LinearLayout.LayoutParams(0, -2, 1f))
+                addView(actionButton(if (enabled) "关闭" else "开启", !enabled) {
+                    if (enabled) stopOverlay() else startOverlay()
+                    render()
+                }, LinearLayout.LayoutParams(dp(92), dp(44)))
+            })
         })
         spacer(12)
         addCard(card().apply {
@@ -212,8 +223,6 @@ class MainActivity : Activity() {
                 settingsSection = "权限与后台"
                 render()
             })
-            addView(divider())
-            addView(settingRow("使用帮助", "", "›", ::showUsageHelp))
         })
     }
 
@@ -836,11 +845,25 @@ class MainActivity : Activity() {
 
     private fun addHistoryCard(entry: ClipEntry) {
         val item = card()
-        item.addView(textView(entry.text, 15f, false).apply { maxLines = 3 })
-        spacerInside(item, 7)
-        item.addView(textView("${entry.category}${if (entry.pinned) " · 已置顶" else ""}", 12f, false, colors.secondaryText))
+        item.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(textView(entry.text, 15f, false).apply {
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            if (entry.pinned) addView(ImageView(this@MainActivity).apply {
+                setImageResource(R.drawable.ic_pin)
+                imageTintList = ColorStateList.valueOf(colors.accent)
+                contentDescription = "已置顶"
+            }, LinearLayout.LayoutParams(dp(17), dp(17)).apply { marginStart = dp(10) })
+        })
+        if (entry.category != CategoryStore.DEFAULT_CATEGORY) {
+            spacerInside(item, 5)
+            item.addView(textView(entry.category, 11.5f, false, colors.secondaryText))
+        }
         val wrapper = EntryGestureRow(this)
-        wrapper.bind(item, EntrySwipeActions(this, entry.pinned,
+        wrapper.bind(item, EntrySwipeActions(this, entry.pinned, colors.dark,
             onPin = { clipStore.togglePinned(entry.id); render(); notifyOverlayAppearanceChanged() },
             onDelete = {
                 android.app.AlertDialog.Builder(this).setTitle("删除这条记录？")
@@ -887,7 +910,11 @@ class MainActivity : Activity() {
         fun updatePosition() {
             val dy = latestRawY - downY + ((scroll?.scrollY ?: 0) - scrollStart)
             row.translationY = dy
-            target = (from + kotlin.math.round(dy / stride).toInt()).coerceIn(0, items.lastIndex)
+            val nextTarget = (from + kotlin.math.round(dy / stride).toInt()).coerceIn(0, items.lastIndex)
+            if (nextTarget != target) {
+                target = nextTarget
+                handle.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            }
             for (i in 0 until list.childCount) {
                 val child = list.getChildAt(i)
                 if (child === row) continue
@@ -961,11 +988,29 @@ class MainActivity : Activity() {
                         notifyOverlayAppearanceChanged()
                         handle.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     }
-                    views.forEach { it.animate().cancel(); it.translationY = 0f; it.tag = null }
-                    list.removeAllViews()
-                    views.forEach { list.addView(it) }
+                    if (commit && target != from) {
+                        val oldY = views.associateWith { view ->
+                            IntArray(2).also { view.getLocationOnScreen(it) }[1]
+                        }
+                        views.forEach { it.animate().cancel(); it.translationY = 0f; it.tag = null }
+                        list.removeAllViews()
+                        views.forEach { list.addView(it) }
+                        list.post {
+                            views.forEach { view ->
+                                if (!view.isAttachedToWindow) return@forEach
+                                val newY = IntArray(2).also { view.getLocationOnScreen(it) }[1]
+                                view.translationY = (oldY.getValue(view) - newY).toFloat()
+                                view.animate().translationY(0f).setDuration(180L).start()
+                            }
+                        }
+                    } else {
+                        views.forEach {
+                            it.tag = null
+                            it.animate().translationY(0f).setDuration(150L).start()
+                        }
+                    }
                     row.elevation = 0f
-                    row.animate().scaleX(1f).scaleY(1f).setDuration(140L).start()
+                    row.animate().scaleX(1f).scaleY(1f).setDuration(160L).start()
                     if (!dragging && event.actionMasked == MotionEvent.ACTION_UP) handle.performClick()
                     dragging = false
                     list.parent?.requestDisallowInterceptTouchEvent(false)

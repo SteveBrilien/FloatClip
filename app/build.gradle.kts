@@ -13,8 +13,8 @@ android {
         minSdk = 28
         // Deliberately locked to Android 11 behavior for the fixed OriginOS target device.
         targetSdk = 30
-        versionCode = 10
-        versionName = "0.5.5"
+        versionCode = 12
+        versionName = "0.6.0"
     }
 
     buildTypes {
@@ -30,10 +30,19 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 
+    sourceSets.getByName("main") {
+        java.srcDir("../nearby-probe/src/main/java")
+        res.srcDir("../nearby-probe/src/main/res")
+    }
+    testOptions { unitTests.isIncludeAndroidResources = true }
+
     lint {
         disable += "ExpiredTargetSdkVersion"
     }
 }
 
 dependencies {
+    implementation(project(":share-core"))
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
 }

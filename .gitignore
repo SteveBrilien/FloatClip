@@ -11,3 +11,7 @@ analysis/
 .idea/
 
 .kotlin/
+
+windows/**/bin/
+
+windows/**/obj/

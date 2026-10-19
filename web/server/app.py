@@ -13,7 +13,7 @@ from pathlib import Path
 
 from aiohttp import web, WSMsgType
 
-VERSION = '0.2.0'
+VERSION = '0.6.0'
 COOKIE = '__Host-floatclip'
 MAX_BODY = 72000
 TTL = 120
@@ -125,7 +125,7 @@ def create_app(config, state_path, static_path):
                 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
                 'X-Frame-Options': 'DENY', 'Cross-Origin-Resource-Policy': 'same-origin',
                 'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), clipboard-read=(self), clipboard-write=(self)',
-                'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' " + origin.replace('https://', 'wss://') + "; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+                'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' " + origin.replace('https://', 'wss://') + "; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; frame-src 'none'; form-action 'self'",
             })
             if req.path.startswith('/api/') or result.status >= 400:
                 result.headers['Cache-Control'] = 'no-store'

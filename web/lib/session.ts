@@ -1,24 +1,27 @@
+import type {Device} from './clipboard.ts';
 import { MAX_FILE,MAX_TEXT,CHUNK,RATE,encoder,parseControl,sha256,filename,nextSize,type Control } from './protocol.ts';
 export interface Channel {
  readyState:string; bufferedAmount:number; binaryType:string;
  send(data:string|ArrayBuffer):void; close():void;
  onmessage:((event:{data:unknown})=>void)|null; onclose:(()=>void)|null;
 }
-export type SharedItem={id:string;kind:'text'|'file';direction:'sent'|'received';text?:string;name?:string;blob?:Blob;bytes?:number};
+export type SharedItem={id:string;kind:'text'|'file';direction:'sent'|'received';text?:string;name?:string;blob?:Blob;bytes?:number;source?:Device};
 export type SessionEvents={ready:(ready:boolean,peer:string)=>void;item:(item:SharedItem)=>void;offer:(offer:Control|null)=>void;progress:(label:string,percent:number|null)=>void;error:(message:string)=>void;closed:()=>void};
 type Out={id:string;file:File;hash:string;phase:string};
 type Incoming={id:string;name:string;size:number;hash:string;chunks:ArrayBuffer[];received:number;accepted:boolean};
 export class DataSession {
  private local=false;private remote=false;private hello=false;private dead=false;private peer='另一台设备';
+ private peerDevice:Device={id:'legacy-'+crypto.randomUUID(),name:'另一台设备',platform:'web'};
+ private emit(item:SharedItem){this.events.item({...item,source:item.direction==='received'?this.peerDevice:this.device??{id:'local',name:'本机',platform:'web'}});}
  private out:Out|null=null;private incoming:Incoming|null=null;private chain=Promise.resolve();
  private textIn:{id:string;parts:string[];total:number;bytes:number}|null=null;
  private pending=new Map<string,SharedItem>();private received=new Set<string>();
  private timer:ReturnType<typeof setTimeout>|null=null;
- constructor(private channel:Channel,private events:SessionEvents,label:string){
+ constructor(private channel:Channel,private events:SessionEvents,label:string,private device?:Device){
   channel.binaryType='arraybuffer';
   channel.onmessage=e=>{this.chain=this.chain.then(()=>this.read(e.data)).catch(()=>this.fail('传输校验失败，连接已结束'));};
   channel.onclose=()=>this.dispose();
-  this.send({t:'hello',version:1,label:label.slice(0,40)});
+  this.send({t:'hello',version:1,label:label.slice(0,40),deviceId:device?.id,platform:device?.platform});
  }
  get ready(){return this.local&&this.remote&&this.hello&&!this.dead;}
  confirm(){if(this.dead)return;this.local=true;this.send({t:'verified'});this.notifyReady();}
@@ -49,7 +52,7 @@ export class DataSession {
    f.received=nextSize(f.received,data.byteLength,f.size);f.chunks.push(data);this.deadline(45000);this.events.progress('正在接收 '+f.name,f.size?f.received/f.size:1);return;
   }
   const m=parseControl(data);
-  if(m.t==='hello'){if(this.hello)throw new Error('Duplicate hello');this.hello=true;this.peer=m.label!;this.notifyReady();return;}
+  if(m.t==='hello'){if(this.hello)throw new Error('Duplicate hello');this.hello=true;this.peer=m.label!;this.peerDevice={id:m.deviceId??this.peerDevice.id,name:this.peer,platform:(m.platform??'web') as Device['platform']};this.notifyReady();return;}
   if(m.t==='verified'){this.remote=true;this.notifyReady();return;}
   if(!this.ready)throw new Error('Unverified');
   const id=m.id!;
@@ -58,11 +61,11 @@ export class DataSession {
    if(!this.textIn){if(m.part!==0)throw new Error('Out of order');this.textIn={id,parts:[],total:m.total!,bytes:0};}
    const t=this.textIn;if(t.id!==id||t.total!==m.total||t.parts.length!==m.part)throw new Error('Invalid text sequence');
    t.bytes+=encoder.encode(m.text!).length;if(t.bytes>MAX_TEXT)throw new Error('Text limit');t.parts.push(m.text!);
-   if(t.parts.length===t.total){const text=t.parts.join('');if(!text.trim())throw new Error('Empty text');this.textIn=null;this.received.add(id);if(this.received.size>100)this.received.delete(this.received.values().next().value!);this.events.item({id,kind:'text',direction:'received',text});this.send({t:'ack',id});}return;
+   if(t.parts.length===t.total){const text=t.parts.join('');if(!text.trim())throw new Error('Empty text');this.textIn=null;this.received.add(id);if(this.received.size>100)this.received.delete(this.received.values().next().value!);this.emit({id,kind:'text',direction:'received',text});this.send({t:'ack',id});}return;
   }
   if(m.t==='ack'){
-   const item=this.pending.get(id);if(item){this.pending.delete(id);this.events.item(item);}
-   if(this.out?.id===id&&this.out.phase==='ack'){const f=this.out;this.out=null;this.finishTransfer();this.events.item({id,kind:'file',direction:'sent',name:f.file.name,bytes:f.file.size});}return;
+   const item=this.pending.get(id);if(item){this.pending.delete(id);this.emit(item);}
+   if(this.out?.id===id&&this.out.phase==='ack'){const f=this.out;this.out=null;this.finishTransfer();this.emit({id,kind:'file',direction:'sent',name:f.file.name,bytes:f.file.size});}return;
   }
   if(m.t==='offer'){
    if(this.out||this.incoming){this.send({t:'reject',id});return;}
@@ -78,7 +81,7 @@ export class DataSession {
    const f=this.incoming;if(!f?.accepted||f.id!==id||f.received!==f.size)throw new Error('Incomplete file');
    this.events.progress('正在校验 '+f.name,1);const blob=new Blob(f.chunks,{type:'application/octet-stream'});
    if(await sha256(await blob.arrayBuffer())!==f.hash)throw new Error('Hash mismatch');
-   if(this.dead)return;this.incoming=null;this.finishTransfer();this.send({t:'ack',id});this.events.item({id,kind:'file',direction:'received',name:f.name,bytes:f.size,blob});return;
+   if(this.dead)return;this.incoming=null;this.finishTransfer();this.send({t:'ack',id});this.emit({id,kind:'file',direction:'received',name:f.name,bytes:f.size,blob});return;
   }
   if(m.t==='cancel')this.dispose();
  }

@@ -1,3 +1,4 @@
+import type {Device} from './clipboard.ts';
 import { DataSession, type SessionEvents, type Channel } from './session.ts';
 import { verificationCode } from './protocol.ts';
 import {apiFetch} from './auth.ts';
@@ -6,7 +7,7 @@ export const initialPeer:PeerState={phase:'idle',message:'连接后即可共享'
 export class WebPeer {
  state={...initialPeer}; session:DataSession|null=null;private pc:RTCPeerConnection|null=null;private active=0;
  private token='';private room='';private timer:ReturnType<typeof setTimeout>|null=null;private lifetime:ReturnType<typeof setTimeout>|null=null;
- constructor(private label:string,private onState:(state:PeerState)=>void,private events:SessionEvents){}
+ constructor(private label:string,private onState:(state:PeerState)=>void,private events:SessionEvents,private device?:Device){}
  private patch(change:Partial<PeerState>){this.state={...this.state,...change};this.onState(this.state);}
  private async api(data:Record<string,unknown>,method='POST'){
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),15000);let result:Response;
@@ -43,7 +44,7 @@ export class WebPeer {
      ready:(ready,peer)=>{if(epoch!==this.active)return;this.patch({peer,phase:ready?'ready':'verifying',message:ready?'已加密直连':this.state.confirmed?'等待另一端确认':'核对两端识别码'});if(ready&&this.lifetime===null)this.lifetime=setTimeout(()=>this.fail('连接已满 10 分钟，请重新配对'),600000);},
      closed:()=>{if(epoch!==this.active)return;this.close(false);this.events.closed();},
      error:message=>{if(epoch!==this.active)return;this.events.error(message);},
-    },this.label);
+    },this.label,this.device);
     for(const data of queued)channel.onmessage?.({data} as MessageEvent);queued.length=0;
     if(this.timer)clearTimeout(this.timer);this.timer=null;void this.cleanup();
    }catch{this.fail('无法核对连接证书，请重新配对');}

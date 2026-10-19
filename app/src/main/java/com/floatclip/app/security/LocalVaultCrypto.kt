@@ -10,10 +10,10 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** Device-bound encryption for FloatClip's primary local vault. */
-class LocalVaultCrypto {
+class LocalVaultCrypto : VaultCipher {
     private val keyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
 
-    fun encrypt(plain: ByteArray): ByteArray {
+    override fun encrypt(plain: ByteArray): ByteArray {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
         val iv = cipher.iv
@@ -25,7 +25,7 @@ class LocalVaultCrypto {
             .array()
     }
 
-    fun decrypt(payload: ByteArray): ByteArray {
+    override fun decrypt(payload: ByteArray): ByteArray {
         val buffer = ByteBuffer.wrap(payload)
         val ivSize = buffer.int
         require(ivSize in 12..32 && buffer.remaining() > ivSize) { "Invalid FloatClip vault payload" }

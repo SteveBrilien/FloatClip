@@ -1,27 +1,32 @@
 {
   "schema": 1,
   "channel": "share-preview",
-  "version": "0.4.0",
-  "notes": "0.4.0 共享预览：修复 Android 11 启动闪退；手机采用紧凑顶栏、分组菜单与多级详情页，返回及主题切换保留文字草稿。Windows 仅同步版本。7 项 SDK 30 启动/导航测试和 239 项通信核心断言通过；新 UI 未再次真机验收，配对超时与 Clash TUN 仍待双端验证。",
+  "version": "0.6.0",
+  "notes": "0.6.0 三端整合：Android 原版加密剪贴板、分类、置顶、备份与悬浮球保留；Android/Windows/iPad 共用共享界面与协议；剪贴板按来源设备分组，支持搜索、复制、分类、置顶、合并导入导出与再次发送。Android 安装包升级 com.floatclip.app，旧 Share 为独立包，请保留原版后覆盖升级；Windows 共享界面需要 WebView2。蓝牙与后台自动同步尚未发布。 Android 0.6.0 已完成构建与自动检查，等待原版签名，暂未发布安装包；手机更新入口仍保留旧 Share 0.4.0，不要卸载原版或清除数据。",
+  "releaseTrain": "2026.10.20-unified",
+  "designRevision": "2026.10-blue-2",
+  "web": {
+    "version": "0.6.0",
+    "url": "https://clip.wmy-cloud.cn",
+    "protocol": "web-v1",
+    "authentication": "account",
+    "nativeInterop": true
+  },
   "android": {
     "build": 8,
     "url": "https://mcp.wmy-cloud.cn/artifacts/pub-2f6494a5bcd2495090b9893796bb6a9d/FloatClip-Share-0.4.0-preview.apk?exp=0&sig=e4caf33da719be1783312ad9a6ebc0222332a0e40320a97e937f645e282acefe",
     "sha256": "c33ee8849ae6a7d399d5928e971367b8901ea77a657599394022b877c0bf9062",
-    "bytes": 2644367
+    "bytes": 2644367,
+    "version": "0.4.0",
+    "status": "awaiting-original-signature",
+    "package": "com.floatclip.probe"
   },
   "windows": {
-    "build": 8,
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-04c0314403a54d10b81324871cdf7510/FloatClip-Share-Windows-0.4.0.zip?exp=0&sig=df12aa27ddc26ee1150bb8152d6c9df1a89ad57eba452beecc888b89f7c01084",
-    "sha256": "4b19f992facb00fe21a6efb1f403de8b33923e5a46f69a6ff15430fa123e34f1",
-    "bytes": 58851923
-  },
-  "releaseTrain": "2026.10.20",
-  "designRevision": "2026.10-blue-1",
-  "web": {
-    "version": "0.2.0",
-    "url": "https://clip.wmy-cloud.cn",
-    "protocol": "web-v1",
-    "authentication": "account",
-    "nativeInterop": false
+    "version": "0.6.0",
+    "build": 12,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-d65ee49ccca24e39b49f3d4ad115779a/FloatClip-Windows-0.6.0.zip?exp=0&sig=77d00148aa129bc55a313a60349e4b30561479c419cf911e17da4b030ee5c4d9",
+    "sha256": "691e4a8d6bac9ffb482222a3a6f733ab44faedaa10c7818020cc7b52db91dc1e",
+    "bytes": 59266873,
+    "status": "available"
   }
 }

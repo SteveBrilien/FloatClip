@@ -32,12 +32,12 @@ test('actual RelayPeer exchanges verified text and files through the actual node
   (globalThis as any).WebSocket=class extends WS {constructor(url:string){super(url,{headers:{Origin:'https://clip.test',Cookie:cookie}});}};
   const left:SharedItem[]=[],right:SharedItem[]=[],errors:string[]=[];
   const events=(list:SharedItem[],accept=false):SessionEvents=>({ready:()=>{},item:x=>list.push(x),offer:x=>{if(x&&accept)queueMicrotask(()=>b?.session?.acceptFile());},progress:()=>{},error:e=>errors.push(e),closed:()=>{}});
-  a=new RelayPeer('Windows test',()=>{},events(left));b=new RelayPeer('iPad test',()=>{},events(right,true));
+  a=new RelayPeer('Windows test',()=>{},events(left),{id:'windows-native-fixture',name:'Windows test',platform:'windows'});b=new RelayPeer('iPad test',()=>{},events(right,true),{id:'ipad-web-fixture',name:'iPad test',platform:'ipad'});
   await a.create();await b.join(a.state.code);await until(()=>a!.state.phase==='verifying'&&b!.state.phase==='verifying');
   assert.equal(a.state.sas,b.state.sas);a.confirm();b.confirm();await until(()=>a!.state.phase==='ready'&&b!.state.phase==='ready');
-  a.session!.sendText('真实协议通道 · 🦋');await until(()=>left.length===1&&right.length===1);assert.equal(right[0].text,'真实协议通道 · 🦋');
+  a.session!.sendText('真实协议通道 · 🦋');await until(()=>left.length===1&&right.length===1);assert.equal(right[0].text,'真实协议通道 · 🦋');assert.deepEqual(right[0].source,{id:'windows-native-fixture',name:'Windows test',platform:'windows'});assert.equal(left[0].source?.id,'windows-native-fixture');
   const bytes=crypto.getRandomValues(new Uint8Array(40000));await a.session!.offerFile(new File([bytes],'network-check.bin'));
-  await until(()=>left.length===2&&right.length===2);assert.deepEqual(new Uint8Array(await right[1].blob!.arrayBuffer()),bytes);assert.deepEqual(errors,[]);
+  await until(()=>left.length===2&&right.length===2);assert.deepEqual(new Uint8Array(await right[1].blob!.arrayBuffer()),bytes);assert.equal(right[1].source?.id,'windows-native-fixture');assert.deepEqual(errors,[]);
  }finally{
   a?.close();b?.close();await new Promise(r=>setTimeout(r,50));globalThis.fetch=nativeFetch;globalThis.WebSocket=originalWS;
   (globalThis as any).window=originalWindow;(globalThis as any).location=originalLocation;setCsrf('');if(child.exitCode===null){const ended=new Promise(r=>child.once('exit',r));child.kill('SIGTERM');await ended;}

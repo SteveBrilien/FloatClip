@@ -5,10 +5,10 @@ Android 原版剪贴板与悬浮球、Windows 客户端、iPad PWA 使用同一�
 - PWA：https://clip.wmy-cloud.cn
 - [三端产品与兼容规范](docs/SHARE_PRODUCT_CONTRACT_2026-10-20.md)
 - [实施范围与迁移方案](docs/UNIFIED_0.6.0_PLAN.md)
-- Android 主模块：app（com.floatclip.app）；nearby-probe 保留为旧 LAN 测试 / 兼容源码。
+- Android 主模块：app（安装包 com.floatclip.probe，源码命名空间 com.floatclip.app）；nearby-probe 保留为旧 LAN 测试 / 兼容源码。
 - Windows：windows/FloatClip.Desktop；新共享界面需要 Microsoft WebView2 Runtime，提供离线本机工具和旧 LAN 入口。
 
-发行状态：Windows / PWA 0.6.0；Android 0.6.0 构建、迁移测试和 lint 已通过，等待原发布签名，未发布覆盖升级包。请保留手机原版和数据。详见 [本次验证与发布状态](docs/RELEASE_0.6.0.md)。
+发行状态：Android / Windows / PWA 均为 0.6.0。Android 沿用当前 Share 的固定签名和包名，覆盖升级共享版；原版 FloatClip 可保留并存，历史记录需通过便携加密备份恢复。详见 [本次验证与发布状态](docs/RELEASE_0.6.0.md)。
 
 以下为原版手机应用的保留资料。
 

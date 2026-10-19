@@ -51,7 +51,7 @@ jobs:
         run: |
           bash scripts/create-nearby-debug-key.sh
           chmod +x ./gradlew
-          ./gradlew :app:assembleDebug :app:lintDebug :nearby-probe:assembleDebug :nearby-probe:lintDebug --no-daemon --stacktrace
+          ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :nearby-probe:assembleDebug :nearby-probe:lintDebug --no-daemon --stacktrace
 
       - name: Test near-field wire compatibility
         run: |

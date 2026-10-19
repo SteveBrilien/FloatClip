@@ -9,12 +9,19 @@ android {
     buildToolsVersion = "35.0.1"
 
     defaultConfig {
-        applicationId = "com.floatclip.app"
+        applicationId = "com.floatclip.probe"
         minSdk = 28
         // Deliberately locked to Android 11 behavior for the fixed OriginOS target device.
         targetSdk = 30
         versionCode = 12
         versionName = "0.6.0"
+    }
+
+    // Keep the installed Share update identity; namespace only locates reused classes.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file(".toolchains/nearby-probe/debug.keystore")
+        }
     }
 
     buildTypes {

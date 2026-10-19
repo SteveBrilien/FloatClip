@@ -4,29 +4,31 @@
 
 ## 本次行为
 
-三端统一“剪贴板、共享、设备、设置”，共享 web-v1 协议和蓝白 / 深色 / 跟随系统界面。剪贴板按来源设备的稳定客户端 ID 分区，支持搜索、分类、置顶、复制、合并备份和再次发送。旧原版手机的加密库、悬浮球、无障碍粘贴和加密备份保留，通过原版应用宿主整合；Windows 提供 DPAPI 本机库和离线工具；PWA 为 IndexedDB 加密本机库。
+三端统一“剪贴板、共享、设备、设置”，共用 web-v1 协议和蓝白 / 深色 / 跟随系统界面。剪贴板按来源设备的稳定客户端 ID 分区，支持搜索、分类、置顶、复制、合并备份和再次发送。分区保存本机已有或已接收的记录，不会自动拉取其他设备的完整剪贴板库。
 
-设备分区保存本机已有或已接收的记录，不会自动拉取其他设备的完整剪贴板库。后台静默同步、永久配对、自动重连、蓝牙和 Wi-Fi Direct 尚未发布。
+Android 整合原版的加密库、悬浮球、无障碍粘贴和加密备份；Windows 提供 DPAPI 本机库和离线工具；PWA 为 IndexedDB 加密本机库。后台静默同步、永久配对、自动重连、蓝牙和 Wi-Fi Direct 尚未发布。
 
-## 自动验证
+## Android：沿用当前共享版身份
 
-- Web：TypeScript 类型检查、24 项 Node 测试、8 项后端测试、生产构建及离线清单通过。包含加密 relay 实际连接、来源设备元数据、同名设备隔离、备份冲突合并和置顶保护。
-- Android：assembleDebug、lintDebug、5 项 SDK 30 Robolectric 检查通过；包含原记录 ID / 分类 / 置顶迁移、并发写入冲突、相同内容不同来源、损坏库保护、宿主来源限制。ARM 测试使用 LEGACY graphics / Conscrypt OFF。存储测试注入测试密码器，不冒充实际 Android Keystore 验证。最终任务 task-floatclip_unified_android-654cf4b4f5e441ebae35。
-- Windows：win-x64 自包含单文件发布通过，21 项库和宿主来源检查通过；测试密码器不冒充 Windows DPAPI 实机检查。共享主界面需要 Microsoft Edge WebView2 Runtime，离线原生工具仍可使用。
+按用户 04:01 的决定，不再等待原版独立应用签名。新版保留当前共享版 com.floatclip.probe，versionCode 12 / 0.6.0，固定使用 .toolchains/nearby-probe/debug.keystore。已核对该密钥及先前公开的 0.4.0 APK，证书 SHA-256 均为 0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c。相同包名、相同签名、更高构建号符合覆盖升级条件；本轮没有进行真机安装验证。
 
-## Android 覆盖升级阻塞
+源码命名空间仍为 com.floatclip.app，仅用于复用现有类和资源；安装身份由 applicationId 决定。原版 com.floatclip.app 可保持安装、数据不被新版自动读取或删除。签名私有权限改为安装包名作用域，避免与原版重复声明权限而拒绝安装。
 
-目标包名 com.floatclip.app，versionCode 12 / 0.6.0。原版稳定证书 SHA-256 为 89f27902ef697dd6a1802cad39cf3067bf83f0a078bda92f30895c6b62d45dd3；当前构建证书不同，不能覆盖原版。只读检查已知主机默认 debug 证书也不匹配，未找到已配置的原版签名动作。
+后续发版继续使用这一固定签名。updates/android-identity.json 记录公开身份；发布脚本必须验证 APK 证书、包名、版本、启动组件和私有权限后才能冻结。CI 可生成临时调试密钥进行构建检查，不能将其产物作为当前升级包发布。私钥和密码不进入 Git、聊天、文档或公开构件。
 
-未发布该默认 debug APK，未改包名绕过升级，也未卸载 / 清除手机数据。发布脚本要求 APK 经 apksigner 验证为原稳定证书才冻结发布。安装包下载信息仅收录真正可用的构件；旧 Share 的 0.4.0 下载保留原字节和独立包名。后续需要原受控签名环境或其准确位置，以原地签名完成 Android 发行。私钥与密码不得写入仓库、聊天或发布记录。
+迁移原版记录：先在原版设置中完成便携加密备份，并保留一份副本；在新版“设置 → 本机剪贴板与悬浮球”的原生管理页面，选择备份副本目录并用原 PIN 恢复。原版与新版不要共用自动备份目录。无来源的历史记录归入新版“本机”板块；新接收文字按来源设备分区。原生恢复会替换新版当前库，应在开始积累新版内容前操作；普通跨端 JSON 备份的导入为合并。
 
-## 硬件验收边界
+## 验证
 
-本轮未连接手机 ADB、Windows 或 iPad。实际 Win10 / Win11 的 WebView2 / DPAPI、Android11 覆盖安装和悬浮球、iPad Safari 安装 / 浅深色布局 / 文件保存待用户测试。未扫描、改动 OrangePi 测力设备有线网络。
+- Web：此前已通过 TypeScript、24 项 Node 测试、8 项后端测试、生产构建和离线清单；本轮不改变共享前端行为。
+- Android：当前身份 assembleDebug、7 项 SDK30 检查及 lintDebug 均通过（任务 task-floatclip_unified_android-e72eee1370b04f32964b）。包含并存权限检查和冻结旧格式的加密备份恢复检查；存储测试注入测试密码器，不冒充实际 Android Keystore 验证。
+- Windows：此前 win-x64 自包含单文件发布和 21 项库 / 宿主来源检查通过，安装包字节不变。共享主界面需要 Microsoft Edge WebView2 Runtime，离线原生工具仍可使用；测试密码器不冒充 Windows DPAPI 真机检查。
+- 此前部署后已通过真实 HTTPS / WSS 验证认证 API、配对、加密文字、40,960 字节文件和 SHA256、退出撤销。使用两个 5 分钟本地探测会话并始终清理，未重新输入或测试用户密码。原账户配置不变。
 
-## 已部署与下载
+本轮未连接手机 ADB、Windows 或 iPad。实际 Android11 覆盖安装与悬浮球、Win10 / Win11 WebView2 / DPAPI、iPad Safari 安装 / 布局 / 文件保存仍待硬件验证。未扫描、改动接测力设备的有线网络。
 
-- PWA：https://clip.wmy-cloud.cn，后端 /_health 返回 0.6.0。新资源通过 HTTPS 校验，匿名认证及版本 API 返回 401。离线公共壳版本 2b14be2366a3；保留旧哈希资源和服务端 / 静态资源回滚副本，不改认证私有配置。
-- Windows 0.6.0 ZIP：59,266,873 字节；SHA-256 691e4a8d6bac9ffb482222a3a6f733ab44faedaa10c7818020cc7b52db91dc1e。下载地址见 updates/share-preview.json 和登录后的“设置 → 更新”。已从公开地址完整下载核对大小和哈希。
-- 部署后以两个 5 分钟本地探测会话验证真实 HTTPS / WSS：认证 API、配对、加密文字、40,960 字节文件及 SHA-256、退出撤销均通过。探测会话始终清理；本次没有重新输入或测试用户密码，也不将这项检查记作密码登录验收。密码登录与 30 天登录保持有后端自动测试；原账户配置未改动。
-- 本轮沿用并保留最初工作区的 0.5.6 UI 改动。MainActivity、ClipboardOverlayService、EntrySwipeActions、OverlayPreferences 四份既有源码字节未改动；README 和 Gradle 仅追加整合资料与所需版本 / 构建配置。两份既有未跟踪验收资料保持未跟踪。
+## 下载与部署
+
+PWA：https://clip.wmy-cloud.cn，版本 0.6.0。离线公共壳 2b14be2366a3；保留旧哈希资源和回滚副本。Windows 0.6.0 ZIP 为 59,266,873 字节，SHA256 691e4a8d6bac9ffb482222a3a6f733ab44faedaa10c7818020cc7b52db91dc1e。安装包公开地址及 Android 最终哈希以 updates/share-preview.json 为准；网站设置内使用同一版本元数据。
+
+Android 0.6.0 APK 已发布：3,022,476 字节，SHA256 f727efd94a8895abcba1c55bf54b344c923ff57bf941f7e93ceb53fe3624e805。公开链接完整下载校验通过；经发布脚本验证与旧 0.4.0 签名一致。Windows 字节仍与先前公开包一致。三端分发状态均为 available，网页版本 API 使用更新后的下载元数据，无需服务重启；认证 API、加密消息及 40KiB 文件传输探测再次通过。

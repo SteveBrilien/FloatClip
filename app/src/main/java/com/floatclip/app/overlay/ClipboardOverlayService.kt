@@ -112,7 +112,7 @@ class ClipboardOverlayService : Service() {
         }
     }
 
-    @SuppressLint("UnspecifiedRegisterReceiverFlag") // registration requires INTERNAL_BROADCAST_PERMISSION (signature)
+    @SuppressLint("UnspecifiedRegisterReceiverFlag") // registration requires a package-scoped signature permission
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(WindowManager::class.java)
@@ -138,7 +138,7 @@ class ClipboardOverlayService : Service() {
         registerReceiver(
             appearanceReceiver,
             IntentFilter(ACTION_REFRESH_APPEARANCE),
-            INTERNAL_BROADCAST_PERMISSION,
+            "$packageName.permission.INTERNAL",
             null,
         )
         registerReceiver(
@@ -1148,7 +1148,6 @@ class ClipboardOverlayService : Service() {
     companion object {
         const val ACTION_REFRESH_APPEARANCE = "com.floatclip.app.action.REFRESH_APPEARANCE"
         const val NOTIFICATION_CHANNEL_ID = "floatclip_overlay_quiet_v2"
-        const val INTERNAL_BROADCAST_PERMISSION = "com.floatclip.app.permission.INTERNAL"
         private const val NOTIFICATION_ID = 2001
         private const val CLIPBOARD_POLL_MS = 650L
         private const val BUBBLE_APPEAR_MS = 240L

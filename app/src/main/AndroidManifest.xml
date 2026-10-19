@@ -2,9 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <permission
-        android:name="com.floatclip.app.permission.INTERNAL"
+        android:name="${applicationId}.permission.INTERNAL"
         android:protectionLevel="signature" />
-    <uses-permission android:name="com.floatclip.app.permission.INTERNAL" />
+    <uses-permission android:name="${applicationId}.permission.INTERNAL" />
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />

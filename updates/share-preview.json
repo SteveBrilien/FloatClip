@@ -2,7 +2,7 @@
   "schema": 1,
   "channel": "share-preview",
   "version": "0.6.0",
-  "notes": "0.6.0 三端整合：Android 原版加密剪贴板、分类、置顶、备份与悬浮球保留；Android/Windows/iPad 共用共享界面与协议；剪贴板按来源设备分组，支持搜索、复制、分类、置顶、合并导入导出与再次发送。Android 安装包升级 com.floatclip.app，旧 Share 为独立包，请保留原版后覆盖升级；Windows 共享界面需要 WebView2。蓝牙与后台自动同步尚未发布。 Android 0.6.0 已完成构建与自动检查，等待原版签名，暂未发布安装包；手机更新入口仍保留旧 Share 0.4.0，不要卸载原版或清除数据。",
+  "notes": "0.6.0 三端整合：沿用当前共享版包名和固定签名，Share 0.4.0 可覆盖升级；加入原版剪贴板、分类、置顶、备份、悬浮球及无障碍粘贴。原版 FloatClip 可并存，旧记录需通过其便携加密备份手动恢复，不会跨应用自动读取。Android/Windows/iPad 共用共享界面与协议；剪贴板按来源设备分区，支持搜索、复制、合并导入导出和再次发送。Windows 共享需要 WebView2；蓝牙与后台自动同步未发布。",
   "releaseTrain": "2026.10.20-unified",
   "designRevision": "2026.10-blue-2",
   "web": {
@@ -13,13 +13,14 @@
     "nativeInterop": true
   },
   "android": {
-    "build": 8,
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-2f6494a5bcd2495090b9893796bb6a9d/FloatClip-Share-0.4.0-preview.apk?exp=0&sig=e4caf33da719be1783312ad9a6ebc0222332a0e40320a97e937f645e282acefe",
-    "sha256": "c33ee8849ae6a7d399d5928e971367b8901ea77a657599394022b877c0bf9062",
-    "bytes": 2644367,
-    "version": "0.4.0",
-    "status": "awaiting-original-signature",
-    "package": "com.floatclip.probe"
+    "version": "0.6.0",
+    "build": 12,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-deb7a135ca4344749a82db98deb988c0/FloatClip-0.6.0.apk?exp=0&sig=7a12788ba4403045e363bfb24dc082aafca64b64c0f198a2befa528b25eca7ab",
+    "sha256": "f727efd94a8895abcba1c55bf54b344c923ff57bf941f7e93ceb53fe3624e805",
+    "bytes": 3022476,
+    "status": "available",
+    "package": "com.floatclip.probe",
+    "signerSha256": "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c"
   },
   "windows": {
     "version": "0.6.0",

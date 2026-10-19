@@ -3,6 +3,7 @@ package com.floatclip.app
 import android.content.Context
 import com.floatclip.app.clipboard.ClipStore
 import com.floatclip.app.security.VaultCipher
+import com.floatclip.app.security.PortableVaultCrypto
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
@@ -28,6 +29,23 @@ class UnifiedVaultTest {
     private fun context(): Context = RuntimeEnvironment.getApplication().also {
         File(it.filesDir,"floatclip_vault.bin").delete()
         it.getSharedPreferences("floatclip_store",Context.MODE_PRIVATE).edit().clear().commit()
+    }
+    @Test fun shareIdentityCanCoexistWithOriginalClipboardApp() {
+        val ctx=context()
+        assertEquals("com.floatclip.probe",ctx.packageName)
+        val info=ctx.packageManager.getPackageInfo(ctx.packageName,android.content.pm.PackageManager.GET_PERMISSIONS)
+        val permissions=info.permissions?.map{it.name}.orEmpty()
+        assertTrue(permissions.contains("${ctx.packageName}.permission.INTERNAL"))
+        assertFalse(permissions.contains("com.floatclip.app.permission.INTERNAL"))
+    }
+    @Test fun portableLegacyBackupRestoresIntoCurrentShareVault() {
+        // Frozen v1 fixture uses the old app's PBKDF2/AES-GCM format; PIN is test data.
+        val backup="""{"format":"floatclip-portable-vault","version":1,"kdf":"PBKDF2-HMAC-SHA256","iterations":210000,"salt":"AAECAwQFBgcICQoLDA0ODw==","iv":"AAECAwQFBgcICQoL","ciphertext":"rUuTMwMYNPZj33MZhNuISZ00DE7bbn4lyttbV+39nP6QpFgVCov3lgZ06dnvz6s+pP92QJ60FXWyRAE4R4B8rLLgo5VTCXq2sVXgn5kAJSw+vct45F80PfP8SQ0Tkg=="}"""
+        val store=ClipStore(context(),codec)
+        assertTrue(store.importJson(PortableVaultCrypto.decrypt(backup,"000123")))
+        val entry=store.entries().single()
+        assertEquals("old text",entry.text);assertTrue(entry.pinned);assertEquals("工作",entry.category)
+        assertEquals("local",entry.sourceDeviceId)
     }
     @Test fun legacyVaultMigratesWithoutLosingPinOrCategory() {
         val ctx=context();val raw="""[{"id":5,"text":"old text","pinned":true,"category":"工作","createdAt":100}]"""

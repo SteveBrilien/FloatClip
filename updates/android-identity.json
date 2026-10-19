@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "package": "com.floatclip.probe",
+  "signerSha256": "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c",
+  "upgradesFrom": { "version": "0.4.0-preview", "build": 8 },
+  "legacyClipboardPackage": "com.floatclip.app",
+  "migration": "Upgrade the installed Share app; retain the original clipboard app and restore its portable backup separately."
+}

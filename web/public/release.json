@@ -117,12 +117,23 @@
   },
   "nativeHost": {
     "bridge": 1,
-    "androidPackage": "com.floatclip.app",
+    "androidPackage": "com.floatclip.probe",
     "windowsRuntime": "Microsoft Edge WebView2",
     "legacyProtocol": "FCP2/FCS1",
-    "minimumVersion": "0.6.0"
+    "minimumVersion": "0.6.0",
+    "androidSignerSha256": "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c"
   },
   "downloads": {
+    "android": {
+      "version": "0.6.0",
+      "build": 12,
+      "url": "https://mcp.wmy-cloud.cn/artifacts/pub-deb7a135ca4344749a82db98deb988c0/FloatClip-0.6.0.apk?exp=0&sig=7a12788ba4403045e363bfb24dc082aafca64b64c0f198a2befa528b25eca7ab",
+      "sha256": "f727efd94a8895abcba1c55bf54b344c923ff57bf941f7e93ceb53fe3624e805",
+      "bytes": 3022476,
+      "status": "available",
+      "package": "com.floatclip.probe",
+      "signerSha256": "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c"
+    },
     "windows": {
       "version": "0.6.0",
       "build": 12,
@@ -133,7 +144,7 @@
     }
   },
   "distribution": {
-    "android": "awaiting-original-signature",
+    "android": "available",
     "windows": "available",
     "web": "available"
   }

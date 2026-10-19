@@ -53,7 +53,7 @@ class NativeBridge(private val activity: Activity, private val legacy: (String) 
         "theme.set" -> {
             val mode = when (args.getString("theme")) { "dark" -> OverlayThemeMode.DARK; "light" -> OverlayThemeMode.LIGHT; "system" -> OverlayThemeMode.SYSTEM; else -> error("主题无效") }
             OverlayPreferences(activity).saveThemeMode(mode)
-            activity.sendBroadcast(Intent(ClipboardOverlayService.ACTION_REFRESH_APPEARANCE).setPackage(activity.packageName), "com.floatclip.app.permission.INTERNAL")
+            activity.sendBroadcast(Intent(ClipboardOverlayService.ACTION_REFRESH_APPEARANCE).setPackage(activity.packageName), "${activity.packageName}.permission.INTERNAL")
             (activity as? UnifiedActivity)?.applyBars(mode)
             true
         }

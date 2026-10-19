@@ -6,7 +6,7 @@ on:
       - app/**
       - nearby-probe/src/main/java/com/floatclip/probe/ShareDesign.kt
       - windows/**
-      - updates/share-preview.json
+      - updates/**
       - scripts/check-share-contract.py
       - .github/workflows/share-contract.yml
   pull_request:

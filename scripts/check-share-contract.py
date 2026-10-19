@@ -16,19 +16,22 @@ assert re.search(r'<Version>([^<]+)</Version>',windows).group(1)==version
 assert re.search(r"VERSION = '([^']+)'",(web/'lib/version.ts').read_text()).group(1)==version
 assert re.search(r"VERSION = '([^']+)'",(web/'server/app.py').read_text()).group(1)==version
 assert re.search(r'Version="([0-9.]+)"',(root/'windows/FloatClip.Desktop/UnifiedWindow.cs').read_text()).group(1)==version
-assert release['nativeHost']['androidPackage']=='com.floatclip.app'
+identity=json.loads((root/'updates/android-identity.json').read_text())
+assert identity['package']=='com.floatclip.probe'
+assert identity['signerSha256']=='0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c'
+assert re.search(r'applicationId = "([^"]+)"',android).group(1)==identity['package']
+assert '.toolchains/nearby-probe/debug.keystore' in android
+assert '${applicationId}.permission.INTERNAL' in (root/'app/src/main/AndroidManifest.xml').read_text()
+assert release['nativeHost']['androidPackage']==identity['package']
+assert release['nativeHost']['androidSignerSha256']==identity['signerSha256']
 build=int(re.search(r'versionCode = (\d+)',android).group(1))
 assert feed['windows']['build']==build
 for platform in ['android','windows']:
- status=release['distribution'][platform]
- if status=='available':
-  assert feed[platform]['build']==build and feed[platform]['version']==version
-  assert release['downloads'][platform]==feed[platform]
-  assert re.fullmatch('[0-9a-f]{64}',feed[platform]['sha256']) and feed[platform]['bytes']>0
- else:
-  assert platform=='android' and status=='awaiting-original-signature'
-  assert platform not in release['downloads'],'Unsigned Android candidate must not be offered as an upgrade'
-  assert feed[platform]['build']<build and feed[platform]['package']=='com.floatclip.probe'
+ assert release['distribution'][platform]=='available'
+ assert feed[platform]['build']==build and feed[platform]['version']==version
+ assert release['downloads'][platform]==feed[platform]
+ assert re.fullmatch('[0-9a-f]{64}',feed[platform]['sha256']) and feed[platform]['bytes']>0
+assert feed['android']['package']==identity['package'] and feed['android']['signerSha256']==identity['signerSha256']
 assert feed['web']['nativeInterop'] is True
 for feature,implementations in release['featureContract'].items():
  assert set(implementations)==platforms,f'{feature}: missing platform status'

@@ -1,0 +1,19 @@
+[Unit]
+Description=FloatClip authenticated PWA node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/orangepi/workspace/Android/FloatClip/web
+Environment=PYTHONPATH=/home/orangepi/workspace/Android/FloatClip/analysis/pwa-selfhost/vendor
+ExecStart=/usr/bin/python3 -B -u /home/orangepi/workspace/Android/FloatClip/web/server/app.py --config /home/orangepi/workspace/Android/FloatClip/analysis/pwa-selfhost/state/node-config.json --state /home/orangepi/workspace/Android/FloatClip/analysis/pwa-selfhost/state --static /home/orangepi/workspace/Android/FloatClip/web/dist --port 18391
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=yes
+MemoryMax=256M
+TasksMax=48
+
+[Install]
+WantedBy=default.target

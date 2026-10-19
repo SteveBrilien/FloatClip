@@ -1,0 +1,52 @@
+name: Share product contract
+on:
+  push:
+    paths:
+      - web/**
+      - nearby-probe/src/main/java/com/floatclip/probe/ShareDesign.kt
+      - windows/FloatClip.Desktop/App.cs
+      - updates/share-preview.json
+      - scripts/check-share-contract.py
+      - .github/workflows/share-contract.yml
+  pull_request:
+    paths:
+      - web/**
+      - nearby-probe/**
+      - windows/**
+      - updates/**
+      - scripts/check-share-contract.py
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate common feature and design declarations
+        run: python3 scripts/check-share-contract.py
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install node runtime dependencies
+        run: python3 -m pip install -r server/requirements.txt
+      - name: Install frontend and protocol test dependencies
+        run: npm ci --ignore-scripts
+      - name: Check types
+        run: node node_modules/typescript/bin/tsc --noEmit
+      - name: Test client protocol and real socket relay
+        run: npm test
+      - name: Test authentication and node behavior
+        run: npm run test:node
+      - name: Build installable PWA
+        run: npm run build

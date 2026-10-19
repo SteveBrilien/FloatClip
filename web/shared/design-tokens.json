@@ -1,0 +1,41 @@
+{
+  "revision": "2026.10-blue-1",
+  "primary": "#2563EB",
+  "light": {
+    "background": "#F4F7FC",
+    "surface": "#FFFFFF",
+    "text": "#19283F",
+    "muted": "#596C85",
+    "line": "#DFE7F2",
+    "tint": "#EBF2FF",
+    "accent": "#245DCE"
+  },
+  "dark": {
+    "background": "#0C1422",
+    "surface": "#162235",
+    "text": "#EDF3FC",
+    "muted": "#A9B8CD",
+    "line": "#2D3C52",
+    "tint": "#243B5A",
+    "accent": "#8DBBFF"
+  },
+  "radius": {
+    "card": 16,
+    "input": 11,
+    "button": 11
+  },
+  "spacing": [
+    4,
+    8,
+    12,
+    16,
+    24,
+    32
+  ],
+  "minimumTouchTarget": 44,
+  "navigation": [
+    "共享",
+    "设备",
+    "设置"
+  ]
+}

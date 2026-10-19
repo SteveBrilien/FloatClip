@@ -14,5 +14,14 @@
     "url": "https://mcp.wmy-cloud.cn/artifacts/pub-04c0314403a54d10b81324871cdf7510/FloatClip-Share-Windows-0.4.0.zip?exp=0&sig=df12aa27ddc26ee1150bb8152d6c9df1a89ad57eba452beecc888b89f7c01084",
     "sha256": "4b19f992facb00fe21a6efb1f403de8b33923e5a46f69a6ff15430fa123e34f1",
     "bytes": 58851923
+  },
+  "releaseTrain": "2026.10.20",
+  "designRevision": "2026.10-blue-1",
+  "web": {
+    "version": "0.2.0",
+    "url": "https://clip.wmy-cloud.cn",
+    "protocol": "web-v1",
+    "authentication": "account",
+    "nativeInterop": false
   }
 }

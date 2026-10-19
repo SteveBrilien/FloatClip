@@ -1,0 +1,64 @@
+{
+  "product": "FloatClip",
+  "designRevision": "2026.10-blue-1",
+  "releaseTrain": "2026.10.20",
+  "versions": {
+    "android": "0.4.0",
+    "windows": "0.4.0",
+    "web": "0.2.0"
+  },
+  "capabilities": {
+    "web": [
+      "manual-clipboard",
+      "file-64mib",
+      "webrtc-direct",
+      "encrypted-node-relay",
+      "password-login",
+      "pwa-install",
+      "update-check"
+    ],
+    "android": [
+      "manual-clipboard",
+      "file-64mib",
+      "lan-tls",
+      "trusted-device",
+      "update-check"
+    ],
+    "windows": [
+      "manual-clipboard",
+      "file-64mib",
+      "lan-tls",
+      "trusted-device",
+      "update-check"
+    ]
+  },
+  "pending": [
+    "native-web-protocol-adapter",
+    "ble-discovery",
+    "bluetooth-rfcomm",
+    "wifi-direct-concurrency"
+  ],
+  "releasePolicy": "Shared feature changes require Android, Windows and Web status, validation and migration notes before release.",
+  "featureContract": {
+    "manual-clipboard": {
+      "android": "implemented",
+      "windows": "implemented",
+      "web": "implemented"
+    },
+    "file-confirmation-and-hash": {
+      "android": "implemented",
+      "windows": "implemented",
+      "web": "implemented"
+    },
+    "light-dark-system": {
+      "android": "implemented",
+      "windows": "implemented",
+      "web": "implemented"
+    },
+    "foreground-sharing": {
+      "android": "implemented",
+      "windows": "implemented",
+      "web": "implemented"
+    }
+  }
+}

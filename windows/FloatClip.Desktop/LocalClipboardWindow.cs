@@ -72,7 +72,7 @@ public sealed class LocalClipboardWindow:Window
     void ReadClipboard(int retry=0)
     {
         if(!capture&&sync?.Snapshot().Enabled!=true)return;
-        try{uint sequence=GetClipboardSequenceNumber();if(sequence!=0&&sequence==lastSequence)return;if(!Clipboard.ContainsText()||Clipboard.ContainsData("ExcludeClipboardContentFromMonitorProcessing")||ClipboardWrites.IsOwnWrite()){lastSequence=sequence;return;}string value=Clipboard.GetText();if(string.IsNullOrWhiteSpace(value)){lastSequence=sequence;return;}if(capture)vault.AddText(value);lastSequence=sequence;sync?.Copied(value);Refresh();}
+        try{uint sequence=GetClipboardSequenceNumber();if(sequence!=0&&sequence==lastSequence)return;if(ClipboardWrites.IsOwnWrite()){lastSequence=sequence;return;}if(!Clipboard.ContainsText()||Clipboard.ContainsData("ExcludeClipboardContentFromMonitorProcessing")){sync?.Copied("",true);lastSequence=sequence;return;}string value=Clipboard.GetText();if(string.IsNullOrWhiteSpace(value)){sync?.Copied("",true);lastSequence=sequence;return;}if(capture)vault.AddText(value);lastSequence=sequence;sync?.Copied(value);Refresh();}
         catch(System.Runtime.InteropServices.COMException){if(retry<3){var timer=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(60)};timer.Tick+=(_,_)=>{timer.Stop();ReadClipboard(retry+1);};timer.Start();}}
         catch{ /* Keep the existing vault intact; report a persistent storage problem on the next open. */ }
     }

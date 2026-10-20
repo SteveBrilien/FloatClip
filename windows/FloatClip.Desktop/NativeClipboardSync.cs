@@ -101,10 +101,10 @@ public sealed class NativeClipboardSync: IDisposable
         _=Task.Run(ReconnectLoop);
         _=Task.Run(RetryLoop);
     }
-    public void Copied(string value)
+    public void Copied(string value,bool excluded=false)
     {
         if(!enabled||disposed)return;
-        try{engine.Copied(value,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());}
+        try{engine.Copied(value,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),excluded);}
         catch{SetStatus("该条目未同步，请检查长度或本机存储");}
     }
     void Send(string key,Frame frame){if(enabled&&!disposed&&pairs.Get(key).Length==32&&links.TryGetValue(key,out var link))link.Queue(frame);}

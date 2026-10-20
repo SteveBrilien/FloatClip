@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Security.Cryptography;
 using FloatClip.Desktop;
+using FloatClip.Share;
 
 static class Program
 {
@@ -29,6 +30,16 @@ static class Program
             byte[] encrypted=File.ReadAllBytes(Path.Combine(root,"clipboard.v1.bin"));Check(!Encoding.UTF8.GetString(encrypted).Contains("secret-original"),"test codec wrote plaintext");
             var invalid=vault.Load();invalid["entries"]![0]!["source"]!["id"]="../../escape";Throws(()=>vault.Commit(invalid["revision"]!.GetValue<string>(),invalid["entries"]!.AsArray()),"invalid source accepted");
             Check(vault.Load()["entries"]!.AsArray().Count==2,"validation failure overwrote storage");
+            var remote=new SyncDevice(Guid.NewGuid(),"手机","android");var delivered=new SyncEntry(Guid.NewGuid(),remote,1,100,"received-sync");
+            vault.ReceiveShared(delivered);vault.ReceiveShared(delivered);Check(vault.Load()["entries"]!.AsArray().Count==3,"delivery idempotence");
+            var organized=vault.Load();var remoteRow=organized["entries"]!.AsArray().OfType<JsonObject>().Single(c=>c["id"]!.GetValue<string>()==delivered.Id.ToString());remoteRow["pinned"]=true;remoteRow["category"]="同步分类";vault.Commit(organized["revision"]!.GetValue<string>(),organized["entries"]!.AsArray());
+            var newCopy=delivered with {Id=Guid.NewGuid(),Clock=2};vault.ReceiveShared(newCopy);var preserved=vault.Load()["entries"]!.AsArray().OfType<JsonObject>().Single(c=>c["id"]!.GetValue<string>()==newCopy.Id.ToString());Check(preserved["pinned"]!.GetValue<bool>()&&preserved["category"]!.GetValue<string>()=="同步分类","repeated copy keeps organization");
+            string pairRoot=Path.Combine(root,"Pairing"),pin=new string('a',64);byte[] credential=RandomNumberGenerator.GetBytes(32);var pairs=new PairStore(pairRoot,Protect,Unprotect);pairs.Put(pin,credential);
+            Check(new PairStore(pairRoot,Protect,Unprotect).Get(pin).AsSpan().SequenceEqual(credential),"authorization survives restart");
+            Check(!Encoding.UTF8.GetString(File.ReadAllBytes(Path.Combine(pairRoot,"paired-devices.dat"))).Contains(Convert.ToBase64String(credential)),"authorization persisted as plaintext");
+            var failedPairStore=new PairStore(pairRoot,_=>throw new IOException("disk error"),Unprotect);Throws(()=>failedPairStore.Put(new string('b',64),RandomNumberGenerator.GetBytes(32)),"credential failure accepted");Check(new PairStore(pairRoot,Protect,Unprotect).Count==1,"credential failure lost existing grants");
+            pairs.Remove(pin);Check(new PairStore(pairRoot,Protect,Unprotect).Count==0,"revoked grant returned after restart");
+            string pairPath=Path.Combine(pairRoot,"paired-devices.dat");File.WriteAllText(pairPath,"corrupt credentials");var damagedPairs=new PairStore(pairRoot,Protect,Unprotect);Check(damagedPairs.Corrupt,"damaged grants not detected");Throws(()=>damagedPairs.Put(pin,credential),"damaged grants silently replaced");Check(File.ReadAllText(pairPath)=="corrupt credentials","damaged credential evidence lost");damagedPairs.Clear();damagedPairs.Put(pin,credential);Check(damagedPairs.Count==1,"explicit reset did not restore pairing");
             var full=vault.Load();var all=full["entries"]!.AsArray();while(all.Count<500){var c=all[0]!.DeepClone();c["id"]=Guid.NewGuid().ToString();c["pinned"]=true;all.Add(c);}foreach(var c in all)c!["pinned"]=true;vault.Commit(full["revision"]!.GetValue<string>(),all);Throws(()=>vault.AddText("overflow"),"pinned data evicted");Check(vault.Load()["entries"]!.AsArray().Count==500,"capacity violated");
             string path=Path.Combine(root,"clipboard.v1.bin");File.WriteAllText(path,"damaged-original");Throws(()=>vault.Load(),"corrupted storage accepted");Throws(()=>vault.AddText("overwrite"),"corrupted storage overwritten");Check(File.ReadAllText(path)=="damaged-original","corrupted source was destroyed");
             Console.WriteLine("FloatClip clipboard library: "+checks+" persistence, provenance and conflict checks passed (test AES codec; DPAPI requires Windows).");return 0;

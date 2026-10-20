@@ -68,6 +68,30 @@ public sealed class ClipboardVault
     }
     public static void Validate(JsonArray entries)
     {
+        ValidateEntries(entries);
+    }
+    public void ReceiveShared(FloatClip.Share.SyncEntry entry)
+    {
+        for(int retry=0;;retry++)
+        {
+            var snapshot=Load();var entries=snapshot["entries"]!.AsArray();string key=entry.Id.ToString();
+            if(entries.OfType<JsonObject>().Any(c=>c["id"]!.GetValue<string>()==key))return;
+            var previous=entries.OfType<JsonObject>().FirstOrDefault(c=>c["text"]!.GetValue<string>()==entry.Text&&c["source"]!["id"]!.GetValue<string>()==entry.Source.Id.ToString());
+            long now=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var row=previous==null?new JsonObject{["pinned"]=false,["category"]="未分类",["createdAt"]=now}:(JsonObject)previous.DeepClone();
+            if(previous!=null)entries.Remove(previous);
+            if(entries.Count>=500)
+            {
+                var removable=entries.OfType<JsonObject>().Where(c=>!c["pinned"]!.GetValue<bool>()).OrderBy(c=>c["updatedAt"]!.GetValue<long>()).FirstOrDefault()??throw new IOException("置顶记录已满");
+                entries.Remove(removable);
+            }
+            row["id"]=key;row["text"]=entry.Text;row["updatedAt"]=now;
+            row["source"]=new JsonObject{["id"]=entry.Source.Id.ToString(),["name"]=entry.Source.Name,["platform"]=entry.Source.Platform};entries.Add(row);
+            try{Commit(snapshot["revision"]!.GetValue<string>(),entries);return;}catch(IOException e)when(e.Message=="VAULT_CONFLICT"&&retry<3){}
+        }
+    }
+    static void ValidateEntries(JsonArray entries)
+    {
         if(entries.Count>500)throw new IOException("剪贴板最多保存 500 条");var keys=new HashSet<string>();
         foreach(var node in entries){var c=node as JsonObject??throw new IOException("记录格式无效");string id=c["id"]!.GetValue<string>(),text=c["text"]!.GetValue<string>(),category=c["category"]!.GetValue<string>();
             var s=c["source"] as JsonObject??throw new IOException("设备来源无效");string sid=s["id"]!.GetValue<string>(),name=s["name"]!.GetValue<string>(),platform=s["platform"]!.GetValue<string>();

@@ -98,11 +98,48 @@ public sealed class BluetoothSyncTransport:IDisposable
         if(disposed!=0)throw new ObjectDisposedException(nameof(BluetoothSyncTransport));
         Start();
         using var linked=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token,cancellation);
+        var candidates=await PairingServices(linked.Token);
+        try
+        {
+            foreach(var candidate in candidates)
+            {
+                linked.Token.ThrowIfCancellationRequested();
+                var service=candidate.Service;var device=candidate.Device;string? relation=null;
+                try
+                {
+                    var socket=new StreamSocket();sockets.TryAdd(socket,0);
+                    try
+                    {
+                        using var deadline=CancellationTokenSource.CreateLinkedTokenSource(linked.Token);deadline.CancelAfter(TimeSpan.FromSeconds(75));
+                        await socket.ConnectAsync(service.ConnectionHostName,service.ConnectionServiceName,SocketProtectionLevel.BluetoothEncryptionWithAuthentication).AsTask(deadline.Token);
+                        using var abort=deadline.Token.Register(()=>socket.Dispose());
+                        var raw=new DuplexStream(socket.InputStream.AsStreamForRead(),socket.OutputStream.AsStreamForWrite(),socket);
+                        await Task.Run(()=>TransportPairing.Connect(raw,verify,token=>relation=pairs.PutBluetooth(token,device.BluetoothAddress),()=>{if(relation!=null)pairs.RemoveKey(relation);}),deadline.Token);
+                        if(relation==null)throw new IOException("蓝牙授权未保存");
+                        return device.Name+"|"+relation;
+                    }
+                    finally{sockets.TryRemove(socket,out _);socket.Dispose();}
+                }
+                catch(OperationCanceledException){throw;}
+                catch{/* A stale SDP record or unavailable paired device is skipped. */}
+            }
+        }
+        finally
+        {
+            foreach(var candidate in candidates){candidate.Service.Dispose();candidate.Device.Dispose();}
+        }
+        throw new IOException("未发现处于“添加设备”窗口的已配对 FloatClip 蓝牙设备");
+    }
+
+    sealed record PairCandidate(BluetoothDevice Device,RfcommDeviceService Service);
+
+    async Task<PairCandidate[]> PairingServices(CancellationToken cancellation)
+    {
+        var direct=new System.Collections.Generic.List<PairCandidate>();
         string selector=RfcommDeviceService.GetDeviceSelector(PairServiceId);
-        var found=await DeviceInformation.FindAllAsync(selector).AsTask(linked.Token);
+        var found=await DeviceInformation.FindAllAsync(selector).AsTask(cancellation);
         foreach(var info in found)
         {
-            linked.Token.ThrowIfCancellationRequested();
             RfcommDeviceService? service=null;BluetoothDevice? device=null;
             try
             {
@@ -110,24 +147,32 @@ public sealed class BluetoothSyncTransport:IDisposable
                 if(service==null)continue;
                 device=await BluetoothDevice.FromHostNameAsync(service.ConnectionHostName);
                 if(device==null||!device.DeviceInformation.Pairing.IsPaired)continue;
-                var socket=new StreamSocket();sockets.TryAdd(socket,0);string? relation=null;
-                try
-                {
-                    using var deadline=CancellationTokenSource.CreateLinkedTokenSource(linked.Token);deadline.CancelAfter(TimeSpan.FromSeconds(75));
-                    await socket.ConnectAsync(service.ConnectionHostName,service.ConnectionServiceName,SocketProtectionLevel.BluetoothEncryptionWithAuthentication).AsTask(deadline.Token);
-                    using var abort=deadline.Token.Register(()=>socket.Dispose());
-                    var raw=new DuplexStream(socket.InputStream.AsStreamForRead(),socket.OutputStream.AsStreamForWrite(),socket);
-                    await Task.Run(()=>TransportPairing.Connect(raw,verify,token=>relation=pairs.PutBluetooth(token,device.BluetoothAddress),()=>{if(relation!=null)pairs.RemoveKey(relation);}),deadline.Token);
-                    if(relation==null)throw new IOException("蓝牙授权未保存");
-                    return device.Name+"|"+relation;
-                }
-                finally{sockets.TryRemove(socket,out _);socket.Dispose();}
+                direct.Add(new(device,service));device=null;service=null;
             }
-            catch(OperationCanceledException){throw;}
-            catch{/* A stale SDP record or unavailable paired device is skipped. */}
+            catch{}
             finally{device?.Dispose();service?.Dispose();}
         }
-        throw new IOException("未发现处于“添加设备”窗口的已配对 FloatClip 蓝牙设备");
+        if(direct.Count>0)return direct.ToArray();
+
+        // Windows often omits Android's dynamically registered RFCOMM service from the
+        // global service selector. Probe OS-paired devices concurrently instead of
+        // serially waiting on headphones/controllers one by one.
+        var devices=await PairedDevices();
+        var probes=devices.Select(async device=>{
+            try
+            {
+                using var deadline=CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+                deadline.CancelAfter(TimeSpan.FromSeconds(7));
+                var result=await device.GetRfcommServicesForIdAsync(PairServiceId,BluetoothCacheMode.Uncached).AsTask(deadline.Token);
+                if(result.Error!=BluetoothError.Success||result.Services.Count==0){device.Dispose();return null;}
+                var service=result.Services[0];
+                for(int i=1;i<result.Services.Count;i++)result.Services[i].Dispose();
+                return new PairCandidate(device,service);
+            }
+            catch{device.Dispose();return null;}
+        }).ToArray();
+        var discovered=await Task.WhenAll(probes);
+        return discovered.Where(x=>x!=null).Cast<PairCandidate>().ToArray();
     }
 
     public void Nudge()

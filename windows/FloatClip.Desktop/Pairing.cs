@@ -149,6 +149,29 @@ public sealed class PairStore
         }
         Changed?.Invoke();
     }
+    public string PutBluetooth(byte[] token,ulong address)
+    {
+        if(!supported)throw new IOException("需要用户范围的加密存储");
+        if(token.Length!=32||address==0||address>0x0000FFFFFFFFFFFFUL)throw new IOException("蓝牙授权凭据无效");
+        string key=KeyOf(token);
+        lock(gate)
+        {
+            if(corrupt)throw new IOException("授权文件损坏，请保留数据并明确重置授权后再配对");
+            var next=peers.ToDictionary(p=>p.Key,p=>p.Value.Copy());
+            if(next.TryGetValue(key,out var existing))
+            {
+                if(existing.BluetoothAddress==address)return key;
+                existing.BluetoothAddress=address;
+            }
+            else
+            {
+                if(next.Count>=8)throw new IOException("最多记住 8 台设备");
+                next[key]=new Entry{Token=Convert.ToBase64String(token),BluetoothAddress=address};
+            }
+            Save(next);
+        }
+        Changed?.Invoke();return key;
+    }
     public void RememberDevice(string key,SyncDevice device)
     {
         SyncProtocol.ValidateDevice(device);key=key.ToLowerInvariant();

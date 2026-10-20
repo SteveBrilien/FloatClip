@@ -34,9 +34,17 @@ public sealed class ClipboardSharingWindow:Window
         content.Children.Add(Card(options));
         content.Children.Add(peers);
         var pairing=new StackPanel();pairing.Children.Add(new TextBlock{Text="添加设备",FontSize=18,Margin=new(0,0,0,10)});
-        pairing.Children.Add(new TextBlock{Text="在手机开启共享并允许添加设备，再查找并核对两端识别码。",Foreground=muted,TextWrapping=TextWrapping.Wrap,Margin=new(0,0,0,12)});
+        pairing.Children.Add(new TextBlock{Text="在手机开启共享并允许添加设备。推荐直接用系统已配对的蓝牙完成首次授权；同一局域网也可作为备用。",Foreground=muted,TextWrapping=TextWrapping.Wrap,Margin=new(0,0,0,12)});
+        pairing.Children.Add(Button("通过蓝牙添加（推荐）",async()=>{
+            if(!sync.Snapshot().Enabled){status.Text="请先开启剪贴板共享";return;}
+            status.Text="正在查找已配对的蓝牙设备…";
+            try{
+                await sync.PairBluetoothAsync(code=>Dispatcher.Invoke(()=>!closed&&MessageBox.Show(this,"请核对手机显示的识别码：\n\n"+code+"\n\n两端完全一致才允许。","首次蓝牙配对",MessageBoxButton.OKCancel,MessageBoxImage.Question)==MessageBoxResult.OK),close.Token);
+                if(!closed){status.Text="蓝牙设备已授权，后续无需热点";Refresh();}
+            }catch(OperationCanceledException){}catch(Exception e){if(!closed)status.Text=e is IOException?e.Message:"蓝牙配对未完成，请重试";}
+        }));
         networks.ItemsSource=Nearby.Networks();networks.SelectedIndex=networks.Items.Count>0?0:-1;networks.Background=surface;networks.Foreground=text;networks.MinHeight=44;pairing.Children.Add(networks);
-        var discover=Button("查找设备",async()=>{
+        var discover=Button("通过局域网查找",async()=>{
             if(!sync.Snapshot().Enabled){status.Text="请先开启剪贴板共享";return;}
             if(networks.SelectedItem is not LanNetwork network){status.Text="请连接 Wi-Fi 或热点";return;}
             nearby.Children.Clear();status.Text="正在查找…";

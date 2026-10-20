@@ -33,6 +33,21 @@ static class Program
     }
     public static void Main(string[] args)
     {
+        byte[] pairClient=Enumerable.Range(0,32).Select(i=>(byte)(0xA0+i)).ToArray(),pairServer=Enumerable.Range(0,32).Select(i=>(byte)(0x20+i)).ToArray();
+        Yes(TransportPairing.EncodeClientHello(pairClient).AsSpan().SequenceEqual(File.ReadAllBytes(Path.Combine(args[0],"bt-pair-client-hello.bin"))));
+        Yes(TransportPairing.Fingerprint(pairClient,pairServer)==File.ReadAllText(Path.Combine(args[0],"bt-pair-code.txt")));
+        using(var pairListener=new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback,0))
+        {
+            pairListener.Start();int pairPort=((System.Net.IPEndPoint)pairListener.LocalEndpoint).Port;
+            byte[]? serverSaved=null,clientSaved=null;Exception? pairError=null;
+            var pairTask=System.Threading.Tasks.Task.Run(()=>{
+                try{using var accepted=pairListener.AcceptTcpClient();TransportPairing.Accept(accepted.GetStream(),_=>true,value=>serverSaved=(byte[])value.Clone());}
+                catch(Exception e){pairError=e;}
+            });
+            using var pairSocket=new System.Net.Sockets.TcpClient();pairSocket.Connect(System.Net.IPAddress.Loopback,pairPort);
+            byte[] paired=TransportPairing.Connect(pairSocket.GetStream(),_=>true,value=>clientSaved=(byte[])value.Clone(),()=>clientSaved=null);
+            pairTask.Wait(3000);Yes(pairError==null&&serverSaved!=null&&clientSaved!=null&&paired.AsSpan().SequenceEqual(serverSaved)&&paired.AsSpan().SequenceEqual(clientSaved));
+        }
         byte[] btToken=Enumerable.Range(1,32).Select(i=>(byte)i).ToArray(),btClientNonce=Enumerable.Range(33,32).Select(i=>(byte)i).ToArray(),btServerNonce=Enumerable.Range(65,32).Select(i=>(byte)i).ToArray();
         var btMaterial=TransportCrypto.Derive(btToken,btClientNonce,btServerNonce);
         Yes(TransportCrypto.EncodeClientHello(btToken,btClientNonce).AsSpan().SequenceEqual(File.ReadAllBytes(Path.Combine(args[0],"bt-client-hello.bin"))));

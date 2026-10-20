@@ -114,9 +114,9 @@ public sealed class NativeClipboardSync: IDisposable
         _=Task.Run(ReconnectLoop);
         _=Task.Run(RetryLoop);
     }
-    void EnsureBluetooth()
+    void EnsureBluetooth(bool force=false)
     {
-        if(disposed||!enabled||!Automatic||bluetooth!=null)return;
+        if(disposed||!enabled||(!Automatic&&!force)||bluetooth!=null)return;
         var created=new BluetoothSyncTransport(pairs,cache,CanBluetoothAttach,AttachSession,message=>{if(enabled&&!disposed&&links.IsEmpty)SetStatus(message);});
         if(Interlocked.CompareExchange(ref bluetooth,created,null)!=null){created.Dispose();return;}
         created.Start();
@@ -147,6 +147,19 @@ public sealed class NativeClipboardSync: IDisposable
         foreach(var key in engine.Snapshot().Peers.Keys.ToArray())if(pairs.GetByKey(key).Length!=32){if(links.TryGetValue(key,out var link))Remove(key,link);engine.Forget(key);}
         blocked.Clear();Signal();Changed?.Invoke();
     }
+    public async Task PairBluetoothAsync(Func<string,bool> verify,CancellationToken cancellation)
+    {
+        if(!enabled)throw new IOException("请先开启剪贴板共享");
+        EnsureBluetooth(true);var transport=bluetooth??throw new IOException("蓝牙短连接不可用");
+        try
+        {
+            await transport.PairAsync(verify,cancellation);
+            SetStatus("蓝牙设备已授权 · 正在建立首次同步");
+            if(Automatic)transport.Nudge();
+        }
+        finally{if(!Automatic)StopBluetooth();}
+    }
+
     public async Task PairAsync(NearbyDevice device,Func<string,bool> verify,CancellationToken cancellation)
     {
         if(!enabled)throw new IOException("请先开启剪贴板共享");

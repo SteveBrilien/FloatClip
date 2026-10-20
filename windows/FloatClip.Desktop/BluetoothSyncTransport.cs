@@ -21,7 +21,9 @@ namespace FloatClip.Desktop;
 public sealed class BluetoothSyncTransport:IDisposable
 {
     static readonly Guid ServiceUuid=Guid.Parse("e06f95e4-fc4d-4e92-b67a-1eb7f9f0a56f");
+    static readonly Guid PairServiceUuid=Guid.Parse("e06f95e4-fc4d-4e92-b67a-1eb7f9f0a570");
     static readonly RfcommServiceId ServiceId=RfcommServiceId.FromUuid(ServiceUuid);
+    static readonly RfcommServiceId PairServiceId=RfcommServiceId.FromUuid(PairServiceUuid);
     readonly PairStore pairs;
     readonly string cache;
     readonly Func<string,bool> canAttach;
@@ -55,7 +57,7 @@ public sealed class BluetoothSyncTransport:IDisposable
                 if(disposed!=0)return;
                 var next=new StreamSocketListener();
                 next.ConnectionReceived+=ConnectionReceived;
-                await next.BindServiceNameAsync(provider.ServiceId.AsString(),SocketProtectionLevel.BluetoothEncryptionAllowNullAuthentication);
+                await next.BindServiceNameAsync(provider.ServiceId.AsString(),SocketProtectionLevel.BluetoothEncryptionWithAuthentication);
                 if(disposed!=0){next.Dispose();return;}
                 listener=next;provider.StartAdvertising(next,false);return;
             }
@@ -89,6 +91,43 @@ public sealed class BluetoothSyncTransport:IDisposable
         }
         catch(Exception e){if(disposed==0&&e is not OperationCanceledException)status("蓝牙连接未通过验证 · "+Friendly(e));}
         finally{if(!handedOff){sockets.TryRemove(socket,out _);socket.Dispose();}}
+    }
+
+    public async Task<string> PairAsync(Func<string,bool> verify,CancellationToken cancellation)
+    {
+        if(disposed!=0)throw new ObjectDisposedException(nameof(BluetoothSyncTransport));
+        Start();
+        using var linked=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token,cancellation);
+        string selector=RfcommDeviceService.GetDeviceSelector(PairServiceId);
+        var found=await DeviceInformation.FindAllAsync(selector).AsTask(linked.Token);
+        foreach(var info in found)
+        {
+            linked.Token.ThrowIfCancellationRequested();
+            RfcommDeviceService? service=null;BluetoothDevice? device=null;
+            try
+            {
+                service=await RfcommDeviceService.FromIdAsync(info.Id);
+                if(service==null)continue;
+                device=await BluetoothDevice.FromHostNameAsync(service.ConnectionHostName);
+                if(device==null||!device.DeviceInformation.Pairing.IsPaired)continue;
+                var socket=new StreamSocket();sockets.TryAdd(socket,0);string? relation=null;
+                try
+                {
+                    using var deadline=CancellationTokenSource.CreateLinkedTokenSource(linked.Token);deadline.CancelAfter(TimeSpan.FromSeconds(75));
+                    await socket.ConnectAsync(service.ConnectionHostName,service.ConnectionServiceName,SocketProtectionLevel.BluetoothEncryptionWithAuthentication).AsTask(deadline.Token);
+                    using var abort=deadline.Token.Register(()=>socket.Dispose());
+                    var raw=new DuplexStream(socket.InputStream.AsStreamForRead(),socket.OutputStream.AsStreamForWrite(),socket);
+                    await Task.Run(()=>TransportPairing.Connect(raw,verify,token=>relation=pairs.PutBluetooth(token,device.BluetoothAddress),()=>{if(relation!=null)pairs.RemoveKey(relation);}),deadline.Token);
+                    if(relation==null)throw new IOException("蓝牙授权未保存");
+                    return device.Name+"|"+relation;
+                }
+                finally{sockets.TryRemove(socket,out _);socket.Dispose();}
+            }
+            catch(OperationCanceledException){throw;}
+            catch{/* A stale SDP record or unavailable paired device is skipped. */}
+            finally{device?.Dispose();service?.Dispose();}
+        }
+        throw new IOException("未发现处于“添加设备”窗口的已配对 FloatClip 蓝牙设备");
     }
 
     public void Nudge()
@@ -161,7 +200,7 @@ public sealed class BluetoothSyncTransport:IDisposable
                 try
                 {
                     using var deadline=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);deadline.CancelAfter(TimeSpan.FromSeconds(15));
-                    await socket.ConnectAsync(service.ConnectionHostName,service.ConnectionServiceName,SocketProtectionLevel.BluetoothEncryptionAllowNullAuthentication).AsTask(deadline.Token);
+                    await socket.ConnectAsync(service.ConnectionHostName,service.ConnectionServiceName,SocketProtectionLevel.BluetoothEncryptionWithAuthentication).AsTask(deadline.Token);
                     using var abort=deadline.Token.Register(()=>socket.Dispose());
                     var raw=new DuplexStream(socket.InputStream.AsStreamForRead(),socket.OutputStream.AsStreamForWrite(),socket);
                     var secure=await Task.Run(()=>TransportCrypto.Connect(raw,token),deadline.Token);

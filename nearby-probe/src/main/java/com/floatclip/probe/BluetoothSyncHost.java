@@ -35,7 +35,7 @@ public final class BluetoothSyncHost implements AutoCloseable {
         BluetoothAdapter adapter=BluetoothAdapter.getDefaultAdapter();
         if(adapter==null||!adapter.isEnabled())return false;
         try{
-            server=adapter.listenUsingInsecureRfcommWithServiceRecord("FloatClip Clipboard",SERVICE_UUID);
+            server=adapter.listenUsingRfcommWithServiceRecord("FloatClip Clipboard",SERVICE_UUID);
             acceptor.execute(this::acceptLoop);return true;
         }catch(Exception e){server=null;events.stopped("蓝牙短连接暂不可用");return false;}
     }

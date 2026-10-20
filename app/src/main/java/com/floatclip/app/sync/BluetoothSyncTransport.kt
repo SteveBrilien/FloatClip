@@ -76,7 +76,7 @@ class BluetoothSyncTransport(
     private fun connect(peer:TrustedPeerStore.Peer){
         val address=peer.bluetoothAddress?:return
         val socket=adapter!!.getRemoteDevice(address)
-            .createInsecureRfcommSocketToServiceRecord(BluetoothSyncHost.SERVICE_UUID)
+            .createRfcommSocketToServiceRecord(BluetoothSyncHost.SERVICE_UUID)
         var handedOff=false
         try{
             adapter.cancelDiscovery()

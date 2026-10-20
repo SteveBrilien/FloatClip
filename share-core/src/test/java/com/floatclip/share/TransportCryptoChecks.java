@@ -51,6 +51,39 @@ public final class TransportCryptoChecks {
         serverThread.join(3000);yes(serverFailure.get()==null&&serverFrame.get()!=null);yes(serverFrame.get().type==ClipboardSync.PING);
         clientSecure.output.close();
 
-        System.out.println("PASS transport crypto Java: "+checks+" checks; authenticated handshake, AES-GCM, replay and tamper rejection");
+        byte[] pairClient=new byte[32],pairServer=new byte[32];for(int i=0;i<32;i++){pairClient[i]=(byte)(0xA0+i);pairServer[i]=(byte)(0x20+i);}
+        String pairCode=TransportPairing.fingerprint(pairClient,pairServer);yes(pairCode.matches("[0-9A-F]{4}( [0-9A-F]{4}){3}"));
+        Files.write(vectors.resolve("bt-pair-client-hello.bin"),TransportPairing.clientHello(pairClient));
+        Files.write(vectors.resolve("bt-pair-server-nonce.bin"),pairServer);
+        Files.writeString(vectors.resolve("bt-pair-code.txt"),pairCode,StandardCharsets.US_ASCII);
+
+        // Full first-pair commit: both sides approve and persist the same token.
+        java.io.PipedInputStream pairServerIn=new java.io.PipedInputStream(),pairClientIn=new java.io.PipedInputStream();
+        java.io.PipedOutputStream pairClientOut=new java.io.PipedOutputStream(pairServerIn),pairServerOut=new java.io.PipedOutputStream(pairClientIn);
+        java.util.concurrent.atomic.AtomicReference<byte[]> pairServerSaved=new java.util.concurrent.atomic.AtomicReference<>(),pairClientSaved=new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<Throwable> pairServerFailure=new java.util.concurrent.atomic.AtomicReference<>();
+        Thread pairThread=new Thread(()->{try{
+            TransportPairing.accept(pairServerIn,pairServerOut,code->true,value->pairServerSaved.set(value.clone()));
+        }catch(Throwable e){pairServerFailure.set(e);}});
+        pairThread.start();
+        byte[] paired=TransportPairing.connect(pairClientIn,pairClientOut,code->true,value->pairClientSaved.set(value.clone()),()->pairClientSaved.set(null));
+        pairThread.join(3000);
+        yes(pairServerFailure.get()==null&&Arrays.equals(paired,pairServerSaved.get())&&Arrays.equals(paired,pairClientSaved.get()));
+
+        // Server persistence failure must revoke the client's provisional grant.
+        java.io.PipedInputStream failServerIn=new java.io.PipedInputStream(),failClientIn=new java.io.PipedInputStream();
+        java.io.PipedOutputStream failClientOut=new java.io.PipedOutputStream(failServerIn),failServerOut=new java.io.PipedOutputStream(failClientIn);
+        java.util.concurrent.atomic.AtomicReference<byte[]> provisional=new java.util.concurrent.atomic.AtomicReference<>();
+        Thread failThread=new Thread(()->{try{
+            TransportPairing.accept(failServerIn,failServerOut,code->true,value->{throw new java.io.IOException("disk full");});
+        }catch(Throwable ignored){}});
+        failThread.start();
+        try{
+            TransportPairing.connect(failClientIn,failClientOut,code->true,value->provisional.set(value.clone()),()->provisional.set(null));
+            throw new AssertionError("one-sided pairing accepted");
+        }catch(java.io.IOException expected){checks++;}
+        failThread.join(3000);yes(provisional.get()==null);
+
+        System.out.println("PASS transport crypto Java: "+checks+" checks; authenticated handshake, AES-GCM, replay, tamper and atomic pairing");
     }
 }

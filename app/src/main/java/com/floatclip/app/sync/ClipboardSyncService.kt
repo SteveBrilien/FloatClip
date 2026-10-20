@@ -22,6 +22,7 @@ import com.floatclip.app.UnifiedActivity
 import com.floatclip.app.clipboard.ClipStore
 import com.floatclip.app.clipboard.ClipboardWrites
 import com.floatclip.app.clipboard.DeviceIdentity
+import com.floatclip.probe.BluetoothPairHost
 import com.floatclip.probe.LanSyncHost
 import com.floatclip.share.ClipboardSync
 import com.floatclip.share.ShareSession
@@ -56,6 +57,7 @@ class ClipboardSyncService: Service() {
     private lateinit var trust: android.content.SharedPreferences
     private lateinit var credentials: TrustedPeerStore
     private var bluetooth: BluetoothSyncTransport?=null
+    private var bluetoothPairing: BluetoothPairHost?=null
     private val trustListener=android.content.SharedPreferences.OnSharedPreferenceChangeListener { _,_ -> if(!closing)actor.execute {
         if(::engine.isInitialized) { for(key in engine.peerKeys())if(!authorized(key)){links.remove(key)?.close();engine.forget(key)} };refreshUi()
     }}
@@ -68,6 +70,7 @@ class ClipboardSyncService: Service() {
     fun closePairing() {
         pairingUntil=0L
         pairRequest?.accept(false);pairRequest=null
+        bluetoothPairing?.close();bluetoothPairing=null
         if(closing)return
         actor.execute {
             setStatus(if(links.isEmpty()) "配对窗口已关闭 · 等待已授权设备" else "配对窗口已关闭 · 已授权设备保持连接")
@@ -109,7 +112,8 @@ class ClipboardSyncService: Service() {
     private val bluetoothReceiver=object: BroadcastReceiver(){override fun onReceive(c: Context?,i: Intent?){
         if(i?.action==android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED&&!closing)actor.execute{
             bluetooth?.close();bluetooth=null
-            if(::engine.isInitialized)refreshBluetooth()
+            bluetoothPairing?.close();bluetoothPairing=null
+            if(::engine.isInitialized){refreshBluetooth();refreshBluetoothPairing()}
         }
     }}
 
@@ -161,9 +165,10 @@ class ClipboardSyncService: Service() {
         if(!prefs.enabled()){pauseImmediately();stopSelf();return START_NOT_STICKY}
         if(intent?.action==PAIR){
             val until=System.currentTimeMillis()+90000;pairingUntil=until
-            actor.schedule({if(!closing&&pairingUntil==until&&links.isEmpty())setStatus("等待已授权设备自动连接")},90,TimeUnit.SECONDS)
+            actor.execute{refreshBluetoothPairing()}
+            actor.schedule({if(!closing&&pairingUntil==until){bluetoothPairing?.close();bluetoothPairing=null;if(links.isEmpty())setStatus("等待已授权设备自动连接")}},90,TimeUnit.SECONDS)
         }
-        actor.execute {if(::engine.isInitialized&&!closing){runCatching{configureEngine();refreshHosts();refreshBluetooth()}.onFailure{setStatus("共享配置未保存，已暂停");pauseImmediately()}}}
+        actor.execute {if(::engine.isInitialized&&!closing){runCatching{configureEngine();refreshHosts();refreshBluetooth();refreshBluetoothPairing()}.onFailure{setStatus("共享配置未保存，已暂停");pauseImmediately()}}}
         return START_STICKY
     }
     private fun configureEngine(){paused=!SyncPolicy.apply(prefs,engine).enabled}
@@ -181,6 +186,7 @@ class ClipboardSyncService: Service() {
     fun pauseImmediately(){
         if(closing)return
         paused=true;pairingUntil=0;pairRequest?.accept(false);pairRequest=null
+        bluetoothPairing?.close();bluetoothPairing=null
         for(link in links.values)link.close();links.clear()
         actor.execute{for(host in hosts.values)host.close();hosts.clear();bluetooth?.close();bluetooth=null;if(::engine.isInitialized)runCatching{engine.configure(false,prefs.sending(),prefs.receiving(),prefs.applying())}}
         setStatus("共享已暂停")
@@ -195,6 +201,41 @@ class ClipboardSyncService: Service() {
             {key->peerMessages(key,false)},
             {message->if(!closing&&links.isEmpty())setStatus(message)}
         ).also{it.start()}
+    }
+
+    private fun refreshBluetoothPairing(){
+        if(closing||paused||!prefs.enabled()||!pairingOpen()||!SyncRuntime.hasObserver()){
+            bluetoothPairing?.close();bluetoothPairing=null;return
+        }
+        if(bluetoothPairing!=null)return
+        lateinit var host: BluetoothPairHost
+        host=BluetoothPairHost(object:BluetoothPairHost.Events{
+            override fun pairingAllowed()=!closing&&!paused&&prefs.enabled()&&pairingOpen()&&SyncRuntime.hasObserver()
+            override fun verify(code:String,answer:Consumer<Boolean>){main.post{
+                if(!pairingAllowed()){answer.accept(false);return@post}
+                pairRequest?.accept(false);pairRequest=answer;SyncRuntime.verify(code,answer)
+            }}
+            override fun paired(token:ByteArray,bluetoothAddress:String){
+                val key=TrustedPeerStore.hash(token)
+                var trustSaved=false
+                try {
+                    credentials.putVerified(key,token)
+                    if(!trust.edit().putBoolean("peer-"+key,true).commit())throw java.io.IOException("Cannot persist authorization")
+                    trustSaved=true
+                    credentials.rememberBluetooth(key,bluetoothAddress)
+                } catch(e: Exception) {
+                    if(trustSaved)trust.edit().remove("peer-"+key).commit()
+                    runCatching{credentials.remove(key)}
+                    throw e
+                }
+                actor.execute{setStatus("蓝牙设备已授权 · 后续可短连接自动同步");refreshUi()}
+            }
+            override fun stopped(message:String){if(!closing)actor.execute{
+                if(bluetoothPairing===host)bluetoothPairing=null
+                if(pairingOpen())setStatus(message)
+            }}
+        })
+        if(host.start())bluetoothPairing=host else host.close()
     }
 
     private fun peerMessages(peer: String,replaceExisting: Boolean=true): ShareSession.Events {
@@ -266,6 +307,7 @@ class ClipboardSyncService: Service() {
         trust.unregisterOnSharedPreferenceChangeListener(trustListener)
         clipboard.removePrimaryClipChangedListener(clipListener)
         if(registered){unregisterReceiver(hotspotReceiver);unregisterReceiver(bluetoothReceiver);runCatching{networkManager.unregisterNetworkCallback(networkCallback)}}
+        bluetoothPairing?.close();bluetoothPairing=null
         bluetooth?.close();bluetooth=null
         for(host in hosts.values.toList())host.close();for(link in links.values)link.close();links.clear();actor.shutdownNow();SyncRuntime.detach(this)
         super.onDestroy()

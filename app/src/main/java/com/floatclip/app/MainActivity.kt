@@ -41,6 +41,7 @@ import com.floatclip.app.prefs.OverlayPreferences
 import com.floatclip.app.prefs.OverlayThemeMode
 import com.floatclip.app.security.VaultSettings
 import com.floatclip.app.clipboard.ClipboardQuery
+import com.floatclip.app.clipboard.ClipboardSources
 import com.floatclip.app.overlay.ui.ClipboardCard
 import android.text.Editable
 import android.text.TextWatcher
@@ -408,8 +409,10 @@ open class MainActivity : Activity() {
         })
         val filterScroll=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false }
         val filters=LinearLayout(this).apply { id=R.id.clipboard_sources; gravity=Gravity.CENTER_VERTICAL; setPadding(0,dp(8),0,dp(8)) }
-        val sources=listOf("" to "全部","local" to "本机")+clipStore.entries().filter { it.sourceDeviceId!="local" }.map { it.sourceDeviceId to it.sourceDeviceName }.distinctBy { it.first }
-        sources.take(8).forEach { (key,name) ->
+        val sources=ClipboardSources.tabs(this,clipStore.entries())
+        if(sourceFilter !in sources.map { it.id })sourceFilter=""
+        sources.forEach { source ->
+            val key=source.id;val name=source.name
             filters.addView(textView(name,14f,false,if(sourceFilter==key) colors.accent else colors.secondaryText).apply {
                 gravity=Gravity.CENTER; setPadding(dp(13),0,dp(13),0); minimumHeight=dp(44)
                 background=roundedBackground(if(sourceFilter==key) colors.actionBackground else Color.TRANSPARENT,11f)

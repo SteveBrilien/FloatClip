@@ -122,7 +122,14 @@ public sealed class LocalClipboardWindow:Window
         var entries=vault.Load()["entries"]!.AsArray();string own=vault.Device()["id"]!.GetValue<string>();rendering=true;
         try{
             closeSwipe=null;
-            if(reloadDevices){sources.Children.Clear();void Filter(string id,string name){var b=Button(name,()=>{source=id;Refresh();});b.Background=source==id?tint:Brushes.Transparent;b.Foreground=source==id?accent:muted;sources.Children.Add(b);}Filter("","全部");Filter(own,"本机");foreach(var g in entries.OfType<JsonObject>().Where(c=>c["source"]!["id"]!.GetValue<string>()!=own).GroupBy(c=>c["source"]!["id"]!.GetValue<string>()))Filter(g.Key,g.First()["source"]!["name"]!.GetValue<string>());}
+            if(reloadDevices){
+                sources.Children.Clear();var shown=new System.Collections.Generic.HashSet<string>();
+                void Filter(string id,string name){if(!shown.Add(id))return;var b=Button(name,()=>{source=id;Refresh();});b.Background=source==id?tint:Brushes.Transparent;b.Foreground=source==id?accent:muted;sources.Children.Add(b);}
+                Filter("","全部");Filter(own,"本机");
+                if(sync!=null)foreach(string key in sync.Pairing.Keys()){var peer=sync.Pairing.Describe(key);if(peer?.DeviceId!=null)Filter(peer.DeviceId.Value.ToString(),peer.Name??"已授权设备");}
+                foreach(var g in entries.OfType<JsonObject>().Where(c=>c["source"]!["id"]!.GetValue<string>()!=own).GroupBy(c=>c["source"]!["id"]!.GetValue<string>()))Filter(g.Key,g.First()["source"]!["name"]!.GetValue<string>());
+                if(source.Length>0&&!shown.Contains(source))source="";
+            }
             list.Children.Clear();string query=search.Text.Trim();var visible=entries.OfType<JsonObject>().Where(c=>(source==""||c["source"]!["id"]!.GetValue<string>()==source)&&new[]{c["text"]!.GetValue<string>(),c["category"]!.GetValue<string>(),c["source"]!["name"]!.GetValue<string>()}.Any(v=>v.Contains(query,StringComparison.CurrentCultureIgnoreCase))).OrderByDescending(c=>c["pinned"]!.GetValue<bool>()).ThenByDescending(c=>c["updatedAt"]!.GetValue<long>()).ToList();
             foreach(var clip in visible)list.Children.Add(Card(clip,own));
             if(visible.Count==0)list.Children.Add(new TextBlock{Text=query.Length==0?"这里还没有记录":"没有匹配的记录",Foreground=muted,Margin=new(0,30,0,0),HorizontalAlignment=HorizontalAlignment.Center});

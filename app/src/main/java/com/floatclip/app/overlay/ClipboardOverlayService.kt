@@ -38,6 +38,7 @@ import android.widget.Toast
 import com.floatclip.app.R
 import com.floatclip.app.accessibility.PasteAccessibilityService
 import com.floatclip.app.clipboard.ClipStore
+import com.floatclip.app.clipboard.ClipboardSources
 import com.floatclip.app.clipboard.ClipboardRepository
 import com.floatclip.app.integration.AccessibilityPasteBridge
 import com.floatclip.app.integration.IntegrationRegistry
@@ -74,6 +75,7 @@ class ClipboardOverlayService : Service() {
     private var entryActionLayer: View? = null
     private var listContainer: LinearLayout? = null
     private var categoryBar: LinearLayout? = null
+    private var sourceBar: LinearLayout? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
     private var panelParams: WindowManager.LayoutParams? = null
     private var panelPinnedMode = false
@@ -81,12 +83,13 @@ class ClipboardOverlayService : Service() {
     private var panelTransitionAnimator: ValueAnimator? = null
     private var foregroundStarted = false
     private var accessibilityHosted = false
-    private val sharedHistoryChanged=object: BroadcastReceiver(){override fun onReceive(context: Context?,intent: Intent?){if(panelOpen&&!panelCollapsing){renderCategoryBar();renderEntries()}}}
+    private val sharedHistoryChanged=object: BroadcastReceiver(){override fun onReceive(context: Context?,intent: Intent?){if(panelOpen&&!panelCollapsing){renderSourceBar();renderCategoryBar();renderEntries()}}}
     private val localBinder = LocalBinder()
     private var panelOpen = false
     private var panelCollapsing = false
     private var clipboardCaptureGeneration = 0
     private var activeCategory = ALL_CATEGORY
+    private var activeSource = ""
     private var lastCapturedClipboard: String? = null
 
     private val edgeHideRunnable = Runnable { hideBubbleAtEdge() }
@@ -286,6 +289,7 @@ class ClipboardOverlayService : Service() {
             entryActionLayer = null
             listContainer = null
             categoryBar = null
+            sourceBar = null
             panelCollapsing = false
         }
         handler.removeCallbacks(edgeHideRunnable)
@@ -561,6 +565,18 @@ class ClipboardOverlayService : Service() {
         header.addView(pinButton, LinearLayout.LayoutParams(dp(40), dp(40)))
         content.addView(header)
 
+        val sourceScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            setPadding(dp(2), dp(2), dp(2), dp(5))
+        }
+        sourceBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        sourceScroll.addView(sourceBar, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42)))
+        content.addView(sourceScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(47)))
+
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -633,6 +649,7 @@ class ClipboardOverlayService : Service() {
         panel.scaleX = 1f
         panel.scaleY = 1f
         panel.translationX = 0f
+        renderSourceBar()
         renderCategoryBar()
         renderEntries()
         params.alpha = 1f
@@ -731,14 +748,20 @@ class ClipboardOverlayService : Service() {
         val palette = themeProvider.palette()
         container.removeAllViews()
         val allItems = store.entries()
+        val sourceItems = if(activeSource.isEmpty()) allItems else allItems.filter { it.sourceDeviceId == activeSource }
         val items = if (activeCategory == ALL_CATEGORY) {
-            allItems
+            sourceItems
         } else {
-            allItems.filter { it.category == activeCategory }
+            sourceItems.filter { it.category == activeCategory }
         }
         if (items.isEmpty()) {
+            val sourceName=ClipboardSources.tabs(this,allItems).firstOrNull{it.id==activeSource}?.name
             container.addView(TextView(this).apply {
-                text = if (allItems.isEmpty()) getString(R.string.empty_history_hint) else "这个分类还没有内容"
+                text = when {
+                    allItems.isEmpty() -> getString(R.string.empty_history_hint)
+                    activeSource.isNotEmpty() -> "${sourceName ?: "此设备"}还没有同步内容"
+                    else -> "这个分类还没有内容"
+                }
                 textSize = 14f
                 gravity = Gravity.CENTER
                 setTextColor(palette.secondaryText)
@@ -749,6 +772,37 @@ class ClipboardOverlayService : Service() {
         }
         items.forEach { container.addView(createClipRow(it)) }
         appendUndo(container)
+    }
+
+    private fun renderSourceBar() {
+        val bar=sourceBar ?: return
+        val palette=themeProvider.palette()
+        val tabs=ClipboardSources.tabs(this,store.entries())
+        if(activeSource !in tabs.map { it.id })activeSource=""
+        bar.removeAllViews()
+        tabs.forEachIndexed { index,source ->
+            val selected=source.id==activeSource
+            bar.addView(TextView(this).apply {
+                text=source.name
+                textSize=13f
+                gravity=Gravity.CENTER
+                maxLines=1
+                ellipsize=android.text.TextUtils.TruncateAt.END
+                setPadding(dp(14),0,dp(14),0)
+                setTextColor(if(selected) ACCENT_BLUE else palette.secondaryText)
+                background=roundedBackground(if(selected) withAlpha(ACCENT_BLUE,if(palette.isDark)70 else 28) else withAlpha(palette.rowBackground,if(palette.isDark)175 else 205),12f)
+                contentDescription="剪贴板来源：${source.name}"
+                setOnClickListener {
+                    if(activeSource!=source.id){
+                        activeSource=source.id
+                        activeCategory=ALL_CATEGORY
+                        renderSourceBar();renderCategoryBar();renderEntries()
+                    }
+                }
+            },LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,dp(36)).apply{
+                if(index>0)marginStart=dp(6)
+            })
+        }
     }
 
     private fun renderCategoryBar() {
@@ -765,9 +819,9 @@ class ClipboardOverlayService : Service() {
                     textSize = 12f
                     gravity = Gravity.CENTER
                     setPadding(dp(13), 0, dp(13), 0)
-                    setTextColor(if (selected) if (palette.isDark) Color.rgb(20, 27, 43) else Color.WHITE else palette.secondaryText)
+                    setTextColor(if (selected) ACCENT_BLUE else palette.secondaryText)
                     background = roundedBackground(
-                        if (selected) ACCENT_BLUE else withAlpha(palette.rowBackground, if (palette.isDark) 175 else 205),
+                        if (selected) withAlpha(ACCENT_BLUE, if (palette.isDark) 70 else 28) else withAlpha(palette.rowBackground, if (palette.isDark) 175 else 205),
                         12f,
                     )
                     setOnClickListener {

@@ -2,6 +2,7 @@ package com.floatclip.app
 
 import android.content.Context
 import com.floatclip.app.clipboard.ClipStore
+import com.floatclip.app.clipboard.ClipboardSources
 import com.floatclip.app.security.VaultCipher
 import com.floatclip.app.sync.SyncPreferences
 import com.floatclip.app.sync.SyncPolicy
@@ -97,4 +98,13 @@ class ClipboardSyncStorageTest {
         assertFalse(fixture.saved!!.toString(Charsets.UTF_8).contains("private queued content"))
     }
 
+
+    @Test fun trustedDeviceIsFirstClassClipboardScopeBeforeFirstClip() {
+        val token=ByteArray(32){(it+7).toByte()}
+        val id=UUID.fromString("44444444-5555-6666-7777-888888888888")
+        val peer=TrustedPeerStore.Peer(TrustedPeerStore.hash(token),token,id,"ADMINISTRATOR","windows","8C:49:B6:23:30:34")
+        val tabs=ClipboardSources.tabs(emptyList(),listOf(peer))
+        assertEquals(listOf("全部","本机","ADMINISTRATOR"),tabs.map{it.name})
+        assertEquals(id.toString(),tabs.last().id)
+    }
 }

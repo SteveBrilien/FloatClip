@@ -348,9 +348,6 @@ open class ShareActivity : Activity() {
     }
     private fun devicesPage() {
         intro(if(managedConnections()) "蓝牙可直接添加设备；同一局域网也可自动发现" else "同一 Wi-Fi 或手机热点，即可发现")
-        if(clipboardHost) card {
-            addView(settingRow("iPad 与跨网设备","",ShareGlyph.DEVICES) { openWebDevices() })
-        }
         card {
             connection(this)
             if(session!=null) {
@@ -374,8 +371,14 @@ open class ShareActivity : Activity() {
         }
         card {
             addView(settingRow("设备授权","",ShareGlyph.SHIELD,"${trust.all.size} 台",R.id.menu_trust) { navigate(Detail.TRUST) })
-            divider(this)
-            addView(settingRow("连接帮助","",ShareGlyph.DEVICES,rowId=R.id.menu_help) { navigate(Detail.HELP) })
+            if(clipboardHost) {
+                divider(this)
+                addView(settingRow("跨网设备（iPad / Web）","远程设备也会作为独立剪贴板来源",ShareGlyph.DEVICES) { openWebDevices() })
+            }
+            if(!managedConnections()) {
+                divider(this)
+                addView(settingRow("连接帮助","",ShareGlyph.DEVICES,rowId=R.id.menu_help) { navigate(Detail.HELP) })
+            }
         }
     }
     private fun settingsPage() {

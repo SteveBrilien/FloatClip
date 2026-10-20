@@ -40,6 +40,10 @@ class TrustedPeerStore(
     fun keys(): Set<String> = load().keys
 
     @Synchronized
+    fun peers(): List<Peer> = load().values.map { it.copy(token = it.token.copyOf()) }
+
+
+    @Synchronized
     fun get(key: String): Peer? {
         val peer=load()[key.lowercase()] ?: return null
         return peer.copy(token=peer.token.copyOf())

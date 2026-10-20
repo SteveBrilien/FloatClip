@@ -335,3 +335,104 @@ Windows / OrangePi ADB 当前均未枚举手机，Windows `adb mdns services` �
 9. 通过后再评估图片 / 文件的 Wi-Fi Direct upgrade，不把 RFCOMM 强行用于大内容。
 
 发布边界不变：这是内部开发候选，不改正式版本、不更新 feed、不部署公开 PWA。
+
+## 2026-10-21 01:15 +08:00：首次蓝牙配对与真实 Windows 链路里程碑
+
+用户明确不接受“某台设备长期打开热点”作为日常同步模型，因此本阶段将热点降为测试/兼容备用，将 Bluetooth Classic RFCOMM 纳入原生同步 transport，并进一步去除了“第一次必须先通过 LAN 配对”的限制。
+
+### 已固定源码
+
+- `21e0368 Add authenticated Bluetooth burst clipboard transport`
+  - LAN / Bluetooth 共用 `sha256(token)` 受信关系。
+  - Bluetooth 仅作为短时字节 transport；FCP3 / ClipboardSync 不分叉。
+  - 每次短连接使用 fresh nonce + HMAC proof + AES-GCM 双向记录层。
+  - 正常同步不在蓝牙链路上传输长期 token。
+  - Android / Windows 均有 RFCOMM client + listener。
+  - 短连接约 12 秒后主动释放。
+- `640c81a docs: record Bluetooth burst transport milestone`
+- `990ef7b Add first-time Bluetooth clipboard pairing`
+  - 新增独立 `FCBP` 首次蓝牙应用授权协议。
+  - 首次配对仅允许在系统已完成 Bluetooth bonding 的认证加密 RFCOMM 上进行。
+  - FloatClip 仍要求双方核对独立的应用内识别码，系统蓝牙配对本身不等同于 FloatClip 授权。
+  - 双方确认后生成新的 32-byte relation token；客户端/服务端均成功持久化后才完成授权。
+  - 任一侧落盘失败会撤销 provisional grant，避免单边“看似配对成功”。
+  - Android 的 90 秒“添加设备”窗口同时开放独立 Bluetooth pairing service；窗口关闭即拒绝新授权。
+  - Windows“剪贴板共享”新增“通过蓝牙添加（推荐）”，LAN 发现保留为备用。
+  - Windows 首次查找直接按 FloatClip pairing service UUID 过滤，不逐个轮询耳机、手柄等所有已配对设备。
+  - 正常 trusted RFCOMM 也由 insecure API 升级到 OS-authenticated/encrypted RFCOMM，再叠加 FloatClip 自己的 TransportCrypto。
+
+### 当前回归结果
+
+最终源码手动回归：
+
+- Java Share core：120 checks PASS。
+- Java ClipboardSync：46 behavioral checks PASS。
+- Bluetooth TransportCrypto / first-pair：12 checks PASS。
+  - 双向 proof / AES-GCM。
+  - replay / tamper rejection。
+  - 完整双方首次配对落盘。
+  - 服务端落盘失败时客户端 provisional authorization rollback。
+- scoped discovery：5 checks PASS。
+- C# ↔ Java persistent socket：PASS。
+- C# ClipboardSync / protocol：49 checks PASS。
+- Windows clipboard library：38 checks PASS。
+- Windows Desktop Release build：0 warning / 0 error。
+
+Durable final gates：
+
+- Android：`task-floatclip_sync_android_verify_offline-77cc516ba95c47b9b82a`
+  - assembleDebug PASS
+  - testDebugUnitTest PASS
+  - lintDebug PASS
+  - Artifact：`artifact-7b3eda223d124596a7d61fa64575402d`
+  - APK SHA-256：`36fefd464ba4278377dab71538719de06228d615177c963c1437000e2d5634f3`
+- Windows：`task-floatclip_sync_windows_dev-3da58ece7db44ad6b800`
+  - self-contained win-x64 publish PASS
+  - Artifact：`artifact-f00935ca3271467ba5d923aef9f3782a`
+
+### 真实 Windows 环境验证
+
+Remote Desktop Commander 当前在线 Windows 设备已确认：
+
+- Intel Wi-Fi 6E AX211 正常。
+- Intel Bluetooth 正常。
+- Windows RFCOMM Protocol TDI 正常。
+- 系统已配对设备列表中明确存在 `vivo t1`。
+- Windows 当前仍在校园网 `10.33.64.236 / gateway 10.33.0.1`，因此后续 Bluetooth 验收不依赖两端同一 Wi-Fi。
+- Windows ADB 和 ADB mDNS 仍未枚举到手机，不能把 ADB 真机验收标为完成。
+
+实际运行 Windows 测试包已验证：
+
+- 主 WPF 程序可正常启动，不是只在交叉编译环境通过。
+- UI Automation 可进入“我的设备 / 剪贴板共享”。
+- 真实点击主开关后 `clipboard-sync.v1.bin` 与 `sync-options.json` 成功持久化，说明 `NativeClipboardSync.Configure()` 的实际运行路径已执行。
+- 新版 UI 已出现“通过蓝牙添加（推荐）”。
+- 主开关关闭时蓝牙添加被正确拦截。
+- 打开后可进入实际 WinRT Bluetooth service discovery，不依赖 LAN IP。
+
+### APK 分发尝试
+
+为了在 ADB 不可见时尽量自动把测试 APK 送到手机，已通过 Windows 自带 Bluetooth File Transfer 向导：
+
+1. 自动选择“发送文件”；
+2. 精确选择设备 `vivo t1`；
+3. 精确选择最终 APK；
+4. 发起发送。
+
+Windows 最终返回 OBEX 连接超时：“连接方在一段时间后没有正确答复或连接的主机没有反应”。因此这次失败只说明 OriginOS 当前没有响应 Windows 的通用 OBEX 文件接收，不代表 FloatClip RFCOMM transport 失败。APK 本身已经过完整 Gate，下一步需要在手机端安装该 APK 后才能进行真正的 FloatClip RFCOMM 首次配对。
+
+### 下一项真机验收
+
+安装最新 APK 后，按以下闭环验收：
+
+1. 手机打开 FloatClip -> 设备页 -> 添加设备（90 秒窗口）。
+2. Windows 打开剪贴板共享 -> 开启共享 -> “通过蓝牙添加（推荐）”。
+3. 两端出现同一 FloatClip 识别码；人工核对并确认。
+4. 检查双方 relation token 均落盘，且不会要求热点/LAN。
+5. Windows 复制文本 -> RFCOMM burst -> Android history / system clipboard（按 apply 开关）。
+6. Android FloatClip 内复制 -> Windows。
+7. 再测试 Android 任意第三方 App 后台复制；该项仍受 Android 11 clipboard platform restriction 约束，必须以 vivo OriginOS 真机结果为准。
+8. 短连接完成后确认 Bluetooth session 自动释放，下一次复制再按需建立。
+9. 测试 master/send/receive/apply/reconnect/per-device 开关，以及撤销授权后旧 token 不能重连。
+
+发布边界不变：以上均为开发分支与测试 artifact；未发布正式 APK、未更新 feed、未部署 PWA、未 push 到 main。

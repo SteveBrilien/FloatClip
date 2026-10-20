@@ -105,6 +105,17 @@ public sealed class ClipboardSyncEngine
         }
     }
     public void Forget(string key){lock(gate){var next=state.Copy();next.Peers.Remove(key);Save(next);applicationGrant++;connected.Remove(key);greeted.Remove(key);}}
+    /** One-time v1 migration: old Windows state used the remote TLS pin as peer key. */
+    public void MigratePeerKey(string oldKey,string relationKey)
+    {
+        lock(gate)
+        {
+            CheckKey(oldKey);CheckKey(relationKey);if(oldKey==relationKey||!state.Peers.ContainsKey(oldKey))return;
+            if(state.Peers.ContainsKey(relationKey))throw new IOException("同步状态包含重复的设备关系");
+            var next=state.Copy();var peer=next.Peers[oldKey];next.Peers.Remove(oldKey);next.Peers[relationKey]=peer;Save(next);
+            if(connected.Remove(oldKey))connected.Add(relationKey);if(greeted.Remove(oldKey))greeted.Add(relationKey);
+        }
+    }
     public void Connected(string key)
     {
         lock(gate)

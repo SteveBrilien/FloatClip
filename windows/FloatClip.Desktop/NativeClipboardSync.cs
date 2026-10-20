@@ -54,7 +54,17 @@ public sealed class NativeClipboardSync: IDisposable
         options=File.Exists(Path.Combine(root,"sync-options.json"))?JsonSerializer.Deserialize<Options>(File.ReadAllText(Path.Combine(root,"sync-options.json")))??throw new IOException("共享设置损坏"):new();
         var device=vault.Device();var local=new SyncDevice(Guid.Parse(device["id"]!.GetValue<string>()),device["name"]!.GetValue<string>(),"windows");
         engine=new ClipboardSyncEngine(local,LoadState,SaveSyncState,Send,PersistSharedEntry,ApplyReceived);
-        if(!pairs.Corrupt)foreach(string key in engine.Snapshot().Peers.Keys.ToArray())if(pairs.Get(key).Length!=32)engine.Forget(key);
+        if(!pairs.Corrupt)
+        {
+            // v1 Windows keyed sync peers by the Android TLS pin. PairStore v2 derives the
+            // relationship key from sha256(token), matching Android's existing identity.
+            foreach(string oldKey in engine.Snapshot().Peers.Keys.ToArray())
+            {
+                string? relation=pairs.KeyForPin(oldKey);
+                if(relation!=null&&relation!=oldKey)engine.MigratePeerKey(oldKey,relation);
+            }
+            foreach(string key in engine.Snapshot().Peers.Keys.ToArray())if(pairs.GetByKey(key).Length!=32)engine.Forget(key);
+        }
         enabled=engine.Snapshot().Enabled;
         pairs.Changed+=AuthorizationChanged;
         NetworkChange.NetworkAddressChanged+=NetworkChanged;
@@ -93,8 +103,8 @@ public sealed class NativeClipboardSync: IDisposable
         lock(optionsGate){options.Automatic=automatic;SaveOptions();}
         enabled=on;Start();Signal();SetStatus(on?"等待已授权设备自动连接":"共享已暂停");
     }
-    public void SetPeerEnabled(string pin,bool on){engine.SetPeerEnabled(pin,on);Changed?.Invoke();}
-    public void Forget(string pin){pairs.Remove(pin);engine.Forget(pin);}
+    public void SetPeerEnabled(string relationKey,bool on){if(pairs.GetByKey(relationKey).Length!=32)throw new IOException("设备授权不存在");engine.SetPeerEnabled(relationKey,on);Changed?.Invoke();}
+    public void Forget(string relationKey){pairs.RemoveKey(relationKey);engine.Forget(relationKey);}
     public void Start()
     {
         if(Interlocked.Exchange(ref started,1)!=0)return;
@@ -107,13 +117,13 @@ public sealed class NativeClipboardSync: IDisposable
         try{engine.Copied(value,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),excluded);}
         catch{SetStatus("该条目未同步，请检查长度或本机存储");}
     }
-    void Send(string key,Frame frame){if(enabled&&!disposed&&pairs.Get(key).Length==32&&links.TryGetValue(key,out var link))link.Queue(frame);}
+    void Send(string key,Frame frame){if(enabled&&!disposed&&pairs.GetByKey(key).Length==32&&links.TryGetValue(key,out var link))link.Queue(frame);}
     void SetStatus(string status){Status=status;Changed?.Invoke();}
     void NetworkChanged(object? sender,EventArgs args)=>Signal();
     void Signal(){try{wake.Release();}catch(SemaphoreFullException){}catch(ObjectDisposedException){}}
     void AuthorizationChanged()
     {
-        foreach(var key in engine.Snapshot().Peers.Keys.ToArray())if(pairs.Get(key).Length!=32){if(links.TryGetValue(key,out var link))Remove(key,link);engine.Forget(key);}
+        foreach(var key in engine.Snapshot().Peers.Keys.ToArray())if(pairs.GetByKey(key).Length!=32){if(links.TryGetValue(key,out var link))Remove(key,link);engine.Forget(key);}
         blocked.Clear();Signal();Changed?.Invoke();
     }
     public async Task PairAsync(NearbyDevice device,Func<string,bool> verify,CancellationToken cancellation)
@@ -125,20 +135,27 @@ public sealed class NativeClipboardSync: IDisposable
     }
     async Task Connect(NearbyDevice device,Func<string,bool> verify,CancellationToken cancellation)
     {
-        string key=device.Pin.ToLowerInvariant();if(!connecting.TryAdd(key,0))return;
-        Link? added=null;
+        string pin=device.Pin.ToLowerInvariant();string? known=pairs.KeyForPin(pin);string attemptKey=known??("pin:"+pin);
+        if(!connecting.TryAdd(attemptKey,0))return;
+        string? key=known;Link? added=null;
         try
         {
-            if(links.ContainsKey(key))return;
+            if(key!=null&&links.ContainsKey(key))return;
             using var cancel=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token,cancellation);
             var session=await Task.Run(()=>Nearby.Connect(device,cache,pairs,verify,cancel.Token,persistent:true),cancel.Token);
-            if(!enabled||disposed||pairs.Get(key).Length!=32){session.Dispose();return;}
+            key=pairs.KeyForPin(pin)??throw new IOException("设备授权未保存");
+            if(!enabled||disposed||pairs.GetByKey(key).Length!=32){session.Dispose();return;}
+            if(links.ContainsKey(key)){session.Dispose();return;}
             var link=new Link(this,key,session);
             if(!links.TryAdd(key,link)){link.Dispose();return;}added=link;
             session.Sync=frame=>
             {
-                if(!enabled||!links.TryGetValue(key,out var active)||!ReferenceEquals(active,link)||pairs.Get(key).Length!=32)return;
-                try{engine.Accept(key,frame,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());}
+                if(!enabled||!links.TryGetValue(key,out var active)||!ReferenceEquals(active,link)||pairs.GetByKey(key).Length!=32)return;
+                try
+                {
+                    engine.Accept(key,frame,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                    if(frame.Type==SyncProtocol.Hello&&engine.Snapshot().Peers.TryGetValue(key,out var peer)&&peer.Device!=null)pairs.RememberDevice(key,peer.Device);
+                }
                 catch(PersistenceFailure){Remove(key,link);SetStatus("本机保存失败，内容尚未确认送达；存储恢复后将重试连接");Signal();}
                 catch{blocked[key]=0;Remove(key,link);SetStatus("设备身份或同步校验失败，请重新核对授权");}
             };
@@ -147,9 +164,9 @@ public sealed class NativeClipboardSync: IDisposable
             session.Failure=_=>SetStatus("连接中断，等待自动重连");
             engine.Connected(key);try{SessionOpened?.Invoke(session);}catch{}session.Start();SetStatus(links.Count+" 台设备已连接 · 加密共享");
         }
-        catch(PairingAuthorizationException){if(added!=null)Remove(key,added);blocked[key]=0;SetStatus("设备授权已失效，需要重新核对");throw;}
-        catch{if(added!=null)Remove(key,added);throw;}
-        finally{connecting.TryRemove(key,out _);}
+        catch(PairingAuthorizationException){if(added!=null&&key!=null)Remove(key,added);if(key!=null)blocked[key]=0;SetStatus("设备授权已失效，需要重新核对");throw;}
+        catch{if(added!=null&&key!=null)Remove(key,added);throw;}
+        finally{connecting.TryRemove(attemptKey,out _);}
     }
     void Remove(string key,Link expected)
     {
@@ -167,7 +184,7 @@ public sealed class NativeClipboardSync: IDisposable
                 if(enabled&&Automatic)
                 {
                     using var attempt=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token,OperationToken);
-                    string[] pending=pairs.Pins().Where(pin=>!links.ContainsKey(pin)&&!blocked.ContainsKey(pin)).ToArray();
+                    string[] pending=pairs.Pins().Where(pin=>{string? key=pairs.KeyForPin(pin);return key!=null&&!links.ContainsKey(key)&&!blocked.ContainsKey(key);}).ToArray();
                     if(pending.Length>0)
                     {
                         bool found=false;string? selected;lock(optionsGate)selected=options.SelectedAdapter;
@@ -221,7 +238,7 @@ public sealed class NativeClipboardSync: IDisposable
                 {
                     await signal.WaitAsync(stop.Token);
                     foreach(int type in new[]{SyncProtocol.Hello,SyncProtocol.Ack,SyncProtocol.Clip})
-                        if(pending.TryRemove(type,out var frame)&&owner.enabled&&owner.pairs.Get(key).Length==32&&owner.engine.MaySend(key,frame))Session.SendSync(frame);
+                        if(pending.TryRemove(type,out var frame)&&owner.enabled&&owner.pairs.GetByKey(key).Length==32&&owner.engine.MaySend(key,frame))Session.SendSync(frame);
                 }
             }
             catch(OperationCanceledException){}

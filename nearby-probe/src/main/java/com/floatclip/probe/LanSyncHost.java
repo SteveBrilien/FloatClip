@@ -19,6 +19,7 @@ public final class LanSyncHost implements AutoCloseable {
         boolean reconnectAllowed();
         void verify(String code,Consumer<Boolean> answer);
         ShareSession.Events messages(String credentialHash);
+        void credential(String credentialHash,byte[] token) throws Exception;
         void connected(String credentialHash,ShareSession session);
         void stopped(String message);
     }
@@ -82,6 +83,7 @@ public final class LanSyncHost implements AutoCloseable {
                     if(!trust.edit().putBoolean("peer-"+hash,true).commit())throw new IOException("Cannot persist authorization");
                 }
                 out.writeByte(1);out.write(token);out.flush();
+                events.credential(hash,token.clone());
             }
             if(closed)return;
             final String identity=hash;

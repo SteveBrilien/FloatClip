@@ -7,6 +7,7 @@ import org.json.JSONObject
 import com.floatclip.app.sync.SyncRuntime
 import com.floatclip.app.sync.SyncPreferences
 import com.floatclip.app.sync.ClipboardSyncService
+import com.floatclip.app.sync.TrustedPeerStore
 import com.floatclip.share.ShareWire
 import java.io.File
 import java.util.function.Consumer
@@ -31,7 +32,9 @@ class DeviceActivity : ShareActivity(),SyncRuntime.Observer {
     override fun pauseManagedConnections(): Boolean {SyncPreferences(this).save(enabled=false);SyncRuntime.refresh(this);return true}
     override fun clearManagedTrust(): Boolean {
         val cleared=getSharedPreferences("share-pairs",MODE_PRIVATE).edit().clear().commit()
-        if(cleared)SyncRuntime.current()?.refreshUi()
+        if(cleared)runCatching{TrustedPeerStore(this).clear()}.onSuccess{SyncRuntime.current()?.refreshUi()}.onFailure{
+            android.widget.Toast.makeText(this,"设备授权已撤销，但加密凭据清理未完成",android.widget.Toast.LENGTH_LONG).show()
+        }
         else android.widget.Toast.makeText(this,"设备授权未移除，请检查本机存储",android.widget.Toast.LENGTH_SHORT).show()
         // Returning true means the managed sync layer handled the request. A storage failure
         // must never fall back to disconnect(), because that would also disable the master switch.

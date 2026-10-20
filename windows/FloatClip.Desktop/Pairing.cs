@@ -40,11 +40,30 @@ public sealed class PairingAuthorizationException: IOException
 /** User-scoped encrypted credentials. The injectable codec is used by portable persistence checks. */
 public sealed class PairStore
 {
+    public sealed record TrustedPeer(string Key,string? OutboundPin,Guid? DeviceId,string? Name,string? Platform,bool AcceptReady);
+    sealed class Entry
+    {
+        public Entry(){}
+        public string Token{get;set;}="";
+        public string? OutboundPin{get;set;}
+        public Guid? DeviceId{get;set;}
+        public string? Name{get;set;}
+        public string? Platform{get;set;}
+        public bool AcceptReady{get;set;}
+        public Entry Copy()=>new(){Token=Token,OutboundPin=OutboundPin,DeviceId=DeviceId,Name=Name,Platform=Platform,AcceptReady=AcceptReady};
+    }
+    sealed class PairFile
+    {
+        public PairFile(){}
+        public int Version{get;set;}=2;
+        public List<Entry> Peers{get;set;}=new();
+    }
+
     readonly object gate=new();
     readonly string path;
     readonly Func<byte[],byte[]> protect,unprotect;
     readonly bool supported;
-    Dictionary<string,string> peers=new();
+    Dictionary<string,Entry> peers=new();
     bool corrupt;
     public event Action? Changed;
     public PairStore(string root,Func<byte[],byte[]>? protect=null,Func<byte[],byte[]>? unprotect=null)
@@ -56,45 +75,118 @@ public sealed class PairStore
         if(!supported||!System.IO.File.Exists(path))return;
         try
         {
-            if(new FileInfo(path).Length>16384)throw new IOException("授权文件过大");
-            var saved=JsonSerializer.Deserialize<Dictionary<string,string>>(this.unprotect(System.IO.File.ReadAllBytes(path)))??throw new IOException("授权文件无效");
-            if(saved.Count>8)throw new IOException("授权文件过大");
-            foreach(var pair in saved)
+            if(new FileInfo(path).Length>32768)throw new IOException("授权文件过大");
+            byte[] plain=this.unprotect(System.IO.File.ReadAllBytes(path));
+            using var document=JsonDocument.Parse(plain);
+            if(document.RootElement.TryGetProperty("Version",out _))
             {
-                string key=pair.Key.ToLowerInvariant();
-                if(!System.Text.RegularExpressions.Regex.IsMatch(key,"^[a-f0-9]{64}$")||Convert.FromBase64String(pair.Value).Length!=32||!peers.TryAdd(key,pair.Value))throw new IOException("授权文件无效");
+                var saved=JsonSerializer.Deserialize<PairFile>(plain)??throw new IOException("授权文件无效");
+                if(saved.Version!=2||saved.Peers.Count>8)throw new IOException("授权文件无效");
+                foreach(var entry in saved.Peers)AddValidated(entry);
+            }
+            else
+            {
+                // v1 was pin -> token. The relation key is the token hash, which already
+                // matches Android's peer-<sha256(token)> identity.
+                var legacy=JsonSerializer.Deserialize<Dictionary<string,string>>(plain)??throw new IOException("授权文件无效");
+                if(legacy.Count>8)throw new IOException("授权文件过大");
+                foreach(var pair in legacy)
+                {
+                    string pin=pair.Key.ToLowerInvariant();if(!ValidHash(pin))throw new IOException("授权文件无效");
+                    AddValidated(new Entry{Token=pair.Value,OutboundPin=pin});
+                }
             }
         }
         catch{peers.Clear();corrupt=true;}
     }
+    static bool ValidHash(string? value)=>value!=null&&System.Text.RegularExpressions.Regex.IsMatch(value,"^[a-f0-9]{64}$");
+    static string KeyOf(byte[] token)=>Convert.ToHexString(SHA256.HashData(token)).ToLowerInvariant();
+    static byte[] Token(Entry entry){try{var token=Convert.FromBase64String(entry.Token);if(token.Length!=32)throw new IOException();return token;}catch{throw new IOException("授权凭据无效");}}
+    void AddValidated(Entry entry)
+    {
+        byte[] token=Token(entry);string key=KeyOf(token);
+        if(entry.OutboundPin!=null){entry.OutboundPin=entry.OutboundPin.ToLowerInvariant();if(!ValidHash(entry.OutboundPin))throw new IOException("授权文件无效");}
+        if(entry.DeviceId==Guid.Empty||entry.Name!=null&&(entry.Name.Length is <1 or >80||entry.Name.Any(char.IsControl))||
+           entry.Platform!=null&&!new[]{"android","windows","ipad","web"}.Contains(entry.Platform))throw new IOException("授权文件无效");
+        if(!peers.TryAdd(key,entry.Copy()))throw new IOException("授权文件含重复设备");
+    }
     public int Count{get{lock(gate)return peers.Count;}}
     public bool Corrupt{get{lock(gate)return corrupt;}}
-    public string[] Pins(){lock(gate)return peers.Keys.ToArray();}
-    public byte[] Get(string pin){lock(gate)return peers.TryGetValue(pin.ToLowerInvariant(),out var value)?Convert.FromBase64String(value):Array.Empty<byte>();}
+    public string[] Keys(){lock(gate)return peers.Keys.ToArray();}
+    public string[] Pins(){lock(gate)return peers.Values.Select(p=>p.OutboundPin).Where(p=>p!=null).Cast<string>().Distinct().ToArray();}
+    public string? KeyForPin(string pin){lock(gate){pin=pin.ToLowerInvariant();return peers.FirstOrDefault(p=>p.Value.OutboundPin==pin).Key;}}
+    public byte[] Get(string pin){lock(gate){string? key=KeyForPin(pin);return key!=null&&peers.TryGetValue(key,out var entry)?Token(entry):Array.Empty<byte>();}}
+    public byte[] GetByKey(string key){lock(gate)return peers.TryGetValue(key.ToLowerInvariant(),out var entry)?Token(entry):Array.Empty<byte>();}
+    public TrustedPeer? Describe(string key)
+    {
+        lock(gate)
+        {
+            key=key.ToLowerInvariant();if(!peers.TryGetValue(key,out var p))return null;
+            return new(key,p.OutboundPin,p.DeviceId,p.Name,p.Platform,p.AcceptReady);
+        }
+    }
     public void Put(string pin,byte[] token)
     {
         if(!supported)return;
+        pin=pin.ToLowerInvariant();if(!ValidHash(pin)||token.Length!=32)throw new IOException("授权凭据无效");
+        string key=KeyOf(token);
         lock(gate)
         {
             if(corrupt)throw new IOException("授权文件损坏，请保留数据并明确重置授权后再配对");
-            pin=pin.ToLowerInvariant();
-            if(!System.Text.RegularExpressions.Regex.IsMatch(pin,"^[a-f0-9]{64}$")||token.Length!=32)throw new IOException("授权凭据无效");
-            if(peers.TryGetValue(pin,out var old)&&CryptographicOperations.FixedTimeEquals(Convert.FromBase64String(old),token))return;
-            if(!peers.ContainsKey(pin)&&peers.Count>=8)throw new IOException("最多记住 8 台设备");
-            var next=new Dictionary<string,string>(peers){[pin]=Convert.ToBase64String(token)};Save(next);
+            var next=peers.ToDictionary(p=>p.Key,p=>p.Value.Copy());
+            if(next.TryGetValue(key,out var existing))
+            {
+                if(existing.OutboundPin!=null&&existing.OutboundPin!=pin)throw new IOException("设备证书身份已改变，需要重新核对");
+                if(existing.OutboundPin==pin)return;existing.OutboundPin=pin;
+            }
+            else
+            {
+                if(next.Count>=8)throw new IOException("最多记住 8 台设备");
+                next[key]=new Entry{Token=Convert.ToBase64String(token),OutboundPin=pin};
+            }
+            Save(next);
+        }
+        Changed?.Invoke();
+    }
+    public void RememberDevice(string key,SyncDevice device)
+    {
+        SyncProtocol.ValidateDevice(device);key=key.ToLowerInvariant();
+        lock(gate)
+        {
+            if(corrupt||!peers.TryGetValue(key,out var current))throw new IOException("设备授权不存在");
+            if(current.DeviceId!=null&&current.DeviceId!=device.Id)throw new IOException("记住的设备身份已改变，需要重新授权");
+            if(current.DeviceId==device.Id&&current.Name==device.Name&&current.Platform==device.Platform)return;
+            var next=peers.ToDictionary(p=>p.Key,p=>p.Value.Copy());var row=next[key];
+            row.DeviceId=device.Id;row.Name=device.Name;row.Platform=device.Platform;Save(next);
+        }
+        Changed?.Invoke();
+    }
+    public void MarkAcceptReady(string key,bool ready)
+    {
+        key=key.ToLowerInvariant();
+        lock(gate)
+        {
+            if(corrupt||!peers.ContainsKey(key))throw new IOException("设备授权不存在");
+            if(peers[key].AcceptReady==ready)return;
+            var next=peers.ToDictionary(p=>p.Key,p=>p.Value.Copy());next[key].AcceptReady=ready;Save(next);
         }
         Changed?.Invoke();
     }
     public void Remove(string pin)
     {
-        lock(gate){if(corrupt)throw new IOException("授权文件损坏");var next=new Dictionary<string,string>(peers);next.Remove(pin.ToLowerInvariant());Save(next);}
+        string? key=KeyForPin(pin);if(key!=null)RemoveKey(key);
+    }
+    public void RemoveKey(string key)
+    {
+        lock(gate){if(corrupt)throw new IOException("授权文件损坏");var next=peers.ToDictionary(p=>p.Key,p=>p.Value.Copy());next.Remove(key.ToLowerInvariant());Save(next);}
         Changed?.Invoke();
     }
     public void Clear(){lock(gate){Save(new());corrupt=false;}Changed?.Invoke();}
-    void Save(Dictionary<string,string> next)
+    void Save(Dictionary<string,Entry> next)
     {
         if(!supported)throw new IOException("需要用户范围的加密存储");
-        byte[] encrypted=protect(JsonSerializer.SerializeToUtf8Bytes(next));string temporary=path+".tmp";
+        var file=new PairFile{Peers=next.Values.Select(p=>p.Copy()).ToList()};
+        byte[] encrypted=protect(JsonSerializer.SerializeToUtf8Bytes(file));string temporary=path+".tmp";
         try{using(var f=new FileStream(temporary,FileMode.Create,FileAccess.Write,FileShare.None)){f.Write(encrypted);f.Flush(true);}System.IO.File.Move(temporary,path,true);peers=next;}
         finally{if(System.IO.File.Exists(temporary))System.IO.File.Delete(temporary);}
     }

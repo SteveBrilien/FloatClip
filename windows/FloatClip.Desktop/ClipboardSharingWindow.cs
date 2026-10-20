@@ -61,12 +61,14 @@ public sealed class ClipboardSharingWindow:Window
             var state=sync.Snapshot();master.IsChecked=state.Enabled;send.IsChecked=state.Send;receive.IsChecked=state.Receive;apply.IsChecked=state.Apply;automatic.IsChecked=sync.Automatic;status.Text=sync.Status;
             peers.Children.Clear();
             if(sync.Pairing.Corrupt){status.Text="设备授权文件无法读取，请保留数据，或明确重置设备授权。";peers.Children.Add(Button("重置设备授权",()=>{if(MessageBox.Show(this,"仅清空设备配对。剪贴板历史会保留，设备需要重新核对识别码。","重置授权",MessageBoxButton.OKCancel)==MessageBoxResult.OK){try{sync.Pairing.Clear();}catch{status.Text="重置授权未完成";}Refresh();}}));}
-            foreach(string key in sync.Pairing.Pins()){
-                state.Peers.TryGetValue(key,out var peer);var panel=new StackPanel();
-                if(peer?.Device!=null){var option=new CheckBox{Content=peer.Device.Name,IsChecked=peer.Enabled,Foreground=text,MinHeight=44,VerticalContentAlignment=VerticalAlignment.Center};
-                    option.Click+=(_,_)=>{try{sync.SetPeerEnabled(key,option.IsChecked==true);}catch{status.Text="设备开关未保存";}Refresh();};panel.Children.Add(option);}
-                else panel.Children.Add(new TextBlock{Text="已配对设备 · "+key[..8],Foreground=text,Margin=new(0,6,0,6)});
-                panel.Children.Add(Button("移除配对",()=>{if(MessageBox.Show(this,"移除后需要重新核对识别码。","移除设备",MessageBoxButton.OKCancel)==MessageBoxResult.OK){try{sync.Forget(key);}catch{status.Text="授权未移除，请检查存储";}Refresh();}}));peers.Children.Add(Card(panel));
+            foreach(string relation in sync.Pairing.Keys()){
+                state.Peers.TryGetValue(relation,out var peer);var panel=new StackPanel();
+                var trusted=sync.Pairing.Describe(relation);
+                string label=peer?.Device?.Name??trusted?.Name??("已配对设备 · "+relation[..8]);
+                if(peer!=null){var option=new CheckBox{Content=label,IsChecked=peer.Enabled,Foreground=text,MinHeight=44,VerticalContentAlignment=VerticalAlignment.Center};
+                    option.Click+=(_,_)=>{try{sync.SetPeerEnabled(relation,option.IsChecked==true);}catch{status.Text="设备开关未保存";}Refresh();};panel.Children.Add(option);}
+                else panel.Children.Add(new TextBlock{Text=label,Foreground=text,Margin=new(0,6,0,6)});
+                panel.Children.Add(Button("移除配对",()=>{if(MessageBox.Show(this,"移除后需要重新核对识别码。","移除设备",MessageBoxButton.OKCancel)==MessageBoxResult.OK){try{sync.Forget(relation);}catch{status.Text="授权未移除，请检查存储";}Refresh();}}));peers.Children.Add(Card(panel));
             }
         }finally{refreshing=false;}
     }

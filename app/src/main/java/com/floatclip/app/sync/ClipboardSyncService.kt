@@ -54,6 +54,7 @@ class ClipboardSyncService: Service() {
     @Volatile private var pairingUntil=0L
     @Volatile private var lastCapture=""
     private lateinit var trust: android.content.SharedPreferences
+    private lateinit var credentials: TrustedPeerStore
     private val trustListener=android.content.SharedPreferences.OnSharedPreferenceChangeListener { _,_ -> if(!closing)actor.execute {
         if(::engine.isInitialized) { for(key in engine.peerKeys())if(!authorized(key)){links.remove(key)?.close();engine.forget(key)} };refreshUi()
     }}
@@ -108,6 +109,7 @@ class ClipboardSyncService: Service() {
     override fun onCreate() {
         super.onCreate();prefs=SyncPreferences(this);clipboard=getSystemService(ClipboardManager::class.java)
         trust=getSharedPreferences("share-pairs",MODE_PRIVATE);trust.registerOnSharedPreferenceChangeListener(trustListener)
+        credentials=TrustedPeerStore(this)
         lastCapture=runCatching{clipboard.primaryClip?.let{SyncRuntime.stamp(it)}}.getOrNull().orEmpty()
         val notifications=getSystemService(NotificationManager::class.java)
         notifications.createNotificationChannel(NotificationChannel(CHANNEL,"设备共享",NotificationManager.IMPORTANCE_LOW))
@@ -131,8 +133,10 @@ class ClipboardSyncService: Service() {
                         }
                     }}
                 })
-                // Pairing credentials are authoritative. If grants were revoked while the
-                // service was stopped, stale sync metadata must not resurrect those peers.
+                // Pairing grants remain authoritative during migration. The encrypted token
+                // store supplements legacy hash-only grants and is pruned when trust is revoked.
+                val authorizedKeys=trust.all.keys.filter{it.startsWith("peer-")&&trust.getBoolean(it,false)}.map{it.removePrefix("peer-")}.toSet()
+                credentials.retain(authorizedKeys)
                 for(key in engine.peerKeys())if(!authorized(key))engine.forget(key)
                 configureEngine();setStatus("等待已授权设备 · Android 11 后台读取受系统限制")
                 actor.scheduleWithFixedDelay({if(!closing&&!paused&&::engine.isInitialized){for(key in links.keys)runCatching{configureEngine();engine.retry(key,System.currentTimeMillis())};refreshHosts()}},10,10,TimeUnit.SECONDS)
@@ -187,6 +191,7 @@ class ClipboardSyncService: Service() {
                     if(!pairingAllowed()){answer.accept(false);return@post}
                     pairRequest?.accept(false);pairRequest=answer;SyncRuntime.verify(code,answer)
                 }}
+                override fun credential(peer: String,token: ByteArray){credentials.putVerified(peer,token)}
                 override fun messages(peer: String): ShareSession.Events {
                     val token=UUID.randomUUID();connectionTokens[peer]=token
                     return object:ShareSession.Events {
@@ -195,7 +200,10 @@ class ClipboardSyncService: Service() {
                         links.remove(peer)?.close();links[peer]=Link(peer,session)
                         runCatching{configureEngine();engine.connected(peer);setStatus("${links.size} 台设备已连接 · 加密共享")}.onFailure{links.remove(peer)?.close();setStatus("设备授权状态未保存")}
                     }}
-                    override fun sync(frame: ShareWire.Frame){if(!closing)actor.execute{if(!closing&&!paused&&prefs.enabled()&&(frame.type!=ClipboardSync.CLIP||prefs.receiving())&&authorized(peer)&&connectionTokens[peer]==token)runCatching{configureEngine();engine.accept(peer,frame,System.currentTimeMillis())}.onFailure{links.remove(peer)?.close();setStatus("设备授权或同步校验失败，请重新核对")}}}
+                    override fun sync(frame: ShareWire.Frame){if(!closing)actor.execute{if(!closing&&!paused&&prefs.enabled()&&(frame.type!=ClipboardSync.CLIP||prefs.receiving())&&authorized(peer)&&connectionTokens[peer]==token)runCatching{
+                        configureEngine();engine.accept(peer,frame,System.currentTimeMillis())
+                        if(frame.type==ClipboardSync.HELLO)engine.peerViews().firstOrNull{it.key==peer}?.let{credentials.rememberDevice(peer,it.device)}
+                    }.onFailure{links.remove(peer)?.close();setStatus("设备授权或同步校验失败，请重新核对")}}}
                     override fun text(id: UUID,value: String,outgoing: Boolean)=Unit
                     override fun offered(offer: ShareWire.Offer){main.post{if(SyncRuntime.hasObserver())SyncRuntime.offer(peer,offer) else links[peer]?.session?.reject(offer.id)}}
                     override fun progress(id: UUID,name: String,done: Long,total: Long,outgoing: Boolean){main.post{SyncRuntime.progress(name,done,total,outgoing)}}

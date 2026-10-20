@@ -5,6 +5,7 @@ import com.floatclip.app.clipboard.ClipStore
 import com.floatclip.app.security.VaultCipher
 import com.floatclip.app.sync.SyncPreferences
 import com.floatclip.app.sync.SyncPolicy
+import com.floatclip.app.sync.TrustedPeerStore
 import com.floatclip.share.ShareWire
 import com.floatclip.share.ClipboardSync
 import org.junit.Assert.*
@@ -26,6 +27,7 @@ class ClipboardSyncStorageTest {
     private val codec=object:VaultCipher{override fun encrypt(plain:ByteArray)=byteArrayOf(70,67)+plain;override fun decrypt(payload:ByteArray)=payload.copyOfRange(2,payload.size)}
     private fun context():Context=RuntimeEnvironment.getApplication().also{
         File(it.filesDir,"floatclip_vault.bin").delete()
+        File(it.filesDir,"trusted_peers.v1.bin").delete()
         it.getSharedPreferences("floatclip_store",Context.MODE_PRIVATE).edit().clear().commit()
         it.getSharedPreferences("floatclip_sync",Context.MODE_PRIVATE).edit().clear().commit()
         it.getSharedPreferences("share-pairs",Context.MODE_PRIVATE).edit().clear().commit()
@@ -39,6 +41,18 @@ class ClipboardSyncStorageTest {
         restarted.save(enabled=false);assertTrue(context.getSharedPreferences("share-pairs",Context.MODE_PRIVATE).getBoolean("peer-fixture",false))
         assertFalse(SyncPreferences(context).enabled())
     }
+    @Test fun verifiedTransportCredentialSurvivesRestartAndBindsDeviceIdentity(){
+        val context=context();val token=ByteArray(32){(it+1).toByte()};val key=TrustedPeerStore.hash(token)
+        val store=TrustedPeerStore(context,codec);store.putVerified(key,token)
+        assertArrayEquals(token,TrustedPeerStore(context,codec).get(key)!!.token)
+        store.rememberDevice(key,remote);val remembered=TrustedPeerStore(context,codec).get(key)!!
+        assertEquals(remote.id,remembered.deviceId);assertEquals("电脑",remembered.name);assertEquals("windows",remembered.platform)
+        assertThrows(IllegalArgumentException::class.java){store.putVerified("a".repeat(64),token)}
+        val changed=ClipboardSync.Device(UUID.randomUUID(),"另一台电脑","windows")
+        assertThrows(java.io.IOException::class.java){store.rememberDevice(key,changed)}
+        store.clear();assertNull(TrustedPeerStore(context,codec).get(key))
+    }
+
     @Test fun repeatedDeliveryKeepsStableIdPinAndCategory(){
         val context=context();val store=ClipStore(context,codec);val first=ClipboardSync.Entry(UUID.randomUUID(),remote,1,100,"remote text")
         store.receiveShared(first);val row=store.entries().single();store.togglePinned(row.id);store.updateCategory(row.id,"工作")

@@ -347,7 +347,7 @@ open class ShareActivity : Activity() {
         }
     }
     private fun devicesPage() {
-        intro("同一 Wi-Fi 或手机热点，即可发现")
+        intro(if(managedConnections()) "蓝牙可直接添加设备；同一局域网也可自动发现" else "同一 Wi-Fi 或手机热点，即可发现")
         if(clipboardHost) card {
             addView(settingRow("iPad 与跨网设备","",ShareGlyph.DEVICES) { openWebDevices() })
         }
@@ -358,13 +358,16 @@ open class ShareActivity : Activity() {
                 button(if(managedConnections()) "暂停共享" else "断开连接",false) { disconnect(); render() }
             } else {
                 button(if(discovering) "重新开放配对窗口" else if(managedConnections()) "添加设备" else "允许附近设备连接",true) {
-                    val ips=addresses(); (prefs.getString("address",null)?.takeIf { it in ips } ?: ips.firstOrNull())?.let { listen(it) } ?: note("请先连接 Wi-Fi 或开启热点")
+                    if(managedConnections()) beginManagedPairing()
+                    else {
+                        val ips=addresses(); (prefs.getString("address",null)?.takeIf { it in ips } ?: ips.firstOrNull())?.let { listen(it) } ?: note("请先连接 Wi-Fi 或开启热点")
+                    }
                 }
                 if(discovering) button(if(managedConnections()) "关闭配对窗口" else "暂停发现",false) {
                     if(managedConnections()&&stopManagedPairing()) render() else { disconnect("发现已暂停"); render() }
                 }
                 val hint=if(managedConnections()) {
-                    if(discovering) "90 秒配对窗口 · 首次配对时在此页核对识别码" else "已授权设备会在局域网内自动重连"
+                    if(discovering) "90 秒配对窗口 · 蓝牙与局域网均可首配" else "已授权设备会通过蓝牙或局域网自动重连"
                 } else if(discovering) "90 秒发现窗口 · 保持手机前台" else "连接电脑时，保持手机前台"
                 addView(text(hint,12,p.muted).apply { gravity=Gravity.CENTER; setPadding(0,dp(10),0,0) })
             }
@@ -462,8 +465,8 @@ open class ShareActivity : Activity() {
         card {
             if(managedConnections()) {
                 step(this,"1","在设置中开启剪贴板共享")
-                step(this,"2","首次添加设备时保持此页打开")
-                step(this,"3","核对识别码后授权，之后自动重连")
+                step(this,"2","首次添加设备时保持此页打开，蓝牙优先，无需同一 Wi-Fi")
+                step(this,"3","核对识别码后授权，之后按需通过蓝牙或局域网自动重连")
             } else {
                 step(this,"1","手机保持 FloatClip 前台")
                 step(this,"2","在电脑设备页查找手机")
@@ -472,7 +475,7 @@ open class ShareActivity : Activity() {
         }
         card {
             addView(text("找不到设备时",16,p.text,true))
-            addView(text("确认两端连接同一 Wi-Fi。校园网隔离设备时，可让电脑连接手机热点。",14,p.muted).apply { setPadding(0,dp(10),0,0) })
+            addView(text(if(managedConnections()) "优先确认两端蓝牙已在系统设置中完成配对。局域网发现仅作为备用，不要求手机和电脑连接同一 Wi-Fi。" else "确认两端连接同一 Wi-Fi。校园网隔离设备时，可让电脑连接手机热点。",14,p.muted).apply { setPadding(0,dp(10),0,0) })
             divider(this)
             addView(settingRow("网络与备用连接","选择地址、邀请链接与诊断",ShareGlyph.DEVICES,rowId=R.id.menu_advanced) { navigate(Detail.ADVANCED) })
         }
@@ -481,7 +484,7 @@ open class ShareActivity : Activity() {
         val ips=addresses()
         if(managedConnections()) {
             card {
-                cardTitle("当前局域网", "持续同步会自动监听可用的 Wi-Fi / 热点地址")
+                cardTitle("局域网备用", "蓝牙首配无需局域网；这里仅显示可用的 Wi-Fi / 热点地址")
                 addView(text(if(ips.isEmpty()) "暂无可用局域网地址" else ips.joinToString("\n"),14,p.muted).apply { setPadding(0,dp(12),0,0) })
                 button("开放 90 秒配对窗口",false) { beginManagedPairing() }
             }

@@ -286,7 +286,7 @@ class ClipboardSyncService: Service() {
             })
             hosts[ip]=host;host.listen(ip)
         }
-        if(addresses.isEmpty()&&links.isEmpty())setStatus("等待局域网或蓝牙受信设备")
+        if(addresses.isEmpty()&&links.isEmpty())setStatus("等待蓝牙或局域网受信设备")
         else if(links.isEmpty())setStatus(if(System.currentTimeMillis()<pairingUntil)"允许添加设备，90 秒内有效" else "等待已授权设备自动连接")
     }
     fun peers(): List<ClipboardSync.PeerView> = if(::engine.isInitialized)engine.peerViews() else emptyList()

@@ -26,7 +26,7 @@ public sealed class LocalClipboardWindow:Window
     readonly StackPanel list=new(),header=new();readonly WrapPanel sources=new();readonly TextBox search=new();readonly TextBlock searchHint=new();
     readonly DockPanel root=new();readonly Border undo=new();
     SolidColorBrush surface=Brushes.White,text=Brushes.Black,muted=Brushes.Gray,line=Brushes.Gray,tint=Brushes.LightBlue,accent=Brushes.Blue;
-    string mode="system",source="";uint lastSequence;bool dark,sourceColors=true,translucent,capture=true,rendering,exiting,hotkey;
+    string mode="system",source="";uint lastSequence,initialSequence;bool dark,sourceColors=true,translucent,capture=true,rendering,exiting,hotkey;
     JsonObject? deleted;HwndSource? hwnd;System.Windows.Forms.NotifyIcon? tray;Action? closeSwipe;
     const int ClipboardMessage=0x031D,HotkeyMessage=0x0312,HotkeyId=703;
     [DllImport("user32.dll")]static extern bool AddClipboardFormatListener(IntPtr hwnd);
@@ -52,6 +52,7 @@ public sealed class LocalClipboardWindow:Window
         search.TextChanged+=(_,_)=>{searchHint.Visibility=search.Text.Length==0?Visibility.Visible:Visibility.Hidden;if(!rendering)Guard(()=>Refresh(false));};
         Activated+=(_,_)=>Guard(()=>Refresh());
         SourceInitialized+=(_,_)=>{
+            initialSequence=GetClipboardSequenceNumber();
             hwnd=HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);hwnd?.AddHook(Hook);
             if(hwnd!=null){AddClipboardFormatListener(hwnd.Handle);hotkey=RegisterHotKey(hwnd.Handle,HotkeyId,0x400C,0x56);}
             try{
@@ -72,7 +73,7 @@ public sealed class LocalClipboardWindow:Window
     void ReadClipboard(int retry=0)
     {
         if(!capture&&sync?.Snapshot().Enabled!=true)return;
-        try{uint sequence=GetClipboardSequenceNumber();if(sequence!=0&&sequence==lastSequence)return;if(ClipboardWrites.IsOwnWrite()){lastSequence=sequence;return;}if(!Clipboard.ContainsText()||Clipboard.ContainsData("ExcludeClipboardContentFromMonitorProcessing")){sync?.Copied("",true);lastSequence=sequence;return;}string value=Clipboard.GetText();if(string.IsNullOrWhiteSpace(value)){sync?.Copied("",true);lastSequence=sequence;return;}if(capture)vault.AddText(value);lastSequence=sequence;sync?.Copied(value);Refresh();}
+        try{uint sequence=GetClipboardSequenceNumber();if(sequence!=0&&sequence==lastSequence)return;if(ClipboardWrites.IsOwnWrite()){lastSequence=sequence;return;}if(!Clipboard.ContainsText()||Clipboard.ContainsData("ExcludeClipboardContentFromMonitorProcessing")){sync?.Copied("",true);lastSequence=sequence;return;}string value=Clipboard.GetText();if(string.IsNullOrWhiteSpace(value)){sync?.Copied("",true);lastSequence=sequence;return;}if(capture)vault.AddText(value);lastSequence=sequence;if(sequence!=initialSequence)sync?.Copied(value);Refresh();}
         catch(System.Runtime.InteropServices.COMException){if(retry<3){var timer=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(60)};timer.Tick+=(_,_)=>{timer.Stop();ReadClipboard(retry+1);};timer.Start();}}
         catch{ /* Keep the existing vault intact; report a persistent storage problem on the next open. */ }
     }

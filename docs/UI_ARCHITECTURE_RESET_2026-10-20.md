@@ -212,3 +212,40 @@ iPad / 跨网能力保留，但不再作为另一套 FloatClip 产品壳。现�
 - Android final gate：assembleDebug、testDebugUnitTest、lintDebug 全部通过；artifact-53b9d35c9e7044cabda9cd666494f0fb。
 - Windows final gate：self-contained win-x64 publish 通过；artifact-f7479fe6cfd24a9b8523a56e3976c8e3。
 - 新增回归明确验证：已授权设备即使尚无任何远端内容，仍作为一级来源显示。
+
+### 2026-10-21 03:08 最终产品壳收口
+
+本轮继续按用户提交的最终“设备”页作为跨端视觉基线完成以下收口：
+
+- Android MainActivity、DeviceActivity 与悬浮窗 fallback token 统一到 ShareDesign：
+  - light bg #F4F7FC
+  - light card #FFFFFF
+  - light text #19283F
+  - light muted #596C85
+  - light line #DFE7F2
+  - light accent #245DCE
+  - light tint #EBF2FF
+  - dark bg #0C1422
+  - dark card #162235
+  - dark text #EDF3FC
+  - dark muted #A9B8CD
+  - dark line #2D3C52
+  - dark accent #8DBBFF
+  - dark tint #243B5A
+- 主 App 卡片圆角统一到 16dp；悬浮窗仍允许 system 模式读取 OriginOS 系统表面色，但文字、选中态和 fallback 不再另建一套色板。
+- Windows 本机剪贴板同步使用同一 token 家族，不再保留旧轻微偏差。
+- Android 早期“状态 / 剪贴板 / 设置”三栏底部导航、PAGE_STATUS 和旧状态页死代码已删除；旧版本若保存了 status page index，升级后直接迁回剪贴板首页。
+- Android 原生 bridge 与 Windows UnifiedWindow 均禁止重新打开旧 LAN 手动连接页；底层 LAN transport 继续保留给自动同步和回归。
+- Windows 入口统一命名为“跨网设备（iPad / Web）”；Web/PWA 源码本身已经没有“局域网兼容模式”可见入口。
+
+最终冻结源码验证：
+- Android final gate：task-floatclip_sync_android_verify_offline-f061081b499642e48ded
+  - assembleDebug PASS
+  - testDebugUnitTest PASS
+  - lintDebug PASS
+  - artifact artifact-e434f35f49234e8a8e2f624b8aebcf21
+- Windows final gate：task-floatclip_sync_windows_dev-78894482e2444517b14e
+  - self-contained win-x64 publish PASS
+  - artifact artifact-d8cc21a1880c49beb0824e52fc5e5c06
+
+真实性边界不变：蓝牙首次配对和受信关系已经真机成功，但 Windows → Android 的测试文字没有进入手机历史，因此内容实时同步仍是下一优先级，不得以 UI 状态替代验收。

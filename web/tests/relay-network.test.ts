@@ -7,7 +7,10 @@ import {join} from 'node:path';
 import {createRequire} from 'node:module';
 import {RelayPeer} from '../lib/relay.ts';
 import {setCsrf} from '../lib/auth.ts';
+import type {TrustedPair,TrustRepository} from '../lib/trusted-store.ts';
 import type {SessionEvents,SharedItem} from '../lib/session.ts';
+
+class MemoryTrust implements TrustRepository {records:TrustedPair[]=[];async all(){return [...this.records];}async put(r:TrustedPair){this.records=[...this.records.filter(x=>x.tag!==r.tag),r];}async remove(tag:string){this.records=this.records.filter(x=>x.tag!==tag);}}
 
 // A protocol integration test over real HTTP/WebSocket sockets; no browser or UI.
 test('actual RelayPeer exchanges verified text and files through the actual node',async()=>{
@@ -32,12 +35,27 @@ test('actual RelayPeer exchanges verified text and files through the actual node
   (globalThis as any).WebSocket=class extends WS {constructor(url:string){super(url,{headers:{Origin:'https://clip.test',Cookie:cookie}});}};
   const left:SharedItem[]=[],right:SharedItem[]=[],errors:string[]=[];
   const events=(list:SharedItem[],accept=false):SessionEvents=>({ready:()=>{},item:x=>list.push(x),offer:x=>{if(x&&accept)queueMicrotask(()=>b?.session?.acceptFile());},progress:()=>{},error:e=>errors.push(e),closed:()=>{}});
-  a=new RelayPeer('Windows test',()=>{},events(left),{id:'windows-native-fixture',name:'Windows test',platform:'windows'});b=new RelayPeer('iPad test',()=>{},events(right,true),{id:'ipad-web-fixture',name:'iPad test',platform:'ipad'});
+  const trustA=new MemoryTrust(),trustB=new MemoryTrust();
+  a=new RelayPeer('Windows test',()=>{},events(left),{id:'windows-native-fixture',name:'Windows test',platform:'windows'},trustA);b=new RelayPeer('iPad test',()=>{},events(right,true),{id:'ipad-web-fixture',name:'iPad test',platform:'ipad'},trustB);
   await a.create();await b.join(a.state.code);await until(()=>a!.state.phase==='verifying'&&b!.state.phase==='verifying');
   assert.equal(a.state.sas,b.state.sas);a.confirm();b.confirm();await until(()=>a!.state.phase==='ready'&&b!.state.phase==='ready');
   a.session!.sendText('真实协议通道 · 🦋');await until(()=>left.length===1&&right.length===1);assert.equal(right[0].text,'真实协议通道 · 🦋');assert.deepEqual(right[0].source,{id:'windows-native-fixture',name:'Windows test',platform:'windows'});assert.equal(left[0].source?.id,'windows-native-fixture');
   const bytes=crypto.getRandomValues(new Uint8Array(40000));await a.session!.offerFile(new File([bytes],'network-check.bin'));
   await until(()=>left.length===2&&right.length===2);assert.deepEqual(new Uint8Array(await right[1].blob!.arrayBuffer()),bytes);assert.equal(right[1].source?.id,'windows-native-fixture');assert.deepEqual(errors,[]);
+  await until(()=>trustA.records.length===1&&trustB.records.length===1);
+  assert.equal(trustA.records[0].tag,trustB.records[0].tag);assert.equal(trustA.records[0].root.extractable,false);
+  a.close();b.close();await new Promise(r=>setTimeout(r,100));
+  const phases:string[]=[];
+  a=new RelayPeer('Windows test',state=>phases.push(state.phase),events(left),{id:'windows-native-fixture',name:'Windows test',platform:'windows'},trustA);
+  b=new RelayPeer('iPad test',state=>phases.push(state.phase),events(right),{id:'ipad-web-fixture',name:'iPad test',platform:'ipad'},trustB);
+  await Promise.all([a.resume(),b.resume()]);await until(()=>a!.state.phase==='ready'&&b!.state.phase==='ready');
+  assert.equal(phases.includes('verifying'),false,'remembered identities should not require another comparison');
+  a.session!.sendText('恢复之后');await until(()=>right.length===3&&left.length===3);assert.equal(right[2].text,'恢复之后');
+  b.configure(true,false);await new Promise(r=>setTimeout(r,100));assert.throws(()=>a!.session!.sendText('paused'));
+  b.configure(true,true);await new Promise(r=>setTimeout(r,100));a.session!.sendText('继续接收');await until(()=>right.length===4);
+  await a.forget(trustA.records[0].tag);assert.equal(trustA.records.length,0);await until(()=>b!.state.phase!=='ready');await b.forget(trustB.records[0].tag);assert.equal(trustB.records.length,0);
+  assert.deepEqual(errors,[]);
+
  }finally{
   a?.close();b?.close();await new Promise(r=>setTimeout(r,50));globalThis.fetch=nativeFetch;globalThis.WebSocket=originalWS;
   (globalThis as any).window=originalWindow;(globalThis as any).location=originalLocation;setCsrf('');if(child.exitCode===null){const ended=new Promise(r=>child.once('exit',r));child.kill('SIGTERM');await ended;}

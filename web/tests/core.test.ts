@@ -29,3 +29,20 @@ test('rejected file has no delivered item, and empty files transfer correctly',a
 test('binary before consent is rejected without exposing content',async()=>{const p=endpoints();try{p.sender.confirm();p.receiver.confirm();await until(()=>p.sender.ready);p.a.send(new Uint8Array([1,2,3]).buffer);await until(()=>p.errors.length>0);assert.equal(p.right.length,0);}finally{p.dispose();}});
 test('corrupted file hash never exposes a received file',async()=>{const p=endpoints();try{p.sender.confirm();p.receiver.confirm();await until(()=>p.sender.ready);const original=p.a.send.bind(p.a);p.a.send=data=>{if(data instanceof ArrayBuffer){const modified=data.slice(0);new Uint8Array(modified)[0]^=255;original(modified);}else original(data);};await p.sender.offerFile(new File([new Uint8Array([1,2,3])],'corrupt.bin'));await until(()=>p.offers.length===1);p.receiver.acceptFile();await until(()=>p.errors.length>0);assert.equal(p.right.length,0);}finally{p.dispose();}});
 
+
+test('receive pause and a new consent epoch discard already queued text without delivery ACK',async()=>{
+ const p=endpoints();try{
+  p.sender.confirm();p.receiver.confirm();await until(()=>p.sender.ready&&p.receiver.ready);
+  const original=p.a.send.bind(p.a),held:(string|ArrayBuffer)[]=[];let hold=true;
+  p.a.send=data=>{if(hold&&typeof data==='string'&&JSON.parse(data).t==='text')held.push(data);else original(data);};
+  p.sender.sendText('before pause');p.receiver.configure(true,false);await sleep();p.receiver.configure(true,true);await sleep();
+  hold=false;for(const data of held)original(data);await sleep(30);assert.equal(p.left.length,0);assert.equal(p.right.length,0);
+  p.sender.sendText('after new grant');await until(()=>p.left.length===1&&p.right.length===1);assert.equal(p.right[0].text,'after new grant');assert.deepEqual(p.errors,[]);
+ }finally{p.dispose();}
+});
+test('failed durable history save never acknowledges delivered text',async()=>{
+ const a=new Wire,b=new Wire;a.other=b;b.other=a;const delivered:SharedItem[]=[],errors:string[]=[];
+ const events=(item:SessionEvents['item']):SessionEvents=>({ready:()=>{},item,offer:()=>{},progress:()=>{},error:e=>errors.push(e),closed:()=>{}});
+ const sender=new DataSession(a,events(i=>delivered.push(i)),'sender'),receiver=new DataSession(b,events(async()=>{throw Error('disk full');}),'receiver');
+ try{a.flush();b.flush();sender.confirm();receiver.confirm();await until(()=>sender.ready&&receiver.ready);sender.sendText('must be durable');await until(()=>errors.length>0);assert.equal(delivered.length,0);}finally{sender.dispose();receiver.dispose();}
+});

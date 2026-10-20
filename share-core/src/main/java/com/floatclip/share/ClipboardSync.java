@@ -107,14 +107,16 @@ public final class ClipboardSync {
     }
     private void emitHello(String key)throws IOException{events.send(key,hello(key));}
     public synchronized Entry copied(String text,long now,boolean excluded) throws Exception {
-        if(!state.enabled||excluded)return null;
+        if(!state.enabled)return null;
+        applicationGrant++;
+        if(!state.send||excluded)return null;
         if(state.clock>=MAX_CLOCK)throw new IOException("Clipboard clock exhausted");
         Entry entry=new Entry(UUID.randomUUID(),local,state.clock+1,now,text);State next=state.copy();
         next.clock=entry.clock;next.headClock=entry.clock;next.headOrigin=local.id;
-        for(Peer p:next.peers.values())if(next.send&&p.enabled&&p.device!=null&&p.receive&&p.epoch!=null){p.pending=entry;p.pendingEpoch=p.epoch;p.queuedAt=now;}
+        for(Peer p:next.peers.values())if(p.enabled&&p.device!=null&&p.receive&&p.epoch!=null){p.pending=entry;p.pendingEpoch=p.epoch;p.queuedAt=now;}
         save(next);
         for(String key:new ArrayList<>(connected))flush(key,now);
-        return state.send?entry:null;
+        return entry;
     }
     public synchronized void accept(String key,ShareWire.Frame frame,long now) throws Exception {
         if(!state.enabled||!connected.contains(key))return;

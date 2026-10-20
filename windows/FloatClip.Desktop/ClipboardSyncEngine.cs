@@ -122,11 +122,13 @@ public sealed class ClipboardSyncEngine
     {
         lock(gate)
         {
-            if(!state.Enabled||excluded)return null;
+            if(!state.Enabled)return null;
+            applicationGrant++;
+            if(!state.Send||excluded)return null;
             var entry=new SyncEntry(Guid.NewGuid(),local,checked(state.Clock+1),now,text);SyncProtocol.ValidateEntry(entry);
             var next=state.Copy();next.Clock=entry.Clock;next.HeadClock=entry.Clock;next.HeadOrigin=local.Id;
-            foreach(var p in next.Peers.Values)if(next.Send&&p.Enabled&&p.Device!=null&&p.Receive&&p.Epoch!=Guid.Empty){p.Pending=entry;p.PendingEpoch=p.Epoch;p.QueuedAt=now;}
-            Save(next);foreach(string key in connected.ToArray())Flush(key,now);return state.Send?entry:null;
+            foreach(var p in next.Peers.Values)if(p.Enabled&&p.Device!=null&&p.Receive&&p.Epoch!=Guid.Empty){p.Pending=entry;p.PendingEpoch=p.Epoch;p.QueuedAt=now;}
+            Save(next);foreach(string key in connected.ToArray())Flush(key,now);return entry;
         }
     }
     public void Accept(string key,Frame frame,long now)

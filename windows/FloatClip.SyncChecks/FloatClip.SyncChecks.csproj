@@ -4,5 +4,6 @@
     <Compile Include="../FloatClip.Desktop/ShareCore.cs" Link="ShareCore.cs" />
     <Compile Include="../FloatClip.Desktop/SyncProtocol.cs" Link="SyncProtocol.cs" />
     <Compile Include="../FloatClip.Desktop/ClipboardSyncEngine.cs" Link="ClipboardSyncEngine.cs" />
+    <Compile Include="../FloatClip.Desktop/TransportCrypto.cs" Link="TransportCrypto.cs" />
   </ItemGroup>
 </Project>

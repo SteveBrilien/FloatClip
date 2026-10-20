@@ -33,6 +33,26 @@ static class Program
     }
     public static void Main(string[] args)
     {
+        byte[] btToken=Enumerable.Range(1,32).Select(i=>(byte)i).ToArray(),btClientNonce=Enumerable.Range(33,32).Select(i=>(byte)i).ToArray(),btServerNonce=Enumerable.Range(65,32).Select(i=>(byte)i).ToArray();
+        var btMaterial=TransportCrypto.Derive(btToken,btClientNonce,btServerNonce);
+        Yes(TransportCrypto.EncodeClientHello(btToken,btClientNonce).AsSpan().SequenceEqual(File.ReadAllBytes(Path.Combine(args[0],"bt-client-hello.bin"))));
+        Yes(btMaterial.ServerProof.AsSpan().SequenceEqual(File.ReadAllBytes(Path.Combine(args[0],"bt-server-proof.bin"))));
+        Yes(btMaterial.ClientProof.AsSpan().SequenceEqual(File.ReadAllBytes(Path.Combine(args[0],"bt-client-proof.bin"))));
+        var btServer=TransportCrypto.Records.Server(btMaterial);Yes(btServer.Open(File.ReadAllBytes(Path.Combine(args[0],"bt-c2s-record.bin"))).AsSpan().SequenceEqual(File.ReadAllBytes(Path.Combine(args[0],"bt-payload.bin"))));
+        var btClient=TransportCrypto.Records.Client(btMaterial);Yes(btClient.Open(File.ReadAllBytes(Path.Combine(args[0],"bt-s2c-record.bin"))).AsSpan().SequenceEqual(File.ReadAllBytes(Path.Combine(args[0],"bt-reply.bin"))));
+        Reject(()=>btServer.Open(File.ReadAllBytes(Path.Combine(args[0],"bt-c2s-record.bin"))));
+        using(var listener=new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback,0))
+        {
+            listener.Start();int port=((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+            Frame? received=null;Exception? serverError=null;
+            var serverTask=System.Threading.Tasks.Task.Run(()=>{
+                try{using var accepted=listener.AcceptTcpClient();var secure=TransportCrypto.Accept(accepted.GetStream(),key=>key==Convert.ToHexString(TransportCrypto.Relation(btToken)).ToLowerInvariant()?btToken:null);received=Wire.Read(secure.Stream);}
+                catch(Exception e){serverError=e;}
+            });
+            using var client=new System.Net.Sockets.TcpClient();client.Connect(System.Net.IPAddress.Loopback,port);var clientSecure=TransportCrypto.Connect(client.GetStream(),btToken);
+            Wire.Write(clientSecure.Stream,new(SyncProtocol.Ping,Guid.Empty,Array.Empty<byte>()));serverTask.Wait(3000);
+            Yes(serverError==null&&received?.Type==SyncProtocol.Ping);
+        }
         var sample=new SyncEntry(Guid.Parse("00112233-4455-6677-8899-aabbccddeeff"),A,1234,1700000000000,"FloatClip 同步 📋\n  exact text\r\n");
         byte[] payload=SyncProtocol.EncodeEntry(sample,Epoch);
         Yes(payload.AsSpan().SequenceEqual(File.ReadAllBytes(Path.Combine(args[0],"sync-clip-payload.bin"))));

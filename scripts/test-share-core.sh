@@ -8,4 +8,6 @@ mkdir -p "$out/classes" "$out/vectors"
 .toolchains/jdk17/bin/java -cp "$out/classes" com.floatclip.share.CoreChecks "$out/vectors"
 .toolchains/jdk17/bin/java -cp "$out/classes" com.floatclip.share.ClipboardSyncChecks "$out/vectors"
 
+.toolchains/jdk17/bin/java -cp "$out/classes" com.floatclip.share.TransportCryptoChecks "$out/vectors"
+
 .toolchains/jdk17/bin/java -cp "$out/classes" com.floatclip.share.DiscoverySocketChecks

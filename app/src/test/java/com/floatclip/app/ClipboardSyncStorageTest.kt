@@ -47,6 +47,7 @@ class ClipboardSyncStorageTest {
         assertArrayEquals(token,TrustedPeerStore(context,codec).get(key)!!.token)
         store.rememberDevice(key,remote);val remembered=TrustedPeerStore(context,codec).get(key)!!
         assertEquals(remote.id,remembered.deviceId);assertEquals("电脑",remembered.name);assertEquals("windows",remembered.platform)
+        store.rememberBluetooth(key,"aa:bb:cc:dd:ee:ff");assertEquals("AA:BB:CC:DD:EE:FF",TrustedPeerStore(context,codec).get(key)!!.bluetoothAddress)
         assertThrows(IllegalArgumentException::class.java){store.putVerified("a".repeat(64),token)}
         val changed=ClipboardSync.Device(UUID.randomUUID(),"另一台电脑","windows")
         assertThrows(java.io.IOException::class.java){store.rememberDevice(key,changed)}

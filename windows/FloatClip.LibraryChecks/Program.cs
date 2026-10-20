@@ -40,6 +40,7 @@ static class Program
             var rememberedDevice=new SyncDevice(Guid.NewGuid(),"手机","android");pairs.RememberDevice(relation,rememberedDevice);var described=pairs.Describe(relation);Check(described?.DeviceId==rememberedDevice.Id&&described.Name=="手机","trusted device metadata persisted");
             Check(new PairStore(pairRoot,Protect,Unprotect).Get(pin).AsSpan().SequenceEqual(credential),"authorization survives restart");
             Check(new PairStore(pairRoot,Protect,Unprotect).Describe(relation)?.DeviceId==rememberedDevice.Id,"trusted relation metadata survives restart");
+            pairs.RememberBluetooth(relation,0xAABBCCDDEEFF);Check(new PairStore(pairRoot,Protect,Unprotect).Describe(relation)?.BluetoothAddress==0xAABBCCDDEEFF,"trusted Bluetooth locator survives restart");
             Check(!Encoding.UTF8.GetString(File.ReadAllBytes(Path.Combine(pairRoot,"paired-devices.dat"))).Contains(Convert.ToBase64String(credential)),"authorization persisted as plaintext");
             var failedPairStore=new PairStore(pairRoot,_=>throw new IOException("disk error"),Unprotect);Throws(()=>failedPairStore.Put(new string('b',64),RandomNumberGenerator.GetBytes(32)),"credential failure accepted");Check(new PairStore(pairRoot,Protect,Unprotect).Count==1,"credential failure lost existing grants");
             pairs.Remove(pin);Check(new PairStore(pairRoot,Protect,Unprotect).Count==0,"revoked grant returned after restart");

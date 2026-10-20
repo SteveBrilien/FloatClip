@@ -25,8 +25,10 @@ public sealed class NativeClipboardSync: IDisposable
     readonly Action<SyncEntry,long> apply;
     readonly ClipboardSyncEngine engine;
     readonly PairStore pairs;
+    BluetoothSyncTransport? bluetooth;
     readonly SemaphoreSlim wake=new(0,1);
     readonly ConcurrentDictionary<string,Link> links=new();
+    readonly object linkGate=new();
     readonly ConcurrentDictionary<string,byte> connecting=new(),blocked=new();
     readonly CancellationTokenSource lifetime=new();
     readonly object optionsGate=new(),operationGate=new();
@@ -97,24 +99,43 @@ public sealed class NativeClipboardSync: IDisposable
     {
         if(disposed)throw new ObjectDisposedException(nameof(NativeClipboardSync));
         CancelOperations();
-        if(!on){enabled=false;foreach(var row in links.ToArray())Remove(row.Key,row.Value);}
+        if(!on){enabled=false;StopBluetooth();foreach(var row in links.ToArray())Remove(row.Key,row.Value);}
         try{engine.Configure(on,sending,receiving,applying);}
         catch{enabled=false;foreach(var row in links.ToArray())Remove(row.Key,row.Value);throw;}
         lock(optionsGate){options.Automatic=automatic;SaveOptions();}
-        enabled=on;Start();Signal();SetStatus(on?"等待已授权设备自动连接":"共享已暂停");
+        enabled=on;Start();if(on&&automatic)EnsureBluetooth();else StopBluetooth();Signal();SetStatus(on?"等待已授权设备自动连接":"共享已暂停");
     }
     public void SetPeerEnabled(string relationKey,bool on){if(pairs.GetByKey(relationKey).Length!=32)throw new IOException("设备授权不存在");engine.SetPeerEnabled(relationKey,on);Changed?.Invoke();}
     public void Forget(string relationKey){pairs.RemoveKey(relationKey);engine.Forget(relationKey);}
     public void Start()
     {
-        if(Interlocked.Exchange(ref started,1)!=0)return;
+        if(Interlocked.Exchange(ref started,1)!=0){if(enabled&&Automatic)EnsureBluetooth();return;}
+        if(enabled&&Automatic)EnsureBluetooth();
         _=Task.Run(ReconnectLoop);
         _=Task.Run(RetryLoop);
+    }
+    void EnsureBluetooth()
+    {
+        if(disposed||!enabled||!Automatic||bluetooth!=null)return;
+        var created=new BluetoothSyncTransport(pairs,cache,CanBluetoothAttach,AttachSession,message=>{if(enabled&&!disposed&&links.IsEmpty)SetStatus(message);});
+        if(Interlocked.CompareExchange(ref bluetooth,created,null)!=null){created.Dispose();return;}
+        created.Start();
+    }
+    void StopBluetooth(){Interlocked.Exchange(ref bluetooth,null)?.Dispose();}
+    bool CanBluetoothAttach(string key)
+    {
+        if(disposed||!enabled||!Automatic||pairs.GetByKey(key).Length!=32||links.ContainsKey(key))return false;
+        var snapshot=engine.Snapshot();
+        return !snapshot.Peers.TryGetValue(key,out var peer)||peer.Enabled;
     }
     public void Copied(string value,bool excluded=false)
     {
         if(!enabled||disposed)return;
-        try{engine.Copied(value,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),excluded);}
+        try
+        {
+            var entry=engine.Copied(value,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),excluded);
+            if(entry!=null&&Automatic){EnsureBluetooth();bluetooth?.Nudge();}
+        }
         catch{SetStatus("该条目未同步，请检查长度或本机存储");}
     }
     void Send(string key,Frame frame){if(enabled&&!disposed&&pairs.GetByKey(key).Length==32&&links.TryGetValue(key,out var link))link.Queue(frame);}
@@ -145,28 +166,50 @@ public sealed class NativeClipboardSync: IDisposable
             var session=await Task.Run(()=>Nearby.Connect(device,cache,pairs,verify,cancel.Token,persistent:true),cancel.Token);
             key=pairs.KeyForPin(pin)??throw new IOException("设备授权未保存");
             if(!enabled||disposed||pairs.GetByKey(key).Length!=32){session.Dispose();return;}
-            if(links.ContainsKey(key)){session.Dispose();return;}
-            var link=new Link(this,key,session);
-            if(!links.TryAdd(key,link)){link.Dispose();return;}added=link;
-            session.Sync=frame=>
-            {
-                if(!enabled||!links.TryGetValue(key,out var active)||!ReferenceEquals(active,link)||pairs.GetByKey(key).Length!=32)return;
-                try
-                {
-                    engine.Accept(key,frame,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-                    if(frame.Type==SyncProtocol.Hello&&engine.Snapshot().Peers.TryGetValue(key,out var peer)&&peer.Device!=null)pairs.RememberDevice(key,peer.Device);
-                }
-                catch(PersistenceFailure){Remove(key,link);SetStatus("本机保存失败，内容尚未确认送达；存储恢复后将重试连接");Signal();}
-                catch{blocked[key]=0;Remove(key,link);SetStatus("设备身份或同步校验失败，请重新核对授权");}
-            };
-            session.Closed=()=>{Remove(key,link);Signal();};
-            session.Offered=offer=>{try{session.Reject(offer.Id);}catch{session.Dispose();}};
-            session.Failure=_=>SetStatus("连接中断，等待自动重连");
-            engine.Connected(key);try{SessionOpened?.Invoke(session);}catch{}session.Start();SetStatus(links.Count+" 台设备已连接 · 加密共享");
+            AttachSession(key,session,"lan");added=links.TryGetValue(key,out var attached)&&ReferenceEquals(attached.Session,session)?attached:null;
         }
         catch(PairingAuthorizationException){if(added!=null&&key!=null)Remove(key,added);if(key!=null)blocked[key]=0;SetStatus("设备授权已失效，需要重新核对");throw;}
         catch{if(added!=null&&key!=null)Remove(key,added);throw;}
         finally{connecting.TryRemove(attemptKey,out _);}
+    }
+    void AttachSession(string key,Session session,string kind)
+    {
+        int priority=kind=="lan"?2:1;
+        Link link;
+        lock(linkGate)
+        {
+            if(disposed||!enabled||pairs.GetByKey(key).Length!=32){session.Dispose();return;}
+            if(links.TryGetValue(key,out var existing))
+            {
+                if(existing.Priority>=priority){session.Dispose();return;}
+                if(((System.Collections.Generic.ICollection<System.Collections.Generic.KeyValuePair<string,Link>>)links).Remove(new(key,existing)))
+                {engine.Disconnected(key);existing.Dispose();}
+            }
+            link=new Link(this,key,session,kind,priority);
+            if(!links.TryAdd(key,link)){link.Dispose();return;}
+        }
+        session.Sync=frame=>
+        {
+            if(!enabled||!links.TryGetValue(key,out var active)||!ReferenceEquals(active,link)||pairs.GetByKey(key).Length!=32)return;
+            try
+            {
+                engine.Accept(key,frame,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                if(frame.Type==SyncProtocol.Hello&&engine.Snapshot().Peers.TryGetValue(key,out var peer)&&peer.Device!=null)pairs.RememberDevice(key,peer.Device);
+            }
+            catch(PersistenceFailure){Remove(key,link);SetStatus("本机保存失败，内容尚未确认送达；存储恢复后将重试连接");Signal();}
+            catch{blocked[key]=0;Remove(key,link);SetStatus("设备身份或同步校验失败，请重新核对授权");}
+        };
+        session.Closed=()=>{Remove(key,link);Signal();};
+        session.Offered=offer=>{try{session.Reject(offer.Id);}catch{session.Dispose();}};
+        session.Failure=_=>SetStatus(kind=="bluetooth"?"蓝牙短连接结束，等待下次同步":"连接中断，等待自动重连");
+        try
+        {
+            engine.Connected(key);
+            try{SessionOpened?.Invoke(session);}catch{}
+            session.Start();
+            SetStatus(links.Count+" 台设备已连接 · "+(kind=="bluetooth"?"蓝牙加密短连接":"局域网加密共享"));
+        }
+        catch{Remove(key,link);throw;}
     }
     void Remove(string key,Link expected)
     {
@@ -227,8 +270,8 @@ public sealed class NativeClipboardSync: IDisposable
         readonly SemaphoreSlim signal=new(0,1);
         readonly CancellationTokenSource stop=new();
         int dead;
-        public readonly Session Session;
-        public Link(NativeClipboardSync owner,string key,Session session){this.owner=owner;this.key=key;Session=session;_=Task.Run(WriteLoop);}
+        public readonly Session Session;public readonly string Kind;public readonly int Priority;
+        public Link(NativeClipboardSync owner,string key,Session session,string kind,int priority){this.owner=owner;this.key=key;Session=session;Kind=kind;Priority=priority;_=Task.Run(WriteLoop);}
         public void Queue(Frame frame){if(dead!=0)return;pending[frame.Type]=frame;try{signal.Release();}catch(SemaphoreFullException){}}
         async Task WriteLoop()
         {
@@ -249,6 +292,6 @@ public sealed class NativeClipboardSync: IDisposable
     public void Dispose()
     {
         if(disposed)return;disposed=true;enabled=false;pairs.Changed-=AuthorizationChanged;NetworkChange.NetworkAddressChanged-=NetworkChanged;
-        lifetime.Cancel();CancelOperations();foreach(var row in links.ToArray())Remove(row.Key,row.Value);
+        StopBluetooth();lifetime.Cancel();CancelOperations();foreach(var row in links.ToArray())Remove(row.Key,row.Value);
     }
 }

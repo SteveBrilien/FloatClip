@@ -31,6 +31,7 @@ class TrustedPeerStore(
         val deviceId: UUID? = null,
         val name: String? = null,
         val platform: String? = null,
+        val bluetoothAddress: String? = null,
     )
 
     private val file = AtomicFile(File(context.filesDir, "trusted_peers.v1.bin"))
@@ -53,7 +54,7 @@ class TrustedPeerStore(
         if (normalized !in current && current.size >= MAX_PEERS) throw IOException("Too many trusted devices")
         val previous = current[normalized]
         if (previous != null && previous.token.contentEquals(token)) return
-        current[normalized] = Peer(normalized, token.copyOf(), previous?.deviceId, previous?.name, previous?.platform)
+        current[normalized] = Peer(normalized, token.copyOf(), previous?.deviceId, previous?.name, previous?.platform, previous?.bluetoothAddress)
         save(current)
     }
 
@@ -65,6 +66,18 @@ class TrustedPeerStore(
         if (previous.deviceId != null && previous.deviceId != device.id) throw IOException("Remembered device identity changed")
         if (previous.deviceId == device.id && previous.name == device.name && previous.platform == device.platform) return
         current[normalized] = previous.copy(deviceId = device.id, name = device.name, platform = device.platform)
+        save(current)
+    }
+
+    @Synchronized
+    fun rememberBluetooth(key: String,address: String) {
+        val normalized=key.lowercase()
+        val value=address.uppercase()
+        require(BLUETOOTH.matches(value)) { "Invalid Bluetooth address" }
+        val current=load().toMutableMap()
+        val previous=current[normalized] ?: throw IOException("Trusted credential missing")
+        if(previous.bluetoothAddress==value)return
+        current[normalized]=previous.copy(bluetoothAddress=value)
         save(current)
     }
 
@@ -92,7 +105,9 @@ class TrustedPeerStore(
         check(file.baseFile.length() <= 32768) { "Trusted peer state too large" }
         val plain = cipher.decrypt(file.readFully())
         val input = DataInputStream(ByteArrayInputStream(plain))
-        if (input.readInt() != MAGIC || input.readUnsignedByte() != VERSION) throw IOException("Trusted peer state version")
+        if (input.readInt() != MAGIC) throw IOException("Trusted peer state version")
+        val version=input.readUnsignedByte()
+        if(version !in 1..VERSION)throw IOException("Trusted peer state version")
         val count = input.readUnsignedByte()
         if (count > MAX_PEERS) throw IOException("Too many trusted devices")
         val result = linkedMapOf<String, Peer>()
@@ -111,7 +126,10 @@ class TrustedPeerStore(
                 ) throw IOException("Invalid trusted device")
                 Peer(key, token, id, name, platform)
             } else Peer(key, token)
-            result[key] = peer
+            val withBluetooth=if(version>=2&&input.readBoolean()){
+                val address=input.readUTF().uppercase();if(!BLUETOOTH.matches(address))throw IOException("Invalid Bluetooth address");peer.copy(bluetoothAddress=address)
+            }else peer
+            result[key] = withBluetooth
         }
         if (input.available() != 0) throw IOException("Trailing trusted peer bytes")
         return result
@@ -135,6 +153,8 @@ class TrustedPeerStore(
                         out.writeUTF(peer.name ?: throw IOException("Trusted device name missing"))
                         out.writeUTF(peer.platform ?: throw IOException("Trusted device platform missing"))
                     }
+                    out.writeBoolean(peer.bluetoothAddress!=null)
+                    if(peer.bluetoothAddress!=null){require(BLUETOOTH.matches(peer.bluetoothAddress));out.writeUTF(peer.bluetoothAddress)}
                 }
             }
             bytes.toByteArray()
@@ -151,9 +171,10 @@ class TrustedPeerStore(
 
     companion object {
         private const val MAGIC = 0x46545031 // FTP1
-        private const val VERSION = 1
+        private const val VERSION = 2
         private const val MAX_PEERS = 8
         private val ZERO = UUID(0, 0)
+        private val BLUETOOTH=Regex("([0-9A-F]{2}:){5}[0-9A-F]{2}")
         private fun validKey(value: String) = value.matches(Regex("[a-f0-9]{64}"))
         fun hash(token: ByteArray): String = ShareWire.digest(token).joinToString("") { "%02x".format(it.toInt() and 255) }
     }

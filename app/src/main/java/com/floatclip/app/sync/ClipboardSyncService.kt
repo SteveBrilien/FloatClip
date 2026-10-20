@@ -55,6 +55,7 @@ class ClipboardSyncService: Service() {
     @Volatile private var lastCapture=""
     private lateinit var trust: android.content.SharedPreferences
     private lateinit var credentials: TrustedPeerStore
+    private var bluetooth: BluetoothSyncTransport?=null
     private val trustListener=android.content.SharedPreferences.OnSharedPreferenceChangeListener { _,_ -> if(!closing)actor.execute {
         if(::engine.isInitialized) { for(key in engine.peerKeys())if(!authorized(key)){links.remove(key)?.close();engine.forget(key)} };refreshUi()
     }}
@@ -105,6 +106,12 @@ class ClipboardSyncService: Service() {
         override fun onLinkPropertiesChanged(network: Network,properties: android.net.LinkProperties){refreshNetwork()}
     }
     private val hotspotReceiver=object: BroadcastReceiver(){override fun onReceive(c: Context?,i: Intent?){refreshNetwork()}}
+    private val bluetoothReceiver=object: BroadcastReceiver(){override fun onReceive(c: Context?,i: Intent?){
+        if(i?.action==android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED&&!closing)actor.execute{
+            bluetooth?.close();bluetooth=null
+            if(::engine.isInitialized)refreshBluetooth()
+        }
+    }}
 
     override fun onCreate() {
         super.onCreate();prefs=SyncPreferences(this);clipboard=getSystemService(ClipboardManager::class.java)
@@ -139,13 +146,15 @@ class ClipboardSyncService: Service() {
                 credentials.retain(authorizedKeys)
                 for(key in engine.peerKeys())if(!authorized(key))engine.forget(key)
                 configureEngine();setStatus("等待已授权设备 · Android 11 后台读取受系统限制")
-                actor.scheduleWithFixedDelay({if(!closing&&!paused&&::engine.isInitialized){for(key in links.keys)runCatching{configureEngine();engine.retry(key,System.currentTimeMillis())};refreshHosts()}},10,10,TimeUnit.SECONDS)
+                refreshBluetooth()
+                actor.scheduleWithFixedDelay({if(!closing&&!paused&&::engine.isInitialized){for(key in links.keys)runCatching{configureEngine();engine.retry(key,System.currentTimeMillis())};refreshHosts();refreshBluetooth()}},10,10,TimeUnit.SECONDS)
                 refreshHosts()
             }.onFailure {setStatus("无法读取共享状态，请保留数据后检查存储");pauseImmediately()}
         }
         clipboard.addPrimaryClipChangedListener(clipListener)
         networkManager.registerNetworkCallback(NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(),networkCallback)
-        registerReceiver(hotspotReceiver,IntentFilter("android.net.wifi.WIFI_AP_STATE_CHANGED"));registered=true
+        registerReceiver(hotspotReceiver,IntentFilter("android.net.wifi.WIFI_AP_STATE_CHANGED"))
+        registerReceiver(bluetoothReceiver,IntentFilter(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED));registered=true
     }
     override fun onStartCommand(intent: Intent?,flags: Int,startId: Int): Int {
         if(intent?.action==PAUSE){prefs.save(enabled=false);pauseImmediately();stopSelf();return START_NOT_STICKY}
@@ -154,7 +163,7 @@ class ClipboardSyncService: Service() {
             val until=System.currentTimeMillis()+90000;pairingUntil=until
             actor.schedule({if(!closing&&pairingUntil==until&&links.isEmpty())setStatus("等待已授权设备自动连接")},90,TimeUnit.SECONDS)
         }
-        actor.execute {if(::engine.isInitialized&&!closing){runCatching{configureEngine();refreshHosts()}.onFailure{setStatus("共享配置未保存，已暂停");pauseImmediately()}}}
+        actor.execute {if(::engine.isInitialized&&!closing){runCatching{configureEngine();refreshHosts();refreshBluetooth()}.onFailure{setStatus("共享配置未保存，已暂停");pauseImmediately()}}}
         return START_STICKY
     }
     private fun configureEngine(){paused=!SyncPolicy.apply(prefs,engine).enabled}
@@ -162,7 +171,7 @@ class ClipboardSyncService: Service() {
         if(closing||paused||!prefs.enabled())return
         actor.execute {
             if(!closing&&!paused&&::engine.isInitialized&&event!=lastCapture&&prefs.enabled()) {
-                runCatching {configureEngine();val p=prefs.policy();val mayShare=!excluded&&SyncPolicy.mayShare(p,shareGeneration);if(!excluded)library.addText(text);engine.copied(text,System.currentTimeMillis(),!mayShare);lastCapture=event;if(!excluded)historyChanged()}
+                runCatching {configureEngine();refreshBluetooth();val p=prefs.policy();val mayShare=!excluded&&SyncPolicy.mayShare(p,shareGeneration);if(!excluded)library.addText(text);engine.copied(text,System.currentTimeMillis(),!mayShare);lastCapture=event;if(!excluded)historyChanged();if(mayShare)bluetooth?.nudge()}
                     .onFailure{setStatus("当前内容未同步，请检查存储或文字长度")}
             }
         }
@@ -173,8 +182,46 @@ class ClipboardSyncService: Service() {
         if(closing)return
         paused=true;pairingUntil=0;pairRequest?.accept(false);pairRequest=null
         for(link in links.values)link.close();links.clear()
-        actor.execute{for(host in hosts.values)host.close();hosts.clear();if(::engine.isInitialized)runCatching{engine.configure(false,prefs.sending(),prefs.receiving(),prefs.applying())}}
+        actor.execute{for(host in hosts.values)host.close();hosts.clear();bluetooth?.close();bluetooth=null;if(::engine.isInitialized)runCatching{engine.configure(false,prefs.sending(),prefs.receiving(),prefs.applying())}}
         setStatus("共享已暂停")
+    }
+    private fun refreshBluetooth(){
+        if(closing||paused||!prefs.enabled()||!prefs.reconnect()){
+            bluetooth?.close();bluetooth=null;return
+        }
+        if(bluetooth!=null)return
+        bluetooth=BluetoothSyncTransport(this,credentials,::authorized,
+            {key->!closing&&!paused&&prefs.enabled()&&prefs.reconnect()&&!links.containsKey(key)},
+            {key->peerMessages(key,false)},
+            {message->if(!closing&&links.isEmpty())setStatus(message)}
+        ).also{it.start()}
+    }
+
+    private fun peerMessages(peer: String,replaceExisting: Boolean=true): ShareSession.Events {
+        val token=UUID.randomUUID();connectionTokens[peer]=token
+        return object:ShareSession.Events {
+            override fun attached(session: ShareSession){actor.execute {
+                if(closing||paused||!prefs.enabled()||connectionTokens[peer]!=token||!authorized(peer)){session.close();return@execute}
+                val previous=links[peer]
+                if(previous!=null&&!replaceExisting){session.close();return@execute}
+                if(previous!=null){links.remove(peer,previous);previous.close()}
+                links[peer]=Link(peer,session)
+                runCatching{configureEngine();engine.connected(peer);setStatus("${links.size} 台设备已连接 · 加密共享")}.onFailure{links.remove(peer)?.close();setStatus("设备授权状态未保存")}
+            }}
+            override fun sync(frame: ShareWire.Frame){if(!closing)actor.execute{if(!closing&&!paused&&prefs.enabled()&&(frame.type!=ClipboardSync.CLIP||prefs.receiving())&&authorized(peer)&&connectionTokens[peer]==token)runCatching{
+                configureEngine();engine.accept(peer,frame,System.currentTimeMillis())
+                if(frame.type==ClipboardSync.HELLO)engine.peerViews().firstOrNull{it.key==peer}?.let{credentials.rememberDevice(peer,it.device)}
+            }.onFailure{links.remove(peer)?.close();setStatus("设备授权或同步校验失败，请重新核对")}}}
+            override fun text(id: UUID,value: String,outgoing: Boolean)=Unit
+            override fun offered(offer: ShareWire.Offer){main.post{if(SyncRuntime.hasObserver())SyncRuntime.offer(peer,offer) else links[peer]?.session?.reject(offer.id)}}
+            override fun progress(id: UUID,name: String,done: Long,total: Long,outgoing: Boolean){main.post{SyncRuntime.progress(name,done,total,outgoing)}}
+            override fun file(offer: ShareWire.Offer,file: File,outgoing: Boolean){main.post{SyncRuntime.file(offer,file,outgoing)}}
+            override fun notice(message: String){setStatus(message)}
+            override fun closed(){if(!closing)actor.execute {
+                val link=links[peer]
+                if(link!=null&&connectionTokens[peer]==token&&link.session.isClosed){links.remove(peer,link);link.close();engine.disconnected(peer);setStatus(if(links.isEmpty())"等待设备自动重连" else "${links.size} 台设备已连接")}
+            }}
+        }
     }
     private fun refreshNetwork(){if(!closing)actor.execute{if(::engine.isInitialized)refreshHosts()}}
     private fun refreshHosts(){
@@ -192,36 +239,13 @@ class ClipboardSyncService: Service() {
                     pairRequest?.accept(false);pairRequest=answer;SyncRuntime.verify(code,answer)
                 }}
                 override fun credential(peer: String,token: ByteArray){credentials.putVerified(peer,token)}
-                override fun messages(peer: String): ShareSession.Events {
-                    val token=UUID.randomUUID();connectionTokens[peer]=token
-                    return object:ShareSession.Events {
-                    override fun attached(session: ShareSession){actor.execute {
-                        if(closing||paused||!prefs.enabled()||connectionTokens[peer]!=token||!authorized(peer)){session.close();return@execute}
-                        links.remove(peer)?.close();links[peer]=Link(peer,session)
-                        runCatching{configureEngine();engine.connected(peer);setStatus("${links.size} 台设备已连接 · 加密共享")}.onFailure{links.remove(peer)?.close();setStatus("设备授权状态未保存")}
-                    }}
-                    override fun sync(frame: ShareWire.Frame){if(!closing)actor.execute{if(!closing&&!paused&&prefs.enabled()&&(frame.type!=ClipboardSync.CLIP||prefs.receiving())&&authorized(peer)&&connectionTokens[peer]==token)runCatching{
-                        configureEngine();engine.accept(peer,frame,System.currentTimeMillis())
-                        if(frame.type==ClipboardSync.HELLO)engine.peerViews().firstOrNull{it.key==peer}?.let{credentials.rememberDevice(peer,it.device)}
-                    }.onFailure{links.remove(peer)?.close();setStatus("设备授权或同步校验失败，请重新核对")}}}
-                    override fun text(id: UUID,value: String,outgoing: Boolean)=Unit
-                    override fun offered(offer: ShareWire.Offer){main.post{if(SyncRuntime.hasObserver())SyncRuntime.offer(peer,offer) else links[peer]?.session?.reject(offer.id)}}
-                    override fun progress(id: UUID,name: String,done: Long,total: Long,outgoing: Boolean){main.post{SyncRuntime.progress(name,done,total,outgoing)}}
-                    override fun file(offer: ShareWire.Offer,file: File,outgoing: Boolean){main.post{SyncRuntime.file(offer,file,outgoing)}}
-                    override fun notice(message: String){setStatus(message)}
-                    override fun closed(){if(!closing)actor.execute {
-                        // A reconnect may already have replaced this key; a dead old link cannot tear it down.
-                        val link=links[peer]
-                        if(link!=null&&connectionTokens[peer]==token&&link.session.isClosed){links.remove(peer,link);link.close();engine.disconnected(peer);setStatus(if(links.isEmpty())"等待设备自动重连" else "${links.size} 台设备已连接")}
-                    }}
-                    }
-                }
+                override fun messages(peer: String)=peerMessages(peer)
                 override fun connected(peer: String,session: ShareSession)=Unit
                 override fun stopped(message: String){if(!closing)actor.execute{hosts.remove(ip);setStatus(message)}}
             })
             hosts[ip]=host;host.listen(ip)
         }
-        if(addresses.isEmpty())setStatus("等待 Wi-Fi 或手机热点")
+        if(addresses.isEmpty()&&links.isEmpty())setStatus("等待局域网或蓝牙受信设备")
         else if(links.isEmpty())setStatus(if(System.currentTimeMillis()<pairingUntil)"允许添加设备，90 秒内有效" else "等待已授权设备自动连接")
     }
     fun peers(): List<ClipboardSync.PeerView> = if(::engine.isInitialized)engine.peerViews() else emptyList()
@@ -241,7 +265,8 @@ class ClipboardSyncService: Service() {
         closing=true;paused=true;pairRequest?.accept(false);pairRequest=null
         trust.unregisterOnSharedPreferenceChangeListener(trustListener)
         clipboard.removePrimaryClipChangedListener(clipListener)
-        if(registered){unregisterReceiver(hotspotReceiver);runCatching{networkManager.unregisterNetworkCallback(networkCallback)}}
+        if(registered){unregisterReceiver(hotspotReceiver);unregisterReceiver(bluetoothReceiver);runCatching{networkManager.unregisterNetworkCallback(networkCallback)}}
+        bluetooth?.close();bluetooth=null
         for(host in hosts.values.toList())host.close();for(link in links.values)link.close();links.clear();actor.shutdownNow();SyncRuntime.detach(this)
         super.onDestroy()
     }

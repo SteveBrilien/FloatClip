@@ -23,7 +23,8 @@ public final class ShareSession implements AutoCloseable {
         default void sync(ShareWire.Frame frame) throws Exception { throw new IOException("Sync adapter unavailable"); }
         default void attached(ShareSession session) { }
     }
-    private final Socket socket; private final File cache; private final Events events;
+    private final InputStream input; private final OutputStream output; private final Closeable connection;
+    private final File cache; private final Events events;
     private final Object writing=new Object(), state=new Object();
     private final AtomicBoolean closed=new AtomicBoolean();
     private final boolean persistent;
@@ -44,10 +45,16 @@ public final class ShareSession implements AutoCloseable {
         this(socket,cache,events,false);
     }
     public ShareSession(Socket socket,File cache,Events events,boolean persistent) throws IOException {
-        this.socket=socket; this.cache=cache; this.events=events;
-        this.persistent=persistent;
-        if(!cache.isDirectory() && !cache.mkdirs()) throw new IOException("File cache unavailable");
-        socket.setSoTimeout(180000); socket.setTcpNoDelay(true);
+        this(configure(socket).getInputStream(),socket.getOutputStream(),socket,cache,events,persistent);
+    }
+    private static Socket configure(Socket socket)throws IOException{
+        socket.setSoTimeout(180000);socket.setTcpNoDelay(true);return socket;
+    }
+    /** Alternate authenticated transports can provide stream adapters without pretending to be TCP sockets. */
+    public ShareSession(InputStream input,OutputStream output,Closeable connection,File cache,Events events,boolean persistent) throws IOException {
+        this.input=Objects.requireNonNull(input);this.output=Objects.requireNonNull(output);this.connection=Objects.requireNonNull(connection);
+        this.cache=cache;this.events=events;this.persistent=persistent;
+        if(!cache.isDirectory()&&!cache.mkdirs())throw new IOException("File cache unavailable");
     }
     public void start() {
         if(!persistent)timer.schedule(this::close,10,TimeUnit.MINUTES);
@@ -61,7 +68,7 @@ public final class ShareSession implements AutoCloseable {
     private void write(int type,UUID id,byte[] data) throws IOException {
         synchronized(writing) {
             if(closed.get()) throw new IOException("Session closed");
-            ShareWire.write(socket.getOutputStream(),new Frame(type,id,data));
+            ShareWire.write(output,new Frame(type,id,data));
         }
     }
     public void sendSync(ShareWire.Frame frame) throws IOException {
@@ -154,7 +161,7 @@ public final class ShareSession implements AutoCloseable {
     private void readLoop() {
         try {
             Frame f;
-            while(!closed.get() && (f=ShareWire.read(socket.getInputStream()))!=null) handle(f);
+            while(!closed.get() && (f=ShareWire.read(input))!=null) handle(f);
         } catch(Exception e) { if(!closed.get()) { events.failure(e); events.notice("连接已结束，请重新连接"); } }
         finally { close(); }
     }
@@ -227,7 +234,7 @@ public final class ShareSession implements AutoCloseable {
     }
     @Override public void close() {
         if(!closed.compareAndSet(false,true)) return;
-        try { socket.close(); } catch(IOException ignored) { }
+        try { connection.close(); } catch(IOException ignored) { }
         fileWorker.shutdownNow(); timer.shutdownNow();
         synchronized(state) {
             try { if(sink!=null) sink.close(); } catch(IOException ignored) { }

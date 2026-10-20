@@ -40,7 +40,7 @@ public sealed class PairingAuthorizationException: IOException
 /** User-scoped encrypted credentials. The injectable codec is used by portable persistence checks. */
 public sealed class PairStore
 {
-    public sealed record TrustedPeer(string Key,string? OutboundPin,Guid? DeviceId,string? Name,string? Platform,bool AcceptReady);
+    public sealed record TrustedPeer(string Key,string? OutboundPin,Guid? DeviceId,string? Name,string? Platform,bool AcceptReady,ulong? BluetoothAddress);
     sealed class Entry
     {
         public Entry(){}
@@ -50,7 +50,8 @@ public sealed class PairStore
         public string? Name{get;set;}
         public string? Platform{get;set;}
         public bool AcceptReady{get;set;}
-        public Entry Copy()=>new(){Token=Token,OutboundPin=OutboundPin,DeviceId=DeviceId,Name=Name,Platform=Platform,AcceptReady=AcceptReady};
+        public ulong? BluetoothAddress{get;set;}
+        public Entry Copy()=>new(){Token=Token,OutboundPin=OutboundPin,DeviceId=DeviceId,Name=Name,Platform=Platform,AcceptReady=AcceptReady,BluetoothAddress=BluetoothAddress};
     }
     sealed class PairFile
     {
@@ -122,7 +123,7 @@ public sealed class PairStore
         lock(gate)
         {
             key=key.ToLowerInvariant();if(!peers.TryGetValue(key,out var p))return null;
-            return new(key,p.OutboundPin,p.DeviceId,p.Name,p.Platform,p.AcceptReady);
+            return new(key,p.OutboundPin,p.DeviceId,p.Name,p.Platform,p.AcceptReady,p.BluetoothAddress);
         }
     }
     public void Put(string pin,byte[] token)
@@ -158,6 +159,17 @@ public sealed class PairStore
             if(current.DeviceId==device.Id&&current.Name==device.Name&&current.Platform==device.Platform)return;
             var next=peers.ToDictionary(p=>p.Key,p=>p.Value.Copy());var row=next[key];
             row.DeviceId=device.Id;row.Name=device.Name;row.Platform=device.Platform;Save(next);
+        }
+        Changed?.Invoke();
+    }
+    public void RememberBluetooth(string key,ulong address)
+    {
+        key=key.ToLowerInvariant();if(address==0||address>0x0000FFFFFFFFFFFFUL)throw new IOException("蓝牙地址无效");
+        lock(gate)
+        {
+            if(corrupt||!peers.ContainsKey(key))throw new IOException("设备授权不存在");
+            if(peers[key].BluetoothAddress==address)return;
+            var next=peers.ToDictionary(p=>p.Key,p=>p.Value.Copy());next[key].BluetoothAddress=address;Save(next);
         }
         Changed?.Invoke();
     }

@@ -34,9 +34,11 @@ public static class Wire
     public static byte[] ReadBytes(Stream s,int count) { byte[] data=new byte[count]; int offset=0; while(offset<count) { int n=s.Read(data,offset,count-offset); if(n==0) throw new EndOfStreamException(); offset+=n; } return data; }
     static void Validate(int type,int size)
     {
-        if(type<1 || type>7 || size<0 || size>MaxText || ((type==Ack || type==End) && size!=32) ||
+        if(type<1 || type>SyncProtocol.Ack || size<0 || size>MaxText || ((type==Ack || type==End) && size!=32) ||
            ((type==Accept || type==Reject) && size!=0) || (type==Chunk && (size<4 || size>ChunkSize+4)) ||
            (type==FileOffer && (size<43 || size>282))) throw new IOException("无效传输帧");
+        if(type==SyncProtocol.Clip&&(size<54||size>SyncProtocol.MaximumBytes+53)||type==SyncProtocol.Hello&&(size<39||size>512)||
+            (type==SyncProtocol.Ping||type==SyncProtocol.Pong)&&size!=0||type==SyncProtocol.Ack&&size!=32)throw new IOException("无效同步帧");
     }
     public static void Write(Stream s,Frame f)
     {
@@ -72,6 +74,8 @@ public sealed class Session : IDisposable
 {
     readonly Stream stream; readonly Action closeSocket; readonly string cache;
     readonly object writing=new(),state=new(); readonly Timer expiry;
+    readonly bool persistent;
+    long lastRead=Environment.TickCount64;
     readonly Dictionary<Guid,(byte[] Hash,string Text)> pending=new();
     readonly Dictionary<Guid,byte[]> received=new(); readonly Queue<Guid> receivedOrder=new();
     Job? outgoing; Offer? incoming; FileStream? sink; IncrementalHash? fileHash; string? part;
@@ -84,12 +88,19 @@ public sealed class Session : IDisposable
     public Action<string>? Notice;
     public Action? Closed;
     public Action<string>? Failure;
-    public Session(Stream stream,Action closeSocket,string cache)
+    public Action<Frame>? Sync;
+    public Session(Stream stream,Action closeSocket,string cache,bool persistent=false)
     {
         this.stream=stream; this.closeSocket=closeSocket; this.cache=cache; Directory.CreateDirectory(cache);
-        expiry=new Timer(_=>Dispose(),null,Timeout.Infinite,Timeout.Infinite);
+        this.persistent=persistent;
+        expiry=new Timer(_=>{if(!persistent){Dispose();return;}if(Environment.TickCount64-Interlocked.Read(ref lastRead)>90000){Dispose();return;}try{Write(SyncProtocol.Ping,Guid.Empty,Array.Empty<byte>());}catch{Dispose();}},null,Timeout.Infinite,Timeout.Infinite);
     }
-    public void Start() { expiry.Change(TimeSpan.FromMinutes(10),Timeout.InfiniteTimeSpan); Task.Run(ReadLoop); }
+    public void Start() {
+        if(persistent)expiry.Change(TimeSpan.FromSeconds(30),TimeSpan.FromSeconds(30));
+        else expiry.Change(TimeSpan.FromMinutes(10),Timeout.InfiniteTimeSpan);
+        Task.Run(ReadLoop);
+    }
+    public void SendSync(Frame frame){if(!persistent||frame.Type<SyncProtocol.Clip||frame.Type>SyncProtocol.Ack)throw new IOException("未协商实时同步协议");Write(frame.Type,frame.Id,frame.Data);}
     void Write(int type,Guid id,byte[] data) { lock(writing) { if(closed!=0) throw new IOException("连接已结束"); Wire.Write(stream,new(type,id,data)); } }
     public void SendText(string text)
     {
@@ -159,6 +170,13 @@ public sealed class Session : IDisposable
     }
     void Handle(Frame f)
     {
+        Interlocked.Exchange(ref lastRead,Environment.TickCount64);
+        if(f.Type>=SyncProtocol.Clip){
+            if(!persistent)throw new IOException("未协商实时同步协议");
+            if(f.Type==SyncProtocol.Ping)Write(SyncProtocol.Pong,f.Id,Array.Empty<byte>());
+            else if(f.Type!=SyncProtocol.Pong){if(Sync==null)throw new IOException("同步适配器不可用");Sync(f);}
+            return;
+        }
         switch(f.Type) {
             case Wire.Text: {
                 string value=Wire.Decode(f.Data); byte[] hash=Wire.Digest(f.Data); bool fresh;

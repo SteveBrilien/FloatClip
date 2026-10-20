@@ -20,10 +20,14 @@ public final class ShareSession implements AutoCloseable {
         void notice(String message);
         void closed();
         default void failure(Exception problem) { }
+        default void sync(ShareWire.Frame frame) throws Exception { throw new IOException("Sync adapter unavailable"); }
+        default void attached(ShareSession session) { }
     }
     private final Socket socket; private final File cache; private final Events events;
     private final Object writing=new Object(), state=new Object();
     private final AtomicBoolean closed=new AtomicBoolean();
+    private final boolean persistent;
+    private volatile long lastRead=System.nanoTime();
     private final ExecutorService fileWorker=Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService timer=Executors.newSingleThreadScheduledExecutor();
     private final LinkedHashMap<UUID,byte[]> pending=new LinkedHashMap<>();
@@ -37,19 +41,32 @@ public final class ShareSession implements AutoCloseable {
         Job(File source,String name) { this.source=source; this.name=name; }
     }
     public ShareSession(Socket socket,File cache,Events events) throws IOException {
+        this(socket,cache,events,false);
+    }
+    public ShareSession(Socket socket,File cache,Events events,boolean persistent) throws IOException {
         this.socket=socket; this.cache=cache; this.events=events;
+        this.persistent=persistent;
         if(!cache.isDirectory() && !cache.mkdirs()) throw new IOException("File cache unavailable");
         socket.setSoTimeout(180000); socket.setTcpNoDelay(true);
     }
     public void start() {
-        timer.schedule(this::close,10,TimeUnit.MINUTES);
+        if(!persistent)timer.schedule(this::close,10,TimeUnit.MINUTES);
+        else timer.scheduleWithFixedDelay(()->{
+            if(System.nanoTime()-lastRead>TimeUnit.SECONDS.toNanos(90)){close();return;}
+            try{write(ClipboardSync.PING,new UUID(0,0),new byte[0]);}catch(IOException e){close();}
+        },30,30,TimeUnit.SECONDS);
         Thread reader=new Thread(this::readLoop,"floatclip-share-reader"); reader.start();
     }
+    public boolean isClosed(){return closed.get();}
     private void write(int type,UUID id,byte[] data) throws IOException {
         synchronized(writing) {
             if(closed.get()) throw new IOException("Session closed");
             ShareWire.write(socket.getOutputStream(),new Frame(type,id,data));
         }
+    }
+    public void sendSync(ShareWire.Frame frame) throws IOException {
+        if(!persistent || frame.type<ClipboardSync.CLIP || frame.type>ClipboardSync.ACK)throw new IOException("Sync was not negotiated");
+        write(frame.type,frame.id,frame.data);
     }
     public void sendText(String value) throws IOException {
         byte[] bytes=value.getBytes(StandardCharsets.UTF_8);
@@ -142,6 +159,13 @@ public final class ShareSession implements AutoCloseable {
         finally { close(); }
     }
     private void handle(Frame f) throws Exception {
+        lastRead=System.nanoTime();
+        if(f.type>=ClipboardSync.CLIP){
+            if(!persistent)throw new IOException("Sync was not negotiated");
+            if(f.type==ClipboardSync.PING)write(ClipboardSync.PONG,f.id,new byte[0]);
+            else if(f.type!=ClipboardSync.PONG)events.sync(f);
+            return;
+        }
         if(f.type==TEXT) {
             String value=ShareWire.text(f.data); byte[] hash=digest(f.data); boolean fresh;
             synchronized(state) {

@@ -212,3 +212,126 @@ ADB 查询结果仍为 `devices=[]`。不能把回环连接或编译通过写成
 5. 最后才进入已确认的单一应用壳 UI 迁移与用户逐页验收。
 
 发布边界不变：当前开发分支不改正式版本号、不部署 PWA、不更新 feed、不发布 APK / Windows 包。
+
+## 23:xx–00:44 蓝牙短连接路线与真机准备
+
+用户明确调整日常传输偏好：热点只应作为测试 / 兜底，不应要求任意一台设备长期开启热点。手机与 Windows 平时通常都保持蓝牙开启，因此 FloatClip 应优先利用已有网络或蓝牙短连接；大内容再考虑临时 Wi-Fi 高速链路。
+
+### 传输策略
+
+本轮把长期“设备信任”与具体传输彻底分离：
+
+1. 设备关系仍由一次应用层核对生成的 32-byte token 建立。
+2. 稳定 relation key 为 `SHA-256(token)`，与 Android 旧 `peer-<hash(token)>` 身份统一。
+3. LAN、Bluetooth、后续 Wi-Fi Direct / Node 只能引用同一 relation，不各自重新配对。
+4. 当前选择策略：
+   - 已存在 LAN 会话时优先保留 LAN；
+   - 没有 LAN 时，已授权设备可建立 Bluetooth Classic RFCOMM 短连接；
+   - Bluetooth 不能抢占健康 LAN；LAN 可升级并替换 Bluetooth；
+   - Bluetooth burst 空闲约 12 秒即关闭；
+   - 关闭“自动连接”后不再监听 / 主动创建新的蓝牙短连接，当前已交付给同步核心的会话不被粗暴中断。
+5. 当前第一阶段 Bluetooth 仅服务于“已经完成 FloatClip 应用层授权”的设备。Windows 的系统蓝牙配对不等价于 FloatClip 信任。后续可再把首次应用层核对也迁到 Bluetooth transport。
+
+### Bluetooth transport 安全层
+
+新增跨平台 `TransportCrypto`，Bluetooth 本身只提供字节流，不承担 FloatClip 身份信任：
+
+- 长期 relation token 不在 Bluetooth 链路上传输；
+- 发起端仅发送 relation hash 用于对端本地查找；
+- 每次短连接使用新的 client/server nonce；
+- HMAC 双向证明双方持有同一 relation token；
+- HKDF 派生方向独立的 AES-GCM key / IV base；
+- record sequence 纳入 AEAD AAD；
+- 重放、乱序、篡改和错误 relation 会失败关闭；
+- 认证成功后直接把 secure InputStream/OutputStream 交给原有 `ShareSession + ClipboardSync`，不复制第二套剪贴板协议。
+
+验证：
+- Java Share core：120 checks；
+- Java ClipboardSync：46 checks；
+- Java TransportCrypto：8 checks，包含完整交互握手、AES-GCM、重放及篡改拒绝；
+- scoped discovery：5 checks；
+- C# ClipboardSync：46 checks，包含 Java/C# socket 与 TransportCrypto loopback；
+- Windows clipboard library：37 checks，包含 trusted relation / Bluetooth locator 持久化与迁移。
+
+### Android
+
+新增：
+- `BluetoothSyncTransport.kt`
+- `BluetoothSyncHost.java`
+
+行为：
+- Android 11 使用 Classic RFCOMM，不依赖 BLE 扫描；
+- 不做后台全量设备扫描，降低位置 / 附近设备权限依赖；
+- 已知 peer 的 Bluetooth address 写入设备绑定加密的 `TrustedPeerStore`；
+- 本地出现新可共享文本时才 nudge 已知 peer；
+- 同时提供受信设备 RFCOMM listener；
+- Bluetooth 开关变化后 transport 会自行恢复 listener；
+- master / reconnect 关闭会停止新 Bluetooth 建连；
+- Bluetooth session 不能替换当前 LAN session。
+
+最终最新源码 Android Gate：
+- Job `task-floatclip_sync_android_verify_offline-5e043465f9314adeb678`
+- `:app:assembleDebug`：通过
+- `:app:testDebugUnitTest`：通过
+- `:app:lintDebug`：通过
+- `BUILD SUCCESSFUL`
+- Artifact 注册：`artifact-2371c10e275d4c91a8211979c95628c0`
+- 该 Artifact 首次尝试发布临时 URL 时触发 SHA_MISMATCH 保护，因此没有把该登记记录直接交给用户；另起冻结 build 重新生成安装候选。
+
+### Windows
+
+新增：
+- `BluetoothSyncTransport.cs`
+- `TransportCrypto.cs`
+
+Windows 桌面项目 TFM 提升为 `net10.0-windows10.0.19041.0` 以使用 WinRT Bluetooth RFCOMM API。
+
+实现：
+- `RfcommServiceProvider` + `StreamSocketListener` 注册 FloatClip RFCOMM 服务；
+- 从 Windows 系统已经配对的 Bluetooth device 中寻找同 UUID 服务；
+- 初次 Bluetooth 成功后保存 Bluetooth address，仅作为 transport locator，不作为身份；
+- `NativeClipboardSync` 统一持有 LAN / Bluetooth session；
+- LAN priority 2，Bluetooth priority 1。
+
+最新 Windows Gate：
+- Job `task-floatclip_sync_windows_dev-7ff4d198a8c64d0a9a76`
+- self-contained win-x64 publish：成功
+- Artifact：`artifact-e6d1176084ae48a68b8a370249cd021b`
+- SHA-256：`433500f6ac1d7fd723ed12928cb055a3a5d060ac02f8208539deec538e080f9e`
+- 大小：199,926,655 bytes
+
+该 Windows 候选已经通过 Remote Commander 下载到真实 Windows，SHA-256 与服务器一致，并成功启动出可响应的 FloatClip 主窗口；未把内部候选当公开发布。
+
+### 真实 Windows / vivo Bluetooth 证据
+
+Remote Commander 设备 `Administrator` 在线。Windows PnP 检查确认：
+- Intel(R) Wireless Bluetooth(R) 正常；
+- `Bluetooth Device (RFCOMM Protocol TDI)` 正常；
+- 手机 `vivo t1` 已存在 Classic Bluetooth 设备节点；
+- 同时存在 BLE 设备节点。
+
+因此当前硬件具备 RFCOMM 真机验证条件，不需要重新做 Windows 系统层蓝牙配对。
+
+同时确认 Windows 当时实际 WLAN 仍是 `BUAA-Mobile`（10.33.64.236 / gateway 10.33.0.1），并未真正切到用户已开启的手机热点。这不影响最终 Bluetooth-only 验收目标，但首次 FloatClip 应用层核对如果被校园网隔离阻断，仍可能需要临时切一次热点。
+
+Windows / OrangePi ADB 当前均未枚举手机，Windows `adb mdns services` 也没有发现无线调试服务。因此 Android 安装不能冒充为已自动完成。
+
+### 当前源码提交
+
+`21e0368 Add authenticated Bluetooth burst clipboard transport`
+
+该提交之后不再修改 Bluetooth 功能源码，后续首先做安装与真机闭环。
+
+### 下一真机验收顺序
+
+1. 安装 Android 内部候选。
+2. 启动 Windows 内部候选与 Android 共享总开关。
+3. 先完成一次 FloatClip 应用层设备核对；如 BUAA-Mobile 客户端隔离则临时让 Windows 真正切到手机热点。
+4. 确认双方 relation token / relation key 都已持久化。
+5. 断开共同局域网，让两端处于不同网络或 Windows 回到校园网，只保持系统 Bluetooth。
+6. Windows → Android：复制短文本，观察 RFCOMM 短连、FCP3 HELLO / CLIP / ACK、历史 / 系统剪贴板与 12 秒释放。
+7. Android → Windows：同样验证，并确认 Android 已从入站 Bluetooth 学到 Windows address 后可主动短连。
+8. 验证连续复制、关/开自动连接、LAN 存在时不被 Bluetooth 抢占、LAN 消失后 Bluetooth fallback。
+9. 通过后再评估图片 / 文件的 Wi-Fi Direct upgrade，不把 RFCOMM 强行用于大内容。
+
+发布边界不变：这是内部开发候选，不改正式版本、不更新 feed、不部署公开 PWA。

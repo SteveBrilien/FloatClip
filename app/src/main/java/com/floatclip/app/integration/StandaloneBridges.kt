@@ -1,9 +1,9 @@
 package com.floatclip.app.integration
 
-import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import com.floatclip.app.accessibility.PasteAccessibilityService
+import com.floatclip.app.clipboard.ClipboardWrites
 
 class AndroidClipboardBridge(context: Context) : ClipboardBridge {
     private val appContext = context.applicationContext
@@ -32,7 +32,7 @@ class AndroidClipboardBridge(context: Context) : ClipboardBridge {
     }
 
     override fun writeText(text: String): Boolean = runCatching {
-        clipboard.setPrimaryClip(ClipData.newPlainText("FloatClip", text))
+        ClipboardWrites.write(appContext, clipboard, text)
         true
     }.getOrDefault(false)
 }

@@ -28,10 +28,10 @@ class EntrySwipeActions(
                 addView(ImageView(context).apply {
                     setImageResource(icon)
                     imageTintList = ColorStateList.valueOf(tint)
-                }, LayoutParams(dp(18), dp(18)))
+                }, LayoutParams(dp(24), dp(24)))
                 addView(TextView(context).apply {
                     text = label
-                    textSize = 11.5f
+                    textSize = 13f
                     gravity = Gravity.CENTER
                     setTextColor(tint)
                     setPadding(0, dp(5), 0, 0)

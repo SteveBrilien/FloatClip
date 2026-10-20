@@ -13,7 +13,7 @@ from pathlib import Path
 
 from aiohttp import web, WSMsgType
 
-VERSION = '0.6.0'
+VERSION = '0.7.1'
 COOKIE = '__Host-floatclip'
 MAX_BODY = 72000
 TTL = 120
@@ -353,7 +353,7 @@ def create_app(config, state_path, static_path):
         p = (root / name).resolve()
         if not p.is_relative_to(root) or not p.is_file():
             raise web.HTTPNotFound()
-        allowed = name in ('index.html', 'sw.js', 'manifest.webmanifest', 'favicon.svg', 'offline.html', 'release.json') or name.startswith(('assets/', 'icons/'))
+        allowed = name in ('index.html', 'sw.js', 'manifest.webmanifest', 'favicon.svg', 'floatclip-icon.svg', 'offline.html', 'release.json') or name.startswith(('assets/', 'icons/'))
         if not allowed:
             raise web.HTTPNotFound()
         result = web.FileResponse(p)

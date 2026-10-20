@@ -704,6 +704,22 @@ class ClipboardOverlayService : Service() {
         }
     }
 
+    private var lastDeletedEntry: ClipEntry? = null
+    private fun appendUndo(container: LinearLayout) {
+        val removed=lastDeletedEntry ?: return
+        val palette=themeProvider.palette()
+        container.addView(TextView(this).apply {
+            text="记录已删除 · 撤销";textSize=14f;gravity=Gravity.CENTER;minimumHeight=dp(48)
+            setTextColor(palette.primaryText)
+            setOnClickListener {
+                runCatching { store.restore(removed) }.onSuccess { lastDeletedEntry=null;renderEntries() }
+                    .onFailure { Toast.makeText(this@ClipboardOverlayService,"暂时无法恢复",Toast.LENGTH_SHORT).show() }
+            }
+        })
+    }
+    private fun deleteClip(entry: ClipEntry) {
+        store.delete(entry.id);lastDeletedEntry=entry;dismissEntryActionLayer(animated=false);renderEntries()
+    }
     private fun renderEntries() {
         if (!panelOpen || panelCollapsing) return
         val container = listContainer ?: return
@@ -723,9 +739,11 @@ class ClipboardOverlayService : Service() {
                 setTextColor(palette.secondaryText)
                 setPadding(dp(10), dp(28), dp(10), dp(28))
             })
+            appendUndo(container)
             return
         }
         items.forEach { container.addView(createClipRow(it)) }
+        appendUndo(container)
     }
 
     private fun renderCategoryBar() {
@@ -764,60 +782,19 @@ class ClipboardOverlayService : Service() {
 
     private fun createClipRow(entry: ClipEntry): View {
         val palette = themeProvider.palette()
-        val alpha = percentAlpha(overlayPreferences.panelAlphaPercent())
         val wrapper = EntryGestureRow(this)
-
-        val pinnedColor = if (entry.pinned) {
-            blendColor(palette.rowBackground, if (palette.isDark) Color.WHITE else ACCENT_BLUE, if (palette.isDark) 0.08f else 0.10f)
-        } else {
-            palette.rowBackground
-        }
-        val front = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(10), dp(11), dp(10))
-            background = roundedBackground(
-                withAlpha(pinnedColor, min(252, alpha + 18)),
-                palette.rowCornerRadiusDp,
-            )
-        }
-        front.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(TextView(this@ClipboardOverlayService).apply {
-                text = entry.text
-                maxLines = 2
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                textSize = 14.5f
-                setTextColor(palette.primaryText)
-            }, LinearLayout.LayoutParams(0, -2, 1f))
-            if (entry.pinned) addView(ImageView(this@ClipboardOverlayService).apply {
-                setImageResource(R.drawable.ic_pin)
-                imageTintList = ColorStateList.valueOf(ACCENT_BLUE)
-                contentDescription = "已置顶"
-            }, LinearLayout.LayoutParams(dp(17), dp(17)).apply { marginStart = dp(10) })
-        })
-        if (entry.category != CategoryStore.DEFAULT_CATEGORY) {
-            front.addView(TextView(this).apply {
-                text = entry.category
-                textSize = 11.3f
-                setTextColor(palette.secondaryText)
-                setPadding(0, dp(5), 0, 0)
-            })
-        }
+        val front=com.floatclip.app.overlay.ui.ClipboardCard(this,entry,palette.isDark,palette.primaryText,palette.rowBackground,true)
+        wrapper.contentDescription=entry.text+"，来源："+entry.sourceDeviceName+(if(entry.pinned) "，已置顶" else "")
 
         wrapper.bind(front, EntrySwipeActions(this, entry.pinned, palette.isDark,
             onPin = { store.togglePinned(entry.id); renderEntries() },
-            onDelete = { showEntryMenu(entry, confirmingDelete = true, anchor = wrapper) },
-        ), dp(132))
+            onDelete = { deleteClip(entry) },
+        ), dp(148))
         wrapper.onSingleTap = {
-            clipboard.writeText(entry.text)
-            Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
+            val pasted=PasteAccessibilityService.paste(entry.text)
+            if(!pasted) clipboard.writeText(entry.text)
+            Toast.makeText(this, if(pasted) "已粘贴" else "已复制", Toast.LENGTH_SHORT).show()
             if (!panelPinnedMode) collapsePanel()
-        }
-        wrapper.onDoubleTap = {
-            store.togglePinned(entry.id)
-            renderEntries()
         }
         wrapper.onLongPress = { showEntryMenu(entry, anchor = wrapper) }
         return wrapper.apply {
@@ -871,7 +848,7 @@ class ClipboardOverlayService : Service() {
                 addView(ImageView(this@ClipboardOverlayService).apply {
                     setImageResource(icon)
                     imageTintList = ColorStateList.valueOf(tint)
-                }, LinearLayout.LayoutParams(dp(19), dp(19)).apply { marginEnd = dp(12) })
+                }, LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginEnd = dp(12) })
                 addView(TextView(this@ClipboardOverlayService).apply {
                     text = label
                     textSize = 14f
@@ -984,7 +961,7 @@ class ClipboardOverlayService : Service() {
         if (!panelOpen || panelCollapsing) return
         val panel = panelView ?: return
         val generation = ++clipboardCaptureGeneration
-        val text = runCatching { clipboard.readCurrentText() }.getOrNull()
+        val text = runCatching { clipboard.readCurrentText(forCapture = true) }.getOrNull()
         if (generation != clipboardCaptureGeneration || panelView !== panel) return
         if (!text.isNullOrBlank() && text != lastCapturedClipboard) {
             lastCapturedClipboard = text

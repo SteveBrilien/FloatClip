@@ -1,11 +1,11 @@
 {
   "product": "FloatClip",
-  "designRevision": "2026.10-blue-2",
-  "releaseTrain": "2026.10.20-unified",
+  "designRevision": "2026.10-clipboard-3",
+  "releaseTrain": "2026.10.20-clipboard-candidate",
   "versions": {
-    "android": "0.6.0",
-    "windows": "0.6.0",
-    "web": "0.6.0"
+    "android": "0.7.1",
+    "windows": "0.7.1",
+    "web": "0.7.1"
   },
   "capabilities": {
     "web": [
@@ -60,11 +60,14 @@
     ]
   },
   "pending": [
-    "persistent-peer-trust-web-v1",
+    "android11-background-capture-acceptance",
     "automatic-reconnect",
-    "web-push",
     "ble-discovery",
     "bluetooth-rfcomm",
+    "continuous-clipboard-handoff",
+    "cross-transport-device-identity",
+    "persistent-peer-trust-web-v1",
+    "web-push",
     "wifi-direct-concurrency"
   ],
   "releasePolicy": "Shared feature changes require Android, Windows and Web status, validation and migration notes before release.",
@@ -118,28 +121,30 @@
   "nativeHost": {
     "bridge": 1,
     "androidPackage": "com.floatclip.probe",
-    "windowsRuntime": "Microsoft Edge WebView2",
+    "windowsRuntime": "WebView2 only for the optional node route",
     "legacyProtocol": "FCP2/FCS1",
     "minimumVersion": "0.6.0",
-    "androidSignerSha256": "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c"
+    "androidSignerSha256": "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c",
+    "androidLauncher": "native-clipboard",
+    "windowsLauncher": "native-clipboard"
   },
   "downloads": {
     "android": {
-      "version": "0.6.0",
-      "build": 12,
-      "url": "https://mcp.wmy-cloud.cn/artifacts/pub-deb7a135ca4344749a82db98deb988c0/FloatClip-0.6.0.apk?exp=0&sig=7a12788ba4403045e363bfb24dc082aafca64b64c0f198a2befa528b25eca7ab",
-      "sha256": "f727efd94a8895abcba1c55bf54b344c923ff57bf941f7e93ceb53fe3624e805",
-      "bytes": 3022476,
+      "version": "0.7.1",
+      "build": 14,
+      "url": "https://mcp.wmy-cloud.cn/artifacts/pub-77ecbc0dd714447cb32a1650e906149b/FloatClip-0.7.1.apk?exp=0&sig=d4c785bf81f495a57bdfc0409f30e5138546b35b55b080da36db1b17b8f8a9f4",
+      "sha256": "7001a3368aedc3b969af6f40ebc35390c61031b8ec817c10444fa9c40ce5ea72",
+      "bytes": 3078476,
       "status": "available",
       "package": "com.floatclip.probe",
       "signerSha256": "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c"
     },
     "windows": {
-      "version": "0.6.0",
-      "build": 12,
-      "url": "https://mcp.wmy-cloud.cn/artifacts/pub-d65ee49ccca24e39b49f3d4ad115779a/FloatClip-Windows-0.6.0.zip?exp=0&sig=77d00148aa129bc55a313a60349e4b30561479c419cf911e17da4b030ee5c4d9",
-      "sha256": "691e4a8d6bac9ffb482222a3a6f733ab44faedaa10c7818020cc7b52db91dc1e",
-      "bytes": 59266873,
+      "version": "0.7.1",
+      "build": 14,
+      "url": "https://mcp.wmy-cloud.cn/artifacts/pub-4b76a3ee65394f4391bec21e73fa7b19/FloatClip-Windows-0.7.1.zip?exp=0&sig=67ac6e7d636ab6e09834b2be6fa6bf7191eebf93826f2a024c8124583ada35af",
+      "sha256": "4652c3003cfd3d4e641b78140c56088b50c6b4c2222b66f56327d25877a80300",
+      "bytes": 69688590,
       "status": "available"
     }
   },
@@ -147,5 +152,24 @@
     "android": "available",
     "windows": "available",
     "web": "available"
+  },
+  "interoperability": {
+    "nativeLAN": [
+      "android",
+      "windows"
+    ],
+    "nodeWeb": [
+      "android-node-entry",
+      "windows-node-entry",
+      "ipad-pwa"
+    ],
+    "automaticClipboardSync": "pending"
+  },
+  "channel": "candidate",
+  "deviceAcceptance": {
+    "android11": "pending",
+    "windows10": "pending",
+    "windows11": "pending",
+    "ipad16": "pending"
   }
 }

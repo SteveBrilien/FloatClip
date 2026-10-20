@@ -24,6 +24,8 @@ final class LanPair implements AutoCloseable {
     private final Events events; private final ShareSession.Events messages;
     private final ExecutorService workers=Executors.newFixedThreadPool(2);
     private final ScheduledExecutorService timer=Executors.newSingleThreadScheduledExecutor();
+    private volatile String peerId="";
+    String peerIdentity() { return peerId; }
     private volatile boolean closed; private ServerSocket listener; private DatagramSocket discovery;
     private Socket socket; private ShareSession session;
     LanPair(File cache, SharedPreferences trust, Events events, ShareSession.Events messages) {
@@ -88,6 +90,7 @@ final class LanPair implements AutoCloseable {
                         synchronized(this) {
                             if(closed) return;
                             expiry.cancel(false); udp.close(); server.close(); listener=null; discovery=null;
+                            peerId=hex(MessageDigest.getInstance("SHA-256").digest(token));
                             session=new ShareSession(peer,cache,messages); events.connected(session); session.start();
                         }
                         return;

@@ -15,7 +15,7 @@ namespace FloatClip.Desktop;
 
 public sealed class UnifiedWindow:Window
 {
-    public const string Version="0.6.0",Origin="https://clip.wmy-cloud.cn";
+    public const string Version="0.7.1",Origin="https://clip.wmy-cloud.cn";
     readonly ClipboardVault vault=new();
     readonly string root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"FloatClip","Host");
     WebView2? browser;
@@ -30,7 +30,7 @@ public sealed class UnifiedWindow:Window
             browser?.Dispose();Directory.CreateDirectory(root);var view=new WebView2();browser=view;Content=view;
             var environment=await CoreWebView2Environment.CreateAsync(null,Path.Combine(root,"Profile"));
             await view.EnsureCoreWebView2Async(environment);var core=view.CoreWebView2;
-            core.Settings.UserAgent=core.Settings.UserAgent+" FloatClipNative/1 Windows/0.6.0";
+            core.Settings.UserAgent=core.Settings.UserAgent+" FloatClipNative/1 Windows/0.7.1";
             core.Settings.AreHostObjectsAllowed=false;core.Settings.IsWebMessageEnabled=true;core.Settings.AreDevToolsEnabled=false;core.Settings.IsStatusBarEnabled=false;
             core.NavigationStarting+=(_,e)=>{if(IsTrusted(e.Uri))return;e.Cancel=true;if(e.IsUserInitiated)External(e.Uri);};
             core.NewWindowRequested+=(_,e)=>{e.Handled=true;if(e.IsUserInitiated)External(e.Uri);};
@@ -47,7 +47,7 @@ public sealed class UnifiedWindow:Window
             };
             core.ProcessFailed+=(_,_)=>Fallback("共享页面的运行组件已停止，请重新打开。",false);
             view.NavigationCompleted+=(_,e)=>{if(!e.IsSuccess)Fallback("无法打开共享页面，请检查网络或先使用本机功能。",false);};
-            core.Navigate(Origin+"/");
+            core.Navigate(Origin+"/?screen=devices");
         }catch(WebView2RuntimeNotFoundException){Fallback("首次使用需要 Microsoft Edge WebView2 Runtime。安装后重新打开 FloatClip。",true);}
         catch{Fallback("共享页面暂不可用，本机剪贴板与原有局域网模式仍可使用。",true);}
     }
@@ -58,12 +58,12 @@ public sealed class UnifiedWindow:Window
             case "vault.load":return vault.Load();
             case "vault.commit":return vault.Commit(a["revision"]!.GetValue<string>(),a["entries"]!.AsArray());
             case "clipboard.read":{string value=Clipboard.ContainsText()?Clipboard.GetText():"";if(value.Length>1000000)throw new IOException("剪贴板文字过长");return value;}
-            case "clipboard.write":{string value=a["text"]!.GetValue<string>();if(value.Length>1000000)throw new IOException("文字过长");Clipboard.SetText(value);return true;}
+            case "clipboard.write":{string value=a["text"]!.GetValue<string>();if(value.Length>1000000)throw new IOException("文字过长");ClipboardWrites.Write(value);return true;}
             case "theme.set":{
                 string mode=a["theme"]!.GetValue<string>();browser!.CoreWebView2.Profile.PreferredColorScheme=mode switch{"dark"=>CoreWebView2PreferredColorScheme.Dark,"light"=>CoreWebView2PreferredColorScheme.Light,"system"=>CoreWebView2PreferredColorScheme.Auto,_=>throw new IOException("主题无效")};
                 File.WriteAllText(Path.Combine(root,"theme.txt"),mode);Background=Brush(mode=="dark"?"#0C1422":"#F4F7FC");return true;}
             case "legacy.open":{
-                string page=a["page"]!.GetValue<string>();if(page=="lan")new MainWindow().Show();else if(page=="clipboard")new LocalClipboardWindow(vault).Show();else throw new IOException("页面无效");return true;}
+                string page=a["page"]!.GetValue<string>();if(page=="lan")new MainWindow(vault).Show();else if(page=="clipboard")new LocalClipboardWindow(vault).Show();else throw new IOException("页面无效");return true;}
             case "file.begin":{
                 if(transfer!=null)throw new IOException("请先完成当前文件保存");string name=a["name"]!.GetValue<string>();long size=a["size"]!.GetValue<long>();
                 if(size<0||size>64L*1024*1024||string.IsNullOrWhiteSpace(name))throw new IOException("文件信息无效");
@@ -90,7 +90,7 @@ public sealed class UnifiedWindow:Window
         panel.Children.Add(new TextBlock{Text="FloatClip",FontSize=32,Foreground=Brush("#19283F"),Margin=new(0,0,0,18)});
         panel.Children.Add(new TextBlock{Text=message,FontSize=16,TextWrapping=TextWrapping.Wrap,Foreground=Brush("#596C85"),Margin=new(0,0,0,20)});
         void Button(string label,Action action){var b=new Button{Content=label,Padding=new(18,11,18,11),Margin=new(0,5,0,5),HorizontalContentAlignment=HorizontalAlignment.Center};b.Click+=(_,_)=>{try{action();}catch{MessageBox.Show(this,"暂时无法打开，请稍后重试。","FloatClip");}};panel.Children.Add(b);}
-        Button("重新打开共享",()=>_ = Open());Button("本机剪贴板",()=>new LocalClipboardWindow(vault).Show());Button("局域网兼容模式",()=>new MainWindow().Show());
+        Button("重新打开共享",()=>_ = Open());Button("本机剪贴板",()=>new LocalClipboardWindow(vault).Show());Button("局域网设备",()=>new MainWindow(vault).Show());
         if(install)Button("安装 Microsoft WebView2",()=>External("https://developer.microsoft.com/microsoft-edge/webview2/"));
         Button("在浏览器打开",()=>External(Origin));Content=panel;
     }

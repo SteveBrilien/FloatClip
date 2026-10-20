@@ -1,7 +1,6 @@
 package com.floatclip.app
 
 import android.app.Activity
-import android.content.ClipData
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
@@ -33,6 +32,7 @@ import android.widget.Toast
 import com.floatclip.app.accessibility.PasteAccessibilityService
 import com.floatclip.app.backup.VaultBackupManager
 import com.floatclip.app.clipboard.ClipStore
+import com.floatclip.app.clipboard.ClipboardWrites
 import com.floatclip.app.integration.IntegrationRegistry
 import com.floatclip.app.model.ClipEntry
 import com.floatclip.app.overlay.ClipboardOverlayService
@@ -40,8 +40,13 @@ import com.floatclip.app.prefs.CategoryStore
 import com.floatclip.app.prefs.OverlayPreferences
 import com.floatclip.app.prefs.OverlayThemeMode
 import com.floatclip.app.security.VaultSettings
+import com.floatclip.app.clipboard.ClipboardQuery
+import com.floatclip.app.overlay.ui.ClipboardCard
+import android.text.Editable
+import android.text.TextWatcher
+import android.content.ClipboardManager
 
-class MainActivity : Activity() {
+open class MainActivity : Activity() {
     private lateinit var categoryStore: CategoryStore
     private lateinit var clipStore: ClipStore
     private lateinit var overlayPreferences: OverlayPreferences
@@ -50,10 +55,15 @@ class MainActivity : Activity() {
     private lateinit var content: LinearLayout
     private lateinit var colors: AppColors
     private var searchQuery: String = ""
-    private var currentPage: Int = PAGE_STATUS
+    private var currentPage: Int = PAGE_CLIPBOARD
     private var categoryManagement = false
     private var settingsSection = ""
     private var historyCategory: String = ALL_CATEGORY
+    private var sourceFilter = ""
+    private var historyList: LinearLayout? = null
+    private var undoEntry: ClipEntry? = null
+    private var undoBar: LinearLayout? = null
+    private val clipboardChanged = ClipboardManager.OnPrimaryClipChangedListener { captureCurrentClipboard() }
 
     private val overlayServiceIntent by lazy(LazyThreadSafetyMode.NONE) {
         Intent(this, ClipboardOverlayService::class.java)
@@ -67,16 +77,21 @@ class MainActivity : Activity() {
         overlayPreferences = OverlayPreferences(this)
         vaultSettings = VaultSettings(this)
         vaultBackupManager = VaultBackupManager(this)
-        currentPage = savedInstanceState?.getInt(STATE_PAGE, PAGE_STATUS) ?: PAGE_STATUS
+        currentPage = savedInstanceState?.getInt(STATE_PAGE, PAGE_CLIPBOARD) ?: PAGE_CLIPBOARD
+        searchQuery = savedInstanceState?.getString("searchQuery").orEmpty()
+        sourceFilter = savedInstanceState?.getString("sourceFilter").orEmpty()
         settingsSection = savedInstanceState?.getString("settingsSection").orEmpty()
         categoryManagement = savedInstanceState?.getBoolean("categoryManagement") ?: false
         render()
+        getSystemService(ClipboardManager::class.java).addPrimaryClipChangedListener(clipboardChanged)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putInt(STATE_PAGE, currentPage)
         outState.putString("settingsSection", settingsSection)
         outState.putBoolean("categoryManagement", categoryManagement)
+        outState.putString("searchQuery",searchQuery)
+        outState.putString("sourceFilter",sourceFilter)
         super.onSaveInstanceState(outState)
     }
 
@@ -85,13 +100,43 @@ class MainActivity : Activity() {
         when {
             currentPage == PAGE_SETTINGS && settingsSection.isNotEmpty() -> { settingsSection = ""; render() }
             currentPage == PAGE_CLIPBOARD && categoryManagement -> { categoryManagement = false; render() }
+            currentPage != PAGE_CLIPBOARD -> { currentPage=PAGE_CLIPBOARD; settingsSection=""; render() }
             else -> super.onBackPressed()
         }
     }
 
     override fun onResume() {
         super.onResume()
-        if (::content.isInitialized) render()
+        if (::content.isInitialized) {
+            if(currentPage==PAGE_CLIPBOARD && currentFocus is EditText && historyList?.isAttachedToWindow==true) refreshHistory() else render()
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if(hasFocus && ::clipStore.isInitialized) captureCurrentClipboard()
+    }
+    override fun onConfigurationChanged(newConfig: Configuration) { super.onConfigurationChanged(newConfig); render() }
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if(event.actionMasked==MotionEvent.ACTION_DOWN) EntryGestureRow.closeOutside(event.rawX,event.rawY)
+        return super.dispatchTouchEvent(event)
+    }
+    override fun onDestroy() {
+        getSystemService(ClipboardManager::class.java).removePrimaryClipChangedListener(clipboardChanged)
+        super.onDestroy()
+    }
+    private fun captureCurrentClipboard() {
+        // A focused read is valid on Android 11; no focus stealing or background polling.
+        if(!hasWindowFocus() || !::clipStore.isInitialized) return
+        val manager=getSystemService(ClipboardManager::class.java)
+        val clip=runCatching { manager.primaryClip }.getOrNull() ?: return
+        if(ClipboardWrites.isOwnClip(this,clip.description)) return
+        val value=clip.takeIf { it.itemCount>0 }?.getItemAt(0)?.text?.toString()
+        if(value.isNullOrBlank()) return
+        runCatching {
+            if(clipStore.entries().firstOrNull { it.sourceDeviceId=="local" }?.text!=value.trim()) clipStore.addText(value)
+            if(currentPage==PAGE_CLIPBOARD && historyList?.isAttachedToWindow==true) refreshHistory()
+        }
     }
 
     @Deprecated("Legacy activity result is sufficient for the fixed Android 11 target")
@@ -124,6 +169,8 @@ class MainActivity : Activity() {
     }
 
     private fun render() {
+        historyList=null
+        undoBar=null
         colors = resolveAppColors()
         applySystemBars()
 
@@ -137,14 +184,14 @@ class MainActivity : Activity() {
         }
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(20), dp(18), dp(28))
+            setPadding(dp(18), dp(6), dp(18), dp(24))
         }
         scroll.addView(
             content,
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
         )
         root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        root.addView(bottomNavigation(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
+        root.isFocusableInTouchMode=true
         setContentView(root)
 
         renderHeader()
@@ -153,21 +200,22 @@ class MainActivity : Activity() {
             PAGE_SETTINGS -> renderSettingsPage()
             else -> renderStatusPage()
         }
+        root.requestFocus()
     }
 
     private fun headerIcon(icon: Int, label: String, action: () -> Unit): View =
         ImageView(this).apply {
             setImageResource(icon)
             imageTintList = ColorStateList.valueOf(colors.primaryText)
-            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            minimumWidth=dp(48); minimumHeight=dp(48)
             contentDescription = label
             background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(colors.actionBackground), null, null)
             setOnClickListener { action() }
         }
 
     private fun renderHeader() {
-        val nested = currentPage == PAGE_SETTINGS && settingsSection.isNotEmpty() ||
-            currentPage == PAGE_CLIPBOARD && categoryManagement
+        val nested = currentPage != PAGE_CLIPBOARD || categoryManagement
         val title = when (currentPage) {
             PAGE_CLIPBOARD -> if (categoryManagement) "分类" else "剪贴板"
             PAGE_SETTINGS -> settingsSection.ifEmpty { "设置" }
@@ -178,19 +226,20 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         if (nested) bar.addView(headerIcon(R.drawable.ic_chevron_left, "返回") {
-            settingsSection = ""
-            categoryManagement = false
-            render()
-        }, LinearLayout.LayoutParams(dp(40), dp(44)).apply { marginEnd = dp(4) })
-        bar.addView(textView(title, if (nested) 21f else 25f, true), LinearLayout.LayoutParams(0, dp(52), 1f))
+            onBackPressed()
+        }.apply { id=R.id.clipboard_back }, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(4) })
+        if(!nested) bar.addView(ImageView(this).apply { setImageResource(R.drawable.ic_floatclip_app); importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO },LinearLayout.LayoutParams(dp(28),dp(28)).apply { marginEnd=dp(10) })
+        bar.addView(textView(title, 21f, true), LinearLayout.LayoutParams(0, dp(56), 1f))
         if (currentPage == PAGE_CLIPBOARD && !categoryManagement) {
-            bar.addView(headerIcon(R.drawable.ic_folder, "管理分类") {
-                categoryManagement = true
-                render()
-            }, LinearLayout.LayoutParams(dp(44), dp(44)))
+            bar.addView(headerIcon(R.drawable.ic_device_computer, "我的设备") {
+                startActivity(Intent(this,DeviceActivity::class.java).putExtra("devicesOnly",true))
+            }.apply { id=R.id.clipboard_devices }, LinearLayout.LayoutParams(dp(48), dp(48)))
+            bar.addView(headerIcon(R.drawable.ic_settings_controls,"设置") {
+                currentPage=PAGE_SETTINGS; settingsSection=""; render()
+            }.apply { id=R.id.clipboard_settings },LinearLayout.LayoutParams(dp(48),dp(48)))
         }
         content.addView(bar)
-        spacer(14)
+        spacer(8)
     }
 
     private fun renderStatusPage() {
@@ -303,51 +352,74 @@ class MainActivity : Activity() {
 
     private fun renderClipboardPage() {
         if (categoryManagement) { renderCategoryManager(); return }
-        content.addView(historyCategorySelector())
-        spacer(9)
         val searchCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             background = roundedBackground(colors.fieldBackground, 13f)
         }
+        searchCard.addView(ImageView(this).apply {
+            setImageResource(R.drawable.ic_search); imageTintList=ColorStateList.valueOf(colors.secondaryText)
+            setPadding(dp(12),dp(12),dp(12),dp(12)); importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        },LinearLayout.LayoutParams(dp(48),dp(48)))
         val search = EditText(this).apply {
-            hint = "搜索内容或分类"
+            id=R.id.clipboard_search
+            hint = "搜索剪贴板"
             isSingleLine = true
-            textSize = 15f
+            textSize = 16f
             setText(searchQuery)
             setSelection(text.length)
             setTextColor(colors.primaryText)
             setHintTextColor(colors.secondaryText)
             background = null
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
-            setPadding(dp(13), 0, dp(6), 0)
+            setPadding(0, 0, dp(4), 0)
             setOnEditorActionListener { _, actionId, _ ->
                 if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
                     searchQuery = text.toString().trim()
-                    render()
+                    refreshHistory()
                     true
                 } else false
             }
         }
         searchCard.addView(search, LinearLayout.LayoutParams(0, dp(48), 1f))
-        searchCard.addView(headerIcon(R.drawable.ic_search, "搜索") {
-            searchQuery = search.text?.toString().orEmpty().trim()
-            render()
-        }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        val clear=headerIcon(R.drawable.ic_close,"清空搜索") { search.setText("") }.apply { visibility=if(searchQuery.isEmpty()) View.GONE else View.VISIBLE }
+        searchCard.addView(clear,LinearLayout.LayoutParams(dp(48),dp(48)))
         addCard(searchCard)
+        search.addTextChangedListener(object:TextWatcher {
+            override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int)=Unit
+            override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int) {
+                searchQuery=s?.toString().orEmpty(); clear.visibility=if(searchQuery.isEmpty()) View.GONE else View.VISIBLE
+                refreshHistory()
+            }
+            override fun afterTextChanged(s:Editable?)=Unit
+        })
+        val filterScroll=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false }
+        val filters=LinearLayout(this).apply { id=R.id.clipboard_sources; gravity=Gravity.CENTER_VERTICAL; setPadding(0,dp(8),0,dp(8)) }
+        val sources=listOf("" to "全部","local" to "本机")+clipStore.entries().filter { it.sourceDeviceId!="local" }.map { it.sourceDeviceId to it.sourceDeviceName }.distinctBy { it.first }
+        sources.take(8).forEach { (key,name) ->
+            filters.addView(textView(name,14f,false,if(sourceFilter==key) colors.accent else colors.secondaryText).apply {
+                gravity=Gravity.CENTER; setPadding(dp(13),0,dp(13),0); minimumHeight=dp(44)
+                background=roundedBackground(if(sourceFilter==key) colors.actionBackground else Color.TRANSPARENT,11f)
+                isSelected=sourceFilter==key; contentDescription="来源：$name"
+                setOnClickListener { sourceFilter=key; historyCategory=ALL_CATEGORY; render() }
+            },LinearLayout.LayoutParams(-2,dp(44)).apply { marginEnd=dp(4) })
+        }
+        filterScroll.addView(filters);content.addView(filterScroll)
+        historyList=LinearLayout(this).apply { id=R.id.clipboard_list; orientation=LinearLayout.VERTICAL }
+        content.addView(historyList)
+        undoBar=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL; visibility=View.GONE }
+        content.addView(undoBar)
+        refreshHistory(); showUndo()
+    }
 
-        val visibleHistory = clipStore.entries()
-            .filter { historyCategory == ALL_CATEGORY || it.category == historyCategory }
-            .filter(::matchesSearch)
-            .take(80)
+    private fun refreshHistory() {
+        val target=historyList ?: return
+        target.removeAllViews()
+        val visibleHistory=clipStore.entries().filter { ClipboardQuery.matches(it,searchQuery,sourceFilter) }
+            .filter { historyCategory==ALL_CATEGORY || it.category==historyCategory }.take(100)
         if (visibleHistory.isEmpty()) {
-            addCard(
-                card().apply {
-                    gravity = Gravity.CENTER
-                    addView(textView("暂无匹配记录", 14f, false, colors.secondaryText))
-                },
-                topMarginDp = 10,
-            )
+            target.addView(textView(if(searchQuery.isEmpty()) "这里还没有记录" else "没有匹配的记录",15f,false,colors.secondaryText).apply { gravity=Gravity.CENTER; setPadding(0,dp(28),0,dp(20)) })
+            if(searchQuery.isEmpty() && sourceFilter.isEmpty()) target.addView(compactTextAction("收录当前剪贴板") { captureCurrentClipboard();refreshHistory() })
         } else {
             visibleHistory.forEach { addHistoryCard(it) }
         }
@@ -404,10 +476,24 @@ class MainActivity : Activity() {
         addCard(card().apply { addView(themeSelector()) })
         spacer(12)
         addCard(card().apply {
+            addView(settingRow("悬浮窗","",if(overlayPreferences.overlayEnabled()) "已开启" else "已关闭") {
+                if(overlayPreferences.overlayEnabled()) stopOverlay() else startOverlay()
+            })
+            addView(divider())
+            addView(settingRow("设备特征色","",if(overlayPreferences.sourceColors()) "已开启" else "已关闭") { overlayPreferences.saveSourceColors(!overlayPreferences.sourceColors());render();notifyOverlayAppearanceChanged() })
+            addView(divider())
+            addView(settingRow("半透明色块","",if(overlayPreferences.translucentCards()) "已开启" else "已关闭") { overlayPreferences.saveTranslucentCards(!overlayPreferences.translucentCards());render();notifyOverlayAppearanceChanged() })
+        })
+        spacer(12)
+        addCard(card().apply {
             listOf("外观", "权限与后台", "备份与恢复").forEachIndexed { index, title ->
                 if (index > 0) addView(divider())
                 addView(settingRow(title, "", "›") { settingsSection = title; render() })
             }
+            addView(divider())
+            addView(settingRow("分类","","›") { currentPage=PAGE_CLIPBOARD;categoryManagement=true;render() })
+            addView(divider())
+            addView(settingRow("检查更新","","›") { checkClientUpdate() })
             addView(divider())
             addView(settingRow("关于", "", "›") {
                 android.app.AlertDialog.Builder(this@MainActivity).setTitle("FloatClip ${versionName()}")
@@ -844,53 +930,61 @@ class MainActivity : Activity() {
             entry.category.contains(searchQuery, ignoreCase = true)
 
     private fun addHistoryCard(entry: ClipEntry) {
-        val item = card()
-        item.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(textView(entry.text, 15f, false).apply {
-                maxLines = 2
-                ellipsize = android.text.TextUtils.TruncateAt.END
-            }, LinearLayout.LayoutParams(0, -2, 1f))
-            if (entry.pinned) addView(ImageView(this@MainActivity).apply {
-                setImageResource(R.drawable.ic_pin)
-                imageTintList = ColorStateList.valueOf(colors.accent)
-                contentDescription = "已置顶"
-            }, LinearLayout.LayoutParams(dp(17), dp(17)).apply { marginStart = dp(10) })
-        })
-        if (entry.category != CategoryStore.DEFAULT_CATEGORY) {
-            spacerInside(item, 5)
-            item.addView(textView(entry.category, 11.5f, false, colors.secondaryText))
-        }
+        val item=ClipboardCard(this,entry,colors.dark,colors.primaryText,colors.cardBackground)
         val wrapper = EntryGestureRow(this)
+        wrapper.contentDescription=entry.text+"，来源："+entry.sourceDeviceName+(if(entry.pinned) "，已置顶" else "")
         wrapper.bind(item, EntrySwipeActions(this, entry.pinned, colors.dark,
-            onPin = { clipStore.togglePinned(entry.id); render(); notifyOverlayAppearanceChanged() },
-            onDelete = {
-                android.app.AlertDialog.Builder(this).setTitle("删除这条记录？")
-                    .setNegativeButton("取消", null)
-                    .setPositiveButton("删除") { _, _ -> clipStore.delete(entry.id); render(); notifyOverlayAppearanceChanged() }.show()
-            },
-        ), dp(132))
+            onPin = { clipStore.togglePinned(entry.id); refreshHistory(); notifyOverlayAppearanceChanged() },
+            onDelete = { deleteEntry(entry) },
+        ), dp(148))
         wrapper.onSingleTap = {
-            getSystemService(android.content.ClipboardManager::class.java)
-                .setPrimaryClip(ClipData.newPlainText("FloatClip", entry.text))
+            ClipboardWrites.write(this,getSystemService(ClipboardManager::class.java),entry.text)
             Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
         }
-        wrapper.onDoubleTap = { clipStore.togglePinned(entry.id); render(); notifyOverlayAppearanceChanged() }
         wrapper.onLongPress = {
             android.app.AlertDialog.Builder(this)
-                .setTitle("词条选项")
-                .setItems(arrayOf("更改分类", if (entry.pinned) "取消置顶" else "置顶", "删除")) { _, which ->
+                .setTitle(entry.sourceDeviceName)
+                .setItems(arrayOf("查看全文", "更改分类", if (entry.pinned) "取消置顶" else "置顶", "删除")) { _, which ->
                     when (which) {
-                        0 -> showCategoryPicker(entry)
-                        1 -> { clipStore.togglePinned(entry.id); render(); notifyOverlayAppearanceChanged() }
-                        else -> android.app.AlertDialog.Builder(this)
-                            .setTitle("删除这条记录？").setNegativeButton("取消", null)
-                            .setPositiveButton("删除") { _, _ -> clipStore.delete(entry.id); render(); notifyOverlayAppearanceChanged() }.show()
+                        0 -> android.app.AlertDialog.Builder(this).setMessage(entry.text).setPositiveButton("关闭",null).setNeutralButton("复制") { _,_ -> ClipboardWrites.write(this,getSystemService(ClipboardManager::class.java),entry.text) }.show()
+                        1 -> showCategoryPicker(entry)
+                        2 -> { clipStore.togglePinned(entry.id); refreshHistory(); notifyOverlayAppearanceChanged() }
+                        else -> deleteEntry(entry)
                     }
                 }.show()
         }
-        content.addView(wrapper, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+        historyList?.addView(wrapper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+    }
+
+    private fun deleteEntry(entry: ClipEntry) {
+        clipStore.delete(entry.id);undoEntry=entry;refreshHistory();showUndo();notifyOverlayAppearanceChanged()
+    }
+    private fun showUndo() {
+        val row=undoBar ?: return
+        row.removeAllViews();row.visibility=if(undoEntry==null) View.GONE else View.VISIBLE
+        row.addView(textView("记录已删除",14f,false,colors.secondaryText),LinearLayout.LayoutParams(0,dp(48),1f))
+        row.addView(compactTextAction("撤销") {
+            val entry=undoEntry ?: return@compactTextAction
+            runCatching { clipStore.restore(entry) }.onSuccess { undoEntry=null;refreshHistory();showUndo();notifyOverlayAppearanceChanged() }
+                .onFailure { Toast.makeText(this,it.message ?: "暂时无法恢复",Toast.LENGTH_LONG).show() }
+        })
+    }
+    private fun checkClientUpdate() {
+        Toast.makeText(this,"正在检查更新…",Toast.LENGTH_SHORT).show()
+        Thread {
+            val result=runCatching { com.floatclip.probe.ShareUpdates.check() }
+            runOnUiThread {
+                if(isFinishing || isDestroyed) return@runOnUiThread
+                result.onSuccess { release ->
+                    val build=packageManager.getPackageInfo(packageName,0).longVersionCode
+                    val newer=release.build>build
+                    val dialog=android.app.AlertDialog.Builder(this).setTitle(if(newer) "发现 ${release.version}" else "当前版本 ${versionName()}")
+                        .setMessage(if(newer) release.notes else "已是此通道最新版本").setNegativeButton("关闭",null)
+                    if(newer) dialog.setPositiveButton("下载") { _,_ -> startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(release.url))) }
+                    dialog.show()
+                }.onFailure { Toast.makeText(this,"检查失败，请稍后重试",Toast.LENGTH_LONG).show() }
+            }
+        }.start()
     }
 
     @android.annotation.SuppressLint("ClickableViewAccessibility")
@@ -1079,8 +1173,8 @@ class MainActivity : Activity() {
             row.addView(ImageView(this).apply {
                 setImageResource(R.drawable.ic_chevron_right)
                 imageTintList = ColorStateList.valueOf(colors.secondaryText)
-                setPadding(dp(5), dp(5), dp(5), dp(5))
-            }, LinearLayout.LayoutParams(dp(24), dp(28)))
+                setPadding(0, 0, 0, 0)
+            }, LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart=dp(8) })
         }
         return row
     }
@@ -1133,7 +1227,7 @@ class MainActivity : Activity() {
         text = textValue
         textSize = sizeSp
         setTextColor(color)
-        if (bold) setTypeface(typeface, Typeface.BOLD)
+        if (bold) typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
         gravity = Gravity.CENTER_VERTICAL
     }
 

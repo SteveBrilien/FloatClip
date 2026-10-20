@@ -22,6 +22,10 @@ class OverlayPreferences(context: Context) {
     ).coerceIn(30, 120)
     fun keepAliveEnabled(): Boolean = prefs.getBoolean(KEY_KEEP_ALIVE_ENABLED, true)
     fun overlayEnabled(): Boolean = prefs.getBoolean(KEY_OVERLAY_ENABLED, false)
+    fun sourceColors(): Boolean = prefs.getBoolean("source_colors", true)
+    fun translucentCards(): Boolean = prefs.getBoolean("translucent_cards", false)
+    fun saveSourceColors(value: Boolean) { prefs.edit().putBoolean("source_colors",value).apply() }
+    fun saveTranslucentCards(value: Boolean) { prefs.edit().putBoolean("translucent_cards",value).apply() }
 
     fun panelAlphaPercent(): Int = prefs.getInt(KEY_PANEL_ALPHA_PERCENT, DEFAULT_PANEL_ALPHA_PERCENT).coerceIn(45, 100)
     fun panelWidthDp(): Int = prefs.getInt(KEY_PANEL_WIDTH_DP, DEFAULT_PANEL_WIDTH_DP).coerceIn(280, 420)

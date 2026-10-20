@@ -23,7 +23,8 @@ public static class Program
             if(args.Length==4 && args[0]=="--qa-nearby") { Acceptance.RunNearby(args[1],args[2],args[3]); return; }
             if(args.Length==3 && args[0]=="--qa") { Acceptance.Run(args[1],args[2]); return; }
             var app=new Application();
-            if(args.Length==0) { app.Run(new UnifiedWindow()); return; }
+            if(args.Length==0) { app.Run(new LocalClipboardWindow(new ClipboardVault())); return; }
+            if(args.Length==1 && args[0]=="--web") { app.Run(new UnifiedWindow()); return; }
             if(args.Length==1 && args[0]=="--clipboard") { app.Run(new LocalClipboardWindow(new ClipboardVault())); return; }
             var window=new MainWindow();
             if(args.Length==3 && args[0]=="--capture") {
@@ -49,6 +50,8 @@ public sealed class MainWindow : Window
 {
     readonly string root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"FloatClip","Share");
     readonly List<(Border Card,string? Path)> items=new();
+    readonly ClipboardVault? library;
+    System.Text.Json.Nodes.JsonObject? librarySource;
     Session? session; Offer? offer; bool closing,connecting; int generation;
     string theme="system";
     readonly PairStore pairStore;
@@ -65,8 +68,9 @@ public sealed class MainWindow : Window
     readonly FrameworkElement[] pages; readonly Button[] navigation;
     T Part<T>(string name) where T:class => (T)layout.FindName(name);
 
-    public MainWindow()
+    public MainWindow(ClipboardVault? library=null)
     {
+        this.library=library;
         Title="FloatClip"; Width=1000; Height=780; MinWidth=820; MinHeight=590;
         WindowStartupLocation=WindowStartupLocation.CenterScreen; FontFamily=new FontFamily("Microsoft YaHei UI, Segoe UI");
         Directory.CreateDirectory(root); Directory.CreateDirectory(Path.Combine(root,"Cache"));
@@ -88,7 +92,7 @@ public sealed class MainWindow : Window
         networks.ItemsSource=Nearby.Networks(); if(networks.Items.Count>0) networks.SelectedIndex=0;
         Part<Button>("Discover").Click+=async(_,_)=>await Discover();
         Part<Button>("RefreshNetworks").Click+=(_,_)=>{ discoveryCancel?.Cancel(); networks.ItemsSource=Nearby.Networks(); if(networks.Items.Count>0) networks.SelectedIndex=0; };
-        Part<Button>("CopyBypass").Click+=(_,_)=>Guard(()=>{ if(Network==null) throw new IOException("请先选择网络"); Clipboard.SetText("tun:\n  route-exclude-address:\n    - "+Network.Subnet); notice.Text="已复制当前网段的 TUN 排除片段；请合并并保留原配置"; });
+        Part<Button>("CopyBypass").Click+=(_,_)=>Guard(()=>{ if(Network==null) throw new IOException("请先选择网络"); ClipboardWrites.Write("tun:\n  route-exclude-address:\n    - "+Network.Subnet); notice.Text="已复制当前网段的 TUN 排除片段；请合并并保留原配置"; });
         Part<Button>("ForgetPeers").Click+=(_,_)=>Guard(()=>{ if(connecting) throw new IOException("请等待当前连接完成或取消后再移除"); if(MessageBox.Show(this,"移除所有记住的手机？下次连接需要重新核对识别码。","FloatClip",MessageBoxButton.OKCancel)!=MessageBoxResult.OK) return; Disconnect(); pairStore.Clear(); notice.Text="已移除记住的设备"; });
         Part<Button>("CheckUpdates").Click+=async(_,_)=>await CheckUpdates();
         Part<Button>("DownloadUpdate").Click+=(_,_)=>Guard(()=>{ if(updateRelease!=null) Process.Start(new ProcessStartInfo(updateRelease.Url){UseShellExecute=true}); });
@@ -123,7 +127,7 @@ public sealed class MainWindow : Window
             items.Clear(); inbox.Children.Clear(); inbox.Children.Add(EmptyInbox()); notice.Text="缓存已清理";
         });
         try { theme=System.IO.File.ReadAllText(Path.Combine(root,"theme.txt")).Trim(); } catch { }
-        SetTheme(theme,false); SelectPage(0); inbox.Children.Add(EmptyInbox());
+        SetTheme(theme,false); SelectPage(library==null?0:1); inbox.Children.Add(EmptyInbox());
         SystemEvents.UserPreferenceChanged+=SystemThemeChanged;
         Closing+=(_,_)=>{ closing=true; generation++; discoveryCancel?.Cancel(); pairCancel?.Cancel(); session?.Dispose(); SystemEvents.UserPreferenceChanged-=SystemThemeChanged; };
     }
@@ -173,6 +177,7 @@ public sealed class MainWindow : Window
             var connected=await Task.Run(()=>Nearby.Connect(device,Path.Combine(root,"Cache"),pairStore,code=>Dispatcher.Invoke(()=>
                 !closing && epoch==generation && MessageBox.Show(this,"请核对手机显示的识别码：\n\n"+code+"\n\n两端完全相同才继续；手机端也需要允许连接。","首次配对 · "+device.Name,MessageBoxButton.OKCancel,MessageBoxImage.Question)==MessageBoxResult.OK),cancel.Token));
             if(closing || epoch!=generation) { connected.Dispose(); return; }
+            librarySource=new System.Text.Json.Nodes.JsonObject{["id"]="lan-"+device.Pin.ToLowerInvariant(),["name"]=device.Name,["platform"]="android"};
             Attach(connected,epoch); status.Text=deviceStatus.Text="●  已连接 · "+device.Name; invite.Clear();
         } catch(IOException e) { if(epoch==generation) { status.Text=deviceStatus.Text="○  未连接"; notice.Text=e.Message; } }
         catch { if(epoch==generation) { status.Text=deviceStatus.Text="○  未连接"; notice.Text="连接已取消或超时，请重试"; } }
@@ -205,7 +210,7 @@ public sealed class MainWindow : Window
     void Attach(Session connected,int epoch)
     {
             session=connected; invite.Clear(); status.Text=deviceStatus.Text="●  已加密连接 · Android 临时设备"; notice.Text="已连接，可以共享文字和文件";
-            connected.Text=(value,outgoing)=>Ui(()=>{ if(epoch!=generation) return; AddItem(value,null,outgoing); notice.Text=outgoing ? "文字已送达" : "收到文字"; });
+            connected.Text=(value,outgoing)=>Ui(()=>{ if(epoch!=generation) return; AddItem(value,null,outgoing); if(library!=null)try{if(outgoing)library.AddText(value);else if(librarySource!=null)library.AddText(value,librarySource);}catch{notice.Text="文字已接收，保存到历史未完成";return;} notice.Text=outgoing ? "文字已送达" : "收到文字"; });
             connected.Offered=value=>Ui(()=>{ if(epoch!=generation) return; offer=value; offerName.Text=value.Name+" · "+Size(value.Size); offerCard.Visibility=Visibility.Visible; notice.Text="收到文件请求，请在共享页确认"; });
             connected.Progress=(name,done,total,outgoing)=>Ui(()=>{ if(epoch!=generation) return; Part<Button>("CancelTransfer").Visibility=Visibility.Visible; progress.Text=(outgoing ? "发送 " : "接收 ")+name; progressBar.Value=total==0 ? 100 : done*100.0/total; });
             connected.File=(value,path,outgoing)=>Ui(()=>{ if(epoch!=generation) return; progress.Text=value.Name+" · 已校验完成"; progressBar.Value=100; Part<Button>("CancelTransfer").Visibility=Visibility.Collapsed; AddItem(value.Name,outgoing ? null : path,outgoing,true); });
@@ -221,7 +226,7 @@ public sealed class MainWindow : Window
         card.SetResourceReference(Border.BackgroundProperty,"Card"); card.SetResourceReference(Border.BorderBrushProperty,"Line"); card.Child=panel;
         panel.Children.Add(Label(outgoing ? "已送达" : isFile ? "收到文件" : "收到文字",12,"Accent"));
         panel.Children.Add(Label(value.Length>500 ? value[..500]+"…" : value,15,"Text"));
-        if(!isFile) { var copy=new Button{Content="复制",HorizontalAlignment=HorizontalAlignment.Left,Margin=new(0,10,0,0),Padding=new(18,8,18,8)}; copy.Click+=(_,_)=>Guard(()=>{ Clipboard.SetText(value); notice.Text="已复制"; }); panel.Children.Add(copy); }
+        if(!isFile) { var copy=new Button{Content="复制",HorizontalAlignment=HorizontalAlignment.Left,Margin=new(0,10,0,0),Padding=new(18,8,18,8)}; copy.Click+=(_,_)=>Guard(()=>{ ClipboardWrites.Write(value); notice.Text="已复制"; }); panel.Children.Add(copy); }
         else if(file!=null) { var save=new Button{Content="另存为…",HorizontalAlignment=HorizontalAlignment.Left,Margin=new(0,10,0,0),Padding=new(18,8,18,8)}; save.Click+=(_,_)=>Guard(()=>{
             var dialog=new SaveFileDialog{FileName=value,Title="保存收到的文件",OverwritePrompt=true}; if(dialog.ShowDialog(this)!=true) return;
             using var input=System.IO.File.OpenRead(file); using var output=new FileStream(dialog.FileName,FileMode.CreateNew,FileAccess.Write); input.CopyTo(output); output.Flush(true); notice.Text="文件已保存";

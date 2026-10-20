@@ -9,7 +9,7 @@ assert len(set(release['versions'].values()))==1,'Unified clients must share a r
 version=release['versions']['web']
 assert version==package['version']==feed['version']
 assert tokens['revision']==release['designRevision']
-assert tokens['navigation']==['剪贴板','共享','设备','设置']
+assert tokens['navigation']==['剪贴板']
 android=(root/'app/build.gradle.kts').read_text();windows=(root/'windows/FloatClip.Desktop/FloatClip.Desktop.csproj').read_text()
 assert re.search(r'versionName = "([0-9.]+)"',android).group(1)==version
 assert re.search(r'<Version>([^<]+)</Version>',windows).group(1)==version
@@ -38,9 +38,8 @@ for feature,implementations in release['featureContract'].items():
  assert set(implementations.values())=={'implemented'},f'{feature}: common features must ship together'
 for feature in ['clipboard-library','source-device-boards','search-pin-category','clipboard-backup','web-v1-interoperability']:
  assert feature in release['featureContract'],feature
-# The main host UI and transport are the same code on all clients. Old native LAN
-# screens intentionally remain a distinct compatibility mode.
-for file in ['app/src/main/java/com/floatclip/app/UnifiedActivity.kt','windows/FloatClip.Desktop/UnifiedWindow.cs']:
+# Native launchers are local-first; the optional node route retains the shared web bridge.
+for file in ['app/src/main/java/com/floatclip/app/NodeActivity.kt','windows/FloatClip.Desktop/UnifiedWindow.cs']:
  assert 'https://clip.wmy-cloud.cn' in (root/file).read_text()
 assert '.UnifiedActivity' in (root/'app/src/main/AndroidManifest.xml').read_text()
 assert 'new UnifiedWindow()' in (root/'windows/FloatClip.Desktop/App.cs').read_text()

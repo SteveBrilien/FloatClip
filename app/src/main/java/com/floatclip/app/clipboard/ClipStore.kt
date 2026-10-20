@@ -46,6 +46,16 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
     }
 
     fun delete(id: Long) = synchronized(LOCK) { persist(entries().filterNot { it.id == id }) }
+    fun restore(entry: ClipEntry) = synchronized(LOCK) {
+        val current = entries().toMutableList()
+        if(current.any { it.key == entry.key || it.id == entry.id }) return@synchronized
+        if(current.size >= MAX_ITEMS) {
+            val oldest = current.filterNot { it.pinned }.minByOrNull { it.createdAt }
+                ?: error("置顶记录已满，请先整理后恢复")
+            current.remove(oldest)
+        }
+        persist(listOf(entry) + current)
+    }
     fun clearUnpinned() = synchronized(LOCK) { persist(entries().filter { it.pinned }) }
     fun clearAll() = synchronized(LOCK) { persist(emptyList()) }
     fun exportJson(): String = buildJson(entries())

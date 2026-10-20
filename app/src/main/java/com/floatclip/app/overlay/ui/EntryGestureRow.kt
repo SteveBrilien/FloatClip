@@ -37,22 +37,29 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
     private val autoClose = Runnable { close() }
     private val detector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         override fun onDown(e: MotionEvent) = true
-        override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+        override fun onSingleTapUp(e: MotionEvent): Boolean {
             if (isAttachedToWindow) performClick()
-            return true
-        }
-        override fun onDoubleTap(e: MotionEvent): Boolean {
-            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-            onDoubleTap?.invoke()
             return true
         }
         override fun onLongPress(e: MotionEvent) {
             if (!horizontal && !vertical && isAttachedToWindow) {
+                press(false)
                 performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                 onLongPress?.invoke()
             }
         }
     })
+
+    init {
+        detector.setOnDoubleTapListener(null)
+        isClickable=true; isFocusable=true; isLongClickable=true
+        setOnLongClickListener { onLongPress?.invoke(); true }
+    }
+    private fun press(down: Boolean) {
+        front?.animate()?.cancel()
+        val scale=if(down && ValueAnimator.areAnimatorsEnabled()) .98f else 1f
+        front?.animate()?.scaleX(scale)?.scaleY(scale)?.setDuration(if(down) 90L else 160L)?.start()
+    }
 
     fun bind(frontView: View, actionsView: View? = null, revealWidthPx: Int = 0) {
         removeAllViews()
@@ -84,12 +91,11 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
         if (open) {
             active?.get()?.takeIf { it !== this }?.close()
             active = WeakReference(this)
-            postDelayed(autoClose, 4500L)
         } else if (active?.get() === this) active = null
         val target = if (open) -actionWidth.toFloat() else 0f
         if (!animated) { translate(target); return }
         settling = ValueAnimator.ofFloat(front?.translationX ?: 0f, target).apply {
-            duration = 180L
+            duration = if(ValueAnimator.areAnimatorsEnabled()) 180L else 0L
             addUpdateListener { translate(it.animatedValue as Float) }
             start()
         }
@@ -108,7 +114,6 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
         // Only a fully revealed action can handle its own gesture.
         if (opened && event.x >= width + (front?.translationX ?: 0f)) {
             removeCallbacks(autoClose)
-            postDelayed(autoClose, 4500L)
             return false
         }
         return true
@@ -124,6 +129,7 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
                 downY = event.y
                 startTranslation = front?.translationX ?: 0f
                 beganOpen = opened || startTranslation < -1f
+                if(!beganOpen) press(true)
                 horizontal = false
                 vertical = false
                 tracker?.recycle()
@@ -134,11 +140,13 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
                 val dy = event.y - downY
                 if (actionWidth > 0 && !horizontal && !vertical && abs(dx) > config.scaledTouchSlop && abs(dx) > abs(dy) * 1.2f) {
                     horizontal = true
+                    press(false)
                     cancelDetector(event)
                     parent?.requestDisallowInterceptTouchEvent(true)
                     active?.get()?.takeIf { it !== this }?.close()
                 } else if (!horizontal && abs(dy) > config.scaledTouchSlop && abs(dy) > abs(dx)) {
                     vertical = true
+                    press(false)
                     cancelDetector(event)
                 }
                 if (horizontal) translate((startTranslation + dx).coerceIn(-actionWidth.toFloat(), 0f))
@@ -147,6 +155,7 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
         tracker?.addMovement(event)
         if (!horizontal && !vertical && !beganOpen) detector.onTouchEvent(event)
         if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+            press(false)
             if (horizontal) {
                 tracker?.computeCurrentVelocity(1000)
                 val vx = tracker?.xVelocity ?: 0f
@@ -182,6 +191,7 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
         cancelDetector(event)
         event.recycle()
         close(false)
+        press(false)
     }
 
     override fun onDetachedFromWindow() {
@@ -196,5 +206,12 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
         super.onDetachedFromWindow()
     }
 
-    companion object { private var active: WeakReference<EntryGestureRow>? = null }
+    companion object {
+        private var active: WeakReference<EntryGestureRow>? = null
+        fun closeOutside(rawX: Float,rawY: Float) {
+            val row=active?.get() ?: return
+            val bounds=Rect();row.getGlobalVisibleRect(bounds)
+            if(!bounds.contains(rawX.toInt(),rawY.toInt())) row.close()
+        }
+    }
 }

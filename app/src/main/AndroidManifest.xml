@@ -39,6 +39,8 @@
         </activity>
 
         <activity android:name=".MainActivity" android:exported="false" />
+        <activity android:name=".DeviceActivity" android:exported="false" android:configChanges="uiMode|orientation|screenSize" />
+        <activity android:name=".NodeActivity" android:exported="false" android:configChanges="uiMode|orientation|screenSize" android:windowSoftInputMode="adjustResize" />
         <activity android:name="com.floatclip.probe.ProbeActivity" android:exported="false" />
         <activity android:name="com.floatclip.probe.ShareActivity" android:exported="false" android:configChanges="uiMode|orientation|screenSize" />
 

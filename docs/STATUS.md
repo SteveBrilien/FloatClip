@@ -1,3 +1,11 @@
+# 当前状态：0.7.1 交互测试版（2026-10-20）
+
+Android build 14 / Windows / PWA 0.7.1 已发布，原生主入口为本机剪贴板，本机及原生 LAN 无网页登录门槛。下载与证据见 [发布记录](RELEASE_0.7.1.md)，后续以 [产品重整方案](FloatClip-Product-Brief.md) 为准。vivo Android 11、Win10/Win11、iPad Safari 真机验收及后台持续接续仍未完成。
+
+以下为原版独立包的历史开发记录；不要据此切换当前共享版包名、签名或回到旧的网页启动结构。
+
+---
+
 # FloatClip development status
 
 Last updated: 2026-09-11

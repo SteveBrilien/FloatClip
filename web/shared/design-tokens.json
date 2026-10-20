@@ -1,5 +1,5 @@
 {
-  "revision": "2026.10-blue-2",
+  "revision": "2026.10-clipboard-3",
   "primary": "#2563EB",
   "light": {
     "background": "#F4F7FC",
@@ -34,9 +34,15 @@
   ],
   "minimumTouchTarget": 44,
   "navigation": [
-    "剪贴板",
-    "共享",
+    "剪贴板"
+  ],
+  "secondaryRoutes": [
     "设备",
-    "设置"
-  ]
+    "设置",
+    "文件传输"
+  ],
+  "iconSize": 24,
+  "sourceMarkerSize": 14,
+  "bodySize": 16,
+  "primaryTouchTarget": 48
 }

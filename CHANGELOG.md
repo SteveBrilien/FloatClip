@@ -2,6 +2,17 @@
 
 All notable FloatClip development changes are recorded here.
 
+## 2026-10-20
+
+### 0.7.1 clipboard-first interaction candidate
+
+- Native Android / Windows launch into the offline clipboard. Public-node authentication is confined to the optional node route.
+- Prioritize vertically centered content, subtle source corner markers, live search and consistent 24 px controls.
+- Restore swipe pin/delete with undo, restrained press feedback, source accents and optional tinted surfaces.
+- Add Windows clipboard notifications, tray and Win+Shift+V. Retain existing encrypted vaults and the current Share signing identity.
+- Suppress native self-copy events without treating equal text from another app as an echo.
+- Publish matching Android, Windows and PWA metadata. Browser interaction tests pass; native hardware and continuous background handoff remain unaccepted. See docs/RELEASE_0.7.1.md.
+
 ## 2026-09-11
 
 ### 0.5.5 visual polish and restored swipe actions

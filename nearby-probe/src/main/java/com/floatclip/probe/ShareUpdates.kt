@@ -6,8 +6,8 @@ import javax.net.ssl.HttpsURLConnection
 
 /** Explicit user initiated checks. Downloads open in the system browser. */
 internal object ShareUpdates {
-    const val BUILD = 8
-    const val VERSION = "0.4.0"
+    const val BUILD = 14
+    const val VERSION = "0.7.1"
     const val FEED = "https://raw.githubusercontent.com/SteveBrilien/FloatClip/main/updates/share-preview.json"
     data class Release(val build: Int, val version: String, val notes: String, val url: String)
     fun check(): Release {

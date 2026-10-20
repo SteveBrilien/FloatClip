@@ -78,4 +78,12 @@ class UnifiedVaultTest {
         assertTrue(UnifiedActivity.isTrusted("https://clip.wmy-cloud.cn/"));assertTrue(UnifiedActivity.isTrusted("https://clip.wmy-cloud.cn:443/path"))
         listOf("http://clip.wmy-cloud.cn","https://clip.wmy-cloud.cn:444/","https://clip.wmy-cloud.cn.evil.example/","https://clip.wmy-cloud.cn@evil.example/","file:///clip.wmy-cloud.cn").forEach { assertFalse(it,UnifiedActivity.isTrusted(it)) }
     }
+    @Test fun deleteUndoRetainsOriginPinAndNewlyCopiedText() {
+        val store=ClipStore(context(),codec);val first=store.addText("first")!!
+        store.togglePinned(first.id);val saved=store.entries().single()
+        store.delete(saved.id);store.addText("new copy");store.restore(saved);store.restore(saved)
+        assertEquals(2,store.entries().size)
+        assertEquals(saved,store.entries().first { it.id==saved.id })
+        assertTrue(store.entries().any { it.text=="new copy" })
+    }
 }

@@ -26,7 +26,13 @@ import java.util.*
 import java.util.concurrent.Executors
 
 /** Standalone front-end. No background clipboard polling or global network changes. */
-class ShareActivity : Activity() {
+open class ShareActivity : Activity() {
+    private val clipboardHost by lazy { intent.getBooleanExtra("devicesOnly",false) }
+    protected open fun sharedText(id: UUID,value: String,outgoing: Boolean,peer: String) = Unit
+    protected open fun openWebDevices(): Boolean = false
+    protected open fun copyText(value: String) {
+        getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("FloatClip",value))
+    }
     private val prefs by lazy { getSharedPreferences("share-ui", MODE_PRIVATE) }
     private val io = Executors.newSingleThreadExecutor()
     private lateinit var transport: LanShare
@@ -75,6 +81,7 @@ class ShareActivity : Activity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         cache.listFiles()?.filter { it.lastModified() < System.currentTimeMillis() - 86400000L || it.name.endsWith(".part") }?.forEach { it.delete() }
+        if(clipboardHost) tab=1
         build()
         if (Build.VERSION.SDK_INT >= 33) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT) {
@@ -149,8 +156,8 @@ class ShareActivity : Activity() {
             val bars=insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
             val ime=insets.getInsets(WindowInsets.Type.ime())
             keyboardVisible=insets.isVisible(WindowInsets.Type.ime())
-            root.setPadding(bars.left,bars.top,bars.right,if(keyboardVisible) ime.bottom else if(detail!=Detail.ROOT) bars.bottom else 0)
-            bottom.visibility=if(keyboardVisible || detail!=Detail.ROOT) View.GONE else View.VISIBLE
+            root.setPadding(bars.left,bars.top,bars.right,if(keyboardVisible) ime.bottom else if(clipboardHost || detail!=Detail.ROOT) bars.bottom else 0)
+            bottom.visibility=if(clipboardHost || keyboardVisible || detail!=Detail.ROOT) View.GONE else View.VISIBLE
             nav.setPadding(nav.paddingLeft,dp(8),nav.paddingRight,dp(8)+bars.bottom)
             insets
         }
@@ -189,17 +196,17 @@ class ShareActivity : Activity() {
     }
     private fun toolbar() {
         header.removeAllViews()
-        if(detail==Detail.ROOT) {
+        if(detail==Detail.ROOT && !clipboardHost) {
             header.addView(ImageView(uiContext).apply { setImageResource(R.drawable.ic_floatclip); importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO },LinearLayout.LayoutParams(dp(28),dp(28)).apply { marginStart=dp(4); marginEnd=dp(12) })
         } else {
             val back=FrameLayout(uiContext).apply {
-                id=R.id.detail_back; contentDescription="返回"; background=ripple(p.bg,24); buttonSemantics(this); setOnClickListener { goBack() }
+                id=R.id.detail_back; contentDescription="返回"; background=ripple(p.bg,24); buttonSemantics(this); setOnClickListener { if(!goBack()) finish() }
             }
             back.addView(icon(ShareGlyph.CHEVRON,p.text).apply { rotation=180f },FrameLayout.LayoutParams(dp(22),dp(22),Gravity.CENTER))
             header.addView(back,LinearLayout.LayoutParams(dp(48),dp(48)).apply { marginEnd=dp(4) })
         }
         header.addView(text(screenTitle(),if(detail==Detail.ROOT) 22 else 20,p.text,true).apply { id=R.id.page_title; isAccessibilityHeading=true },LinearLayout.LayoutParams(0,-2,1f))
-        if(detail==Detail.ROOT) {
+        if(detail==Detail.ROOT && !clipboardHost) {
             val badge=FrameLayout(uiContext).apply { minimumHeight=dp(48); background=ripple(p.bg,12); contentDescription="版本与更新"; buttonSemantics(this); setOnClickListener { navigate(Detail.UPDATES) } }
             badge.addView(text("预览版",11,p.blue,true).apply { background=shape(p.tint,8); setPadding(dp(8),dp(5),dp(8),dp(5)); importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO },FrameLayout.LayoutParams(-2,-2,Gravity.CENTER))
             header.addView(badge,LinearLayout.LayoutParams(-2,dp(48)))
@@ -209,7 +216,7 @@ class ShareActivity : Activity() {
         val scrollY=if(renderedTab==tab && renderedDetail==detail) scroller.scrollY else 0
         body.animate().cancel(); body.alpha=1f; body.translationX=0f
         body.removeAllViews(); nav.removeAllViews(); toolbar()
-        bottom.visibility=if(detail==Detail.ROOT && !keyboardVisible) View.VISIBLE else View.GONE
+        bottom.visibility=if(!clipboardHost && detail==Detail.ROOT && !keyboardVisible) View.VISIBLE else View.GONE
         listOf("共享" to ShareGlyph.SHARE,"设备" to ShareGlyph.DEVICES,"设置" to ShareGlyph.SETTINGS).forEachIndexed { i,(label,glyph) ->
             val selected=tab==i
             val item=column().apply {
@@ -310,7 +317,7 @@ class ShareActivity : Activity() {
             addView(text(if(item.outgoing) "已送达" else if(item.file==null) "收到文字" else "收到文件",12,p.blue,true))
             addView(text(item.text ?: item.name,15,p.text).apply { maxLines=5; ellipsize=android.text.TextUtils.TruncateAt.END; setPadding(0,dp(10),0,0) })
             if(item.file==null && item.text!=null) button("复制文字",false) {
-                getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("FloatClip",item.text)); note("已复制")
+                copyText(item.text); note("已复制")
             }
             if(item.file!=null && !item.outgoing) button("另存为…",false) {
                 saving=item; picker=true
@@ -329,6 +336,9 @@ class ShareActivity : Activity() {
     }
     private fun devicesPage() {
         intro("同一 Wi-Fi 或手机热点，即可发现")
+        if(clipboardHost) card {
+            addView(settingRow("iPad 与跨网设备","",ShareGlyph.DEVICES) { openWebDevices() })
+        }
         card {
             connection(this)
             if(session!=null) {
@@ -462,7 +472,7 @@ class ShareActivity : Activity() {
             if(session==null) {
                 button("生成邀请链接",false) { selected?.let { listen(it,false) } ?: note("没有可用网络") }
                 if(invitation.isNotEmpty()) button("复制邀请链接",true) {
-                    getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("FloatClip 连接邀请",invitation)); note("已复制备用邀请")
+                    copyText(invitation); note("已复制备用邀请")
                 }
             } else addView(text("请先断开当前连接",13,p.muted).apply { setPadding(0,dp(12),0,0) })
         }
@@ -484,7 +494,7 @@ class ShareActivity : Activity() {
     private fun listen(ip: String, nearby: Boolean = true) {
         disconnect(); val generation=epoch
         val messages=object:ShareSession.Events {
-            override fun text(id:UUID,value:String,outgoing:Boolean)=ui { if(generation==epoch) { add(Received(text=value,outgoing=outgoing)); note(if(outgoing) "文字已送达" else "收到文字"); if(tab==0) contentChanged() } }
+            override fun text(id:UUID,value:String,outgoing:Boolean)=ui { if(generation==epoch) { sharedText(id,value,outgoing,pair?.peerIdentity() ?: ""); add(Received(text=value,outgoing=outgoing)); note(if(outgoing) "文字已送达" else "收到文字"); if(tab==0) contentChanged() } }
             override fun offered(value:ShareWire.Offer)=ui { if(generation==epoch) { offer=value; if(tab==0) contentChanged() else note("收到文件请求，请前往共享页") } }
             override fun progress(id:UUID,name:String,done:Long,total:Long,outgoing:Boolean)=ui { if(generation==epoch) { progress="${if(outgoing) "发送" else "接收"} $name · ${if(total==0L) 100 else done*100/total}%"; if(::progressView.isInitialized) { progressView.text=progress; progressView.visibility=View.VISIBLE } } }
             override fun file(value:ShareWire.Offer,local:File,outgoing:Boolean)=ui { if(generation==epoch) { add(Received(file=if(outgoing) null else local,name=value.name,text=null,outgoing=outgoing)); progress="${value.name} · 已校验完成"; if(outgoing && local.name.startsWith("out-")) local.delete(); if(tab==0) contentChanged() } }

@@ -5,7 +5,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 dist = root / 'dist'
-assets = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png']
+assets = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/floatclip-icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png']
 assets += ['/' + str(p.relative_to(dist)) for p in sorted((dist / 'assets').glob('*')) if p.is_file()]
 revision = hashlib.sha256(b''.join((dist / p.lstrip('/')).read_bytes() for p in assets if p != '/')).hexdigest()[:12]
 worker = """const CACHE='floatclip-public-REVISION';

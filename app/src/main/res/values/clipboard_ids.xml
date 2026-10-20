@@ -1,0 +1,8 @@
+<resources>
+    <item name="clipboard_search" type="id"/>
+    <item name="clipboard_list" type="id"/>
+    <item name="clipboard_settings" type="id"/>
+    <item name="clipboard_devices" type="id"/>
+    <item name="clipboard_back" type="id"/>
+    <item name="clipboard_sources" type="id"/>
+</resources>

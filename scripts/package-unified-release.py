@@ -30,13 +30,14 @@ if options.android_apk:
  if identity['legacyClipboardPackage']+'.permission.INTERNAL' in manifest or identity['package']+'.permission.INTERNAL' not in manifest:raise SystemExit('Permission conflicts with the original clipboard app')
  rows.append(freeze('FloatClip-'+version+'.apk',(root/options.android_apk).read_bytes()))
 source=root/options.windows_dir
-archive=root/'analysis/unified-0.6-windows.zip'
+if not (source/'FloatClip.exe').is_file():raise SystemExit('Windows executable missing; build before packaging')
+archive=root/('analysis/unified-'+version+'-windows.zip')
 with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=7) as z:
  for p in sorted(source.rglob('*')):
   if p.is_file() and p.suffix.lower() not in ['.pdb','.xml']:
    info=zipfile.ZipInfo('FloatClip/'+str(p.relative_to(source)),(1980,1,1,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED;z.writestr(info,p.read_bytes())
  info=zipfile.ZipInfo('FloatClip/README.txt',(1980,1,1,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED
- z.writestr(info,('FloatClip '+version+'\n\nWindows 10/11 x64：完整解压后运行 FloatClip.exe。\n首次共享需要 Microsoft Edge WebView2 Runtime；若缺少组件，应用会提供微软官方安装入口。\n主界面与 Android 0.6.0 / iPad PWA 共用共享协议。\n本机剪贴板由当前 Windows 用户加密保存。\n离线工具：FloatClip.exe --clipboard\n旧局域网兼容模式：FloatClip.exe --legacy-lan\n\nPWA：https://clip.wmy-cloud.cn\n').encode('utf-8'))
+ z.writestr(info,('FloatClip '+version+'\n\nWindows 10/11 x64：完整解压后运行 FloatClip.exe。\n本机剪贴板和局域网设备不需要网页账号或 WebView2。连接 iPad / 经小主机共享的可选入口需要 WebView2 与网页认证。\n剪贴板为主界面，左滑或右键可置顶、删除并撤销；Win + Shift + V 调出。正常关闭窗口后在托盘运行，可从托盘退出。\n本机剪贴板由当前 Windows 用户加密保存。\n直接运行 FloatClip.exe 打开本机剪贴板；--web 打开可选跨网入口。\n局域网设备：FloatClip.exe --legacy-lan\n\nPWA：https://clip.wmy-cloud.cn\n').encode('utf-8'))
 rows.append(freeze('FloatClip-Windows-'+version+'.zip',archive.read_bytes()))
 manifest={'version':version,'androidPackage':identity['package'],'androidSignerSha256':identity['signerSha256'],'androidStatus':'signed' if options.android_apk else 'not-packaged','artifacts':rows}
 (destination/'checksums.json').write_text(json.dumps(manifest,indent=2)+'\n')

@@ -11,7 +11,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 /** Device-bound encryption for FloatClip's primary local vault. */
 class LocalVaultCrypto : VaultCipher {
-    private val keyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
+    private val keyStore by lazy { KeyStore.getInstance(KEYSTORE).apply { load(null) } }
 
     override fun encrypt(plain: ByteArray): ByteArray {
         val cipher = Cipher.getInstance(TRANSFORMATION)

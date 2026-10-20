@@ -1,33 +1,33 @@
 {
   "schema": 1,
   "channel": "share-preview",
-  "version": "0.6.0",
-  "notes": "0.6.0 三端整合：沿用当前共享版包名和固定签名，Share 0.4.0 可覆盖升级；加入原版剪贴板、分类、置顶、备份、悬浮球及无障碍粘贴。原版 FloatClip 可并存，旧记录需通过其便携加密备份手动恢复，不会跨应用自动读取。Android/Windows/iPad 共用共享界面与协议；剪贴板按来源设备分区，支持搜索、复制、合并导入导出和再次发送。Windows 共享需要 WebView2；蓝牙与后台自动同步未发布。",
-  "releaseTrain": "2026.10.20-unified",
-  "designRevision": "2026.10-blue-2",
+  "version": "0.7.1",
+  "notes": "0.7.1 测试版：修复 Android 复制远端条目后被重复收录为本机内容；正文垂直居中，设备来源收为角落图标；实时搜索、左滑置顶/删除与撤销、按压反馈、24px 图标与深浅色。Android/Windows 直接进入本机剪贴板，本机及原生局域网无需网页登录。iPad/跨网入口保留认证与原生数据桥。Windows 支持托盘与 Win+Shift+V。沿用当前 Share 包名和签名，可覆盖升级；原版独立应用仍可保留。后台持续同步、自动重连及 Android11 全天候收录尚未完成真机验收。",
+  "releaseTrain": "2026.10.20-clipboard-candidate",
+  "designRevision": "2026.10-clipboard-3",
   "web": {
-    "version": "0.6.0",
+    "version": "0.7.1",
     "url": "https://clip.wmy-cloud.cn",
     "protocol": "web-v1",
     "authentication": "account",
     "nativeInterop": true
   },
   "android": {
-    "version": "0.6.0",
-    "build": 12,
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-deb7a135ca4344749a82db98deb988c0/FloatClip-0.6.0.apk?exp=0&sig=7a12788ba4403045e363bfb24dc082aafca64b64c0f198a2befa528b25eca7ab",
-    "sha256": "f727efd94a8895abcba1c55bf54b344c923ff57bf941f7e93ceb53fe3624e805",
-    "bytes": 3022476,
+    "version": "0.7.1",
+    "build": 14,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-77ecbc0dd714447cb32a1650e906149b/FloatClip-0.7.1.apk?exp=0&sig=d4c785bf81f495a57bdfc0409f30e5138546b35b55b080da36db1b17b8f8a9f4",
+    "sha256": "7001a3368aedc3b969af6f40ebc35390c61031b8ec817c10444fa9c40ce5ea72",
+    "bytes": 3078476,
     "status": "available",
     "package": "com.floatclip.probe",
     "signerSha256": "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c"
   },
   "windows": {
-    "version": "0.6.0",
-    "build": 12,
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-d65ee49ccca24e39b49f3d4ad115779a/FloatClip-Windows-0.6.0.zip?exp=0&sig=77d00148aa129bc55a313a60349e4b30561479c419cf911e17da4b030ee5c4d9",
-    "sha256": "691e4a8d6bac9ffb482222a3a6f733ab44faedaa10c7818020cc7b52db91dc1e",
-    "bytes": 59266873,
+    "version": "0.7.1",
+    "build": 14,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-4b76a3ee65394f4391bec21e73fa7b19/FloatClip-Windows-0.7.1.zip?exp=0&sig=67ac6e7d636ab6e09834b2be6fa6bf7191eebf93826f2a024c8124583ada35af",
+    "sha256": "4652c3003cfd3d4e641b78140c56088b50c6b4c2222b66f56327d25877a80300",
+    "bytes": 69688590,
     "status": "available"
   }
 }

@@ -90,6 +90,7 @@ class PasteAccessibilityService : AccessibilityService() {
     private fun captureClipboard() {
         val clip = runCatching { clipboard?.primaryClip }.getOrNull() ?: return
         latestOwnWrite = ClipboardWrites.isOwnClip(this, clip.description)
+        if(!latestOwnWrite)com.floatclip.app.sync.SyncRuntime.observe(this,clip)
         val item = if (clip.itemCount > 0) clip.getItemAt(0) else return
         val text = item.coerceToText(this)?.toString()?.trim().orEmpty()
         latestText = text.takeIf { it.isNotEmpty() }

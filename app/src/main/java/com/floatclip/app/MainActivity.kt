@@ -45,6 +45,12 @@ import com.floatclip.app.overlay.ui.ClipboardCard
 import android.text.Editable
 import android.text.TextWatcher
 import android.content.ClipboardManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import com.floatclip.app.sync.SyncPreferences
+import com.floatclip.app.sync.SyncRuntime
+import com.floatclip.app.sync.ClipboardSyncService
 
 open class MainActivity : Activity() {
     private lateinit var categoryStore: CategoryStore
@@ -64,6 +70,7 @@ open class MainActivity : Activity() {
     private var undoEntry: ClipEntry? = null
     private var undoBar: LinearLayout? = null
     private val clipboardChanged = ClipboardManager.OnPrimaryClipChangedListener { captureCurrentClipboard() }
+    private val sharedHistoryChanged=object: BroadcastReceiver(){override fun onReceive(context: Context?,intent: Intent?){if(currentPage==PAGE_CLIPBOARD&&historyList?.isAttachedToWindow==true)refreshHistory()}}
 
     private val overlayServiceIntent by lazy(LazyThreadSafetyMode.NONE) {
         Intent(this, ClipboardOverlayService::class.java)
@@ -71,6 +78,8 @@ open class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        registerReceiver(sharedHistoryChanged,IntentFilter(ClipboardSyncService.HISTORY_CHANGED),"$packageName.permission.INTERNAL",null)
+        if(SyncPreferences(this).enabled())SyncRuntime.refresh(this)
         IntegrationRegistry.initialize(this)
         categoryStore = CategoryStore(this)
         clipStore = ClipStore(this)
@@ -122,6 +131,7 @@ open class MainActivity : Activity() {
         return super.dispatchTouchEvent(event)
     }
     override fun onDestroy() {
+        unregisterReceiver(sharedHistoryChanged)
         getSystemService(ClipboardManager::class.java).removePrimaryClipChangedListener(clipboardChanged)
         super.onDestroy()
     }
@@ -135,6 +145,7 @@ open class MainActivity : Activity() {
         if(value.isNullOrBlank()) return
         runCatching {
             if(clipStore.entries().firstOrNull { it.sourceDeviceId=="local" }?.text!=value.trim()) clipStore.addText(value)
+            SyncRuntime.observe(this,clip)
             if(currentPage==PAGE_CLIPBOARD && historyList?.isAttachedToWindow==true) refreshHistory()
         }
     }
@@ -458,6 +469,7 @@ open class MainActivity : Activity() {
             when (settingsSection) {
                 "外观" -> renderAppearanceSettings()
                 "备份与恢复" -> renderBackupSettings()
+                "剪贴板共享" -> renderSyncSettings()
                 else -> {
                     renderPermissionGuide()
                     addCard(card().apply {
@@ -486,7 +498,7 @@ open class MainActivity : Activity() {
         })
         spacer(12)
         addCard(card().apply {
-            listOf("外观", "权限与后台", "备份与恢复").forEachIndexed { index, title ->
+            listOf("外观", "剪贴板共享", "权限与后台", "备份与恢复").forEachIndexed { index, title ->
                 if (index > 0) addView(divider())
                 addView(settingRow(title, "", "›") { settingsSection = title; render() })
             }
@@ -502,6 +514,26 @@ open class MainActivity : Activity() {
                     .setNeutralButton("使用帮助") { _, _ -> showUsageHelp() }.show()
             })
         })
+    }
+
+    private fun renderSyncSettings() {
+        val prefs=SyncPreferences(this)
+        addCard(card().apply {
+            fun toggle(label: String,on: Boolean,change: ()->Unit) {
+                if(childCount>0)addView(divider())
+                addView(settingRow(label,"",if(on) "已开启" else "已关闭") {runCatching{change();SyncRuntime.refresh(this@MainActivity)}.onFailure{Toast.makeText(this@MainActivity,"共享配置未保存",Toast.LENGTH_SHORT).show()};render()})
+            }
+            toggle("共享剪贴板",prefs.enabled()){prefs.save(enabled=!prefs.enabled())}
+            toggle("自动连接已授权设备",prefs.reconnect()){prefs.save(reconnect=!prefs.reconnect())}
+            toggle("发送新复制的文字",prefs.sending()){prefs.save(sending=!prefs.sending())}
+            toggle("接收文字到历史",prefs.receiving()){prefs.save(receiving=!prefs.receiving())}
+            toggle("接收后写入系统剪贴板",prefs.applying()){prefs.save(applying=!prefs.applying())}
+        })
+        SyncRuntime.current()?.peers()?.forEach {peer ->
+            spacer(12);addCard(card().apply {addView(settingRow(peer.device.name,"",if(peer.enabled)"共享中" else "已暂停"){SyncRuntime.current()?.peerEnabled(peer.key,!peer.enabled);window.decorView.postDelayed({render()},120)})})
+        }
+        spacer(12)
+        addCard(card().apply {addView(textView(SyncRuntime.current()?.status?:"共享关闭时保留配对授权",14f,false,colors.secondaryText));addView(textView("Android 11 后台读取受系统限制；连接常驻不代表具备后台读取权限。",13f,false,colors.secondaryText))})
     }
 
     private fun renderAppearanceSettings() {

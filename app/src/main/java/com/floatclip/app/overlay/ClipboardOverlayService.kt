@@ -81,6 +81,7 @@ class ClipboardOverlayService : Service() {
     private var panelTransitionAnimator: ValueAnimator? = null
     private var foregroundStarted = false
     private var accessibilityHosted = false
+    private val sharedHistoryChanged=object: BroadcastReceiver(){override fun onReceive(context: Context?,intent: Intent?){if(panelOpen&&!panelCollapsing){renderCategoryBar();renderEntries()}}}
     private val localBinder = LocalBinder()
     private var panelOpen = false
     private var panelCollapsing = false
@@ -115,6 +116,7 @@ class ClipboardOverlayService : Service() {
     @SuppressLint("UnspecifiedRegisterReceiverFlag") // registration requires a package-scoped signature permission
     override fun onCreate() {
         super.onCreate()
+        registerReceiver(sharedHistoryChanged,IntentFilter(com.floatclip.app.sync.ClipboardSyncService.HISTORY_CHANGED),"$packageName.permission.INTERNAL",null)
         windowManager = getSystemService(WindowManager::class.java)
         store = ClipStore(this)
         clipboard = ClipboardRepository(this)
@@ -215,6 +217,7 @@ class ClipboardOverlayService : Service() {
         panelPinButton = null
         entryActionLayer = null
         runCatching { unregisterReceiver(appearanceReceiver) }
+        runCatching { unregisterReceiver(sharedHistoryChanged) }
         runCatching { unregisterReceiver(systemAppearanceReceiver) }
         if (OverlayKeepAliveScheduler.shouldRun(this)) OverlayKeepAliveScheduler.schedule(this)
         super.onDestroy()

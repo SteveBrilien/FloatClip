@@ -30,6 +30,18 @@ open class ShareActivity : Activity() {
     private val clipboardHost by lazy { intent.getBooleanExtra("devicesOnly",false) }
     protected open fun sharedText(id: UUID,value: String,outgoing: Boolean,peer: String) = Unit
     protected open fun openWebDevices(): Boolean = false
+    protected open fun managedConnections(): Boolean = false
+    protected open fun beginManagedPairing(): Boolean = false
+    protected open fun stopManagedPairing(): Boolean = false
+    protected open fun pauseManagedConnections(): Boolean = false
+    protected open fun clearManagedTrust(): Boolean = false
+    protected open fun hostTheme(): String? = null
+    protected fun managedState(active: ShareSession?,summary: String,allowing: Boolean) {
+        session=active;status=summary;discovering=allowing;invitation="";render()
+    }
+    protected fun managedOffer(value: ShareWire.Offer,active: ShareSession?) {session=active;offer=value;switchTab(0)}
+    protected fun managedProgress(name: String,done: Long,total: Long,outgoing: Boolean) {progress="${if(outgoing) "发送" else "接收"} $name · ${if(total==0L) 100 else done*100/total}%";if(::progressView.isInitialized)progressView.text=progress}
+    protected fun managedFile(value: ShareWire.Offer,file: File,outgoing: Boolean) {add(Received(file=if(outgoing)null else file,name=value.name,outgoing=outgoing));progress="文件已校验完成";render()}
     protected open fun copyText(value: String) {
         getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("FloatClip",value))
     }
@@ -91,19 +103,19 @@ open class ShareActivity : Activity() {
     }
     @Suppress("DEPRECATION")
     override fun onBackPressed() { if (!goBack()) super.onBackPressed() }
-    override fun onStart() { super.onStart(); foreground = true; if(!picker && session==null && pair==null && invitation.isEmpty()) addresses().let { ips -> (prefs.getString("address",null)?.takeIf { it in ips } ?: ips.firstOrNull())?.let { listen(it) } } }
+    override fun onStart() { super.onStart(); foreground = true; if(!managedConnections() && !picker && session==null && pair==null && invitation.isEmpty()) addresses().let { ips -> (prefs.getString("address",null)?.takeIf { it in ips } ?: ips.firstOrNull())?.let { listen(it) } } }
     override fun onResume() { super.onResume(); if(::body.isInitialized) render() }
     override fun onStop() {
         foreground = false
-        if (!picker) disconnect("已暂停，回到前台后重新连接")
+        if (!picker&&!managedConnections()) disconnect("已暂停，回到前台后重新连接")
         super.onStop()
     }
-    override fun onDestroy() { disconnect(); io.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() { if(!managedConnections())disconnect();io.shutdownNow();super.onDestroy() }
     override fun onConfigurationChanged(config: Configuration) { super.onConfigurationChanged(config); build() }
 
     @Suppress("DEPRECATION") // Platform fallbacks are required on supported Android 9–14 devices.
     private fun palette() {
-        dark = when (prefs.getString("theme", "system")) {
+        dark = when (hostTheme() ?: prefs.getString("theme", "system")) {
             "dark" -> true; "light" -> false
             else -> resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         }
@@ -300,7 +312,7 @@ open class ShareActivity : Activity() {
             addView(settingRow("文件","单个文件，最大 64 MiB",ShareGlyph.FILE) { chooseFile() })
             progressView=text(progress,12,p.blue).apply { visibility=if(progress.isEmpty()) View.GONE else View.VISIBLE; setPadding(0,dp(10),0,0); accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE }
             addView(progressView)
-            if(progress.isNotEmpty() && session!=null) button("取消传输并断开",false) { disconnect(); render() }
+            if(progress.isNotEmpty() && session!=null) button(if(managedConnections()) "取消传输并暂停共享" else "取消传输并断开",false) { disconnect(); render() }
         }
         offer?.let { pending -> card {
             cardTitle("收到文件请求", "${pending.name} · ${size(pending.size)}")
@@ -343,13 +355,18 @@ open class ShareActivity : Activity() {
             connection(this)
             if(session!=null) {
                 button("开始共享",true) { switchTab(0) }
-                button("断开连接",false) { disconnect(); render() }
+                button(if(managedConnections()) "暂停共享" else "断开连接",false) { disconnect(); render() }
             } else {
-                button(if(discovering) "重新开放连接" else "允许附近设备连接",true) {
+                button(if(discovering) "重新开放配对窗口" else if(managedConnections()) "添加设备" else "允许附近设备连接",true) {
                     val ips=addresses(); (prefs.getString("address",null)?.takeIf { it in ips } ?: ips.firstOrNull())?.let { listen(it) } ?: note("请先连接 Wi-Fi 或开启热点")
                 }
-                if(discovering) button("暂停发现",false) { disconnect("发现已暂停"); render() }
-                addView(text(if(discovering) "90 秒发现窗口 · 保持手机前台" else "连接电脑时，保持手机前台",12,p.muted).apply { gravity=Gravity.CENTER; setPadding(0,dp(10),0,0) })
+                if(discovering) button(if(managedConnections()) "关闭配对窗口" else "暂停发现",false) {
+                    if(managedConnections()&&stopManagedPairing()) render() else { disconnect("发现已暂停"); render() }
+                }
+                val hint=if(managedConnections()) {
+                    if(discovering) "90 秒配对窗口 · 首次配对时在此页核对识别码" else "已授权设备会在局域网内自动重连"
+                } else if(discovering) "90 秒发现窗口 · 保持手机前台" else "连接电脑时，保持手机前台"
+                addView(text(hint,12,p.muted).apply { gravity=Gravity.CENTER; setPadding(0,dp(10),0,0) })
             }
         }
         card {
@@ -430,15 +447,28 @@ open class ShareActivity : Activity() {
             addView(text("记住的设备可直接重连；移除授权后，需要再次核对识别码。",14,p.muted).apply { setPadding(0,dp(14),0,0) })
             if(trust.all.isNotEmpty()) button("移除所有设备授权",false) {
                 dialog().setTitle("移除所有设备授权？").setMessage("所有已记住的电脑都需要重新配对。")
-                    .setNegativeButton("取消",null).setPositiveButton("移除授权") { _,_ -> disconnect(); trust.edit().clear().apply(); render() }.show()
+                    .setNegativeButton("取消",null).setPositiveButton("移除授权") { _,_ ->
+                        if(managedConnections()&&clearManagedTrust()) render()
+                        else {
+                            disconnect()
+                            trust.edit().clear().apply()
+                            render()
+                        }
+                    }.show()
             }
         }
     }
     private fun helpPage() {
         card {
-            step(this,"1","手机保持 FloatClip 前台")
-            step(this,"2","在电脑设备页查找手机")
-            step(this,"3","首次核对两端识别码后允许")
+            if(managedConnections()) {
+                step(this,"1","在设置中开启剪贴板共享")
+                step(this,"2","首次添加设备时保持此页打开")
+                step(this,"3","核对识别码后授权，之后自动重连")
+            } else {
+                step(this,"1","手机保持 FloatClip 前台")
+                step(this,"2","在电脑设备页查找手机")
+                step(this,"3","首次核对两端识别码后允许")
+            }
         }
         card {
             addView(text("找不到设备时",16,p.text,true))
@@ -449,6 +479,22 @@ open class ShareActivity : Activity() {
     }
     private fun advancedPage() {
         val ips=addresses()
+        if(managedConnections()) {
+            card {
+                cardTitle("当前局域网", "持续同步会自动监听可用的 Wi-Fi / 热点地址")
+                addView(text(if(ips.isEmpty()) "暂无可用局域网地址" else ips.joinToString("\n"),14,p.muted).apply { setPadding(0,dp(12),0,0) })
+                button("开放 90 秒配对窗口",false) { beginManagedPairing() }
+            }
+            card {
+                cardTitle("备用邀请", "持续剪贴板同步不回退到旧的临时 Share 会话")
+                addView(text("附近发现不可用时请先检查同一局域网、AP 隔离或电脑端 TUN 路由；临时邀请链接暂不用于持久授权和自动重连。",14,p.muted).apply { setPadding(0,dp(12),0,0) })
+            }
+            card {
+                addView(text("代理影响连接时，可在电脑设备页查看网络诊断。",14,p.muted))
+                button("打开连接诊断",false) { startActivity(Intent(this@ShareActivity,ProbeActivity::class.java)) }
+            }
+            return
+        }
         var selected=prefs.getString("address",null)?.takeIf { it in ips } ?: ips.firstOrNull()
         card {
             cardTitle("连接地址", "仅在默认连接方式不可用时调整")
@@ -482,16 +528,32 @@ open class ShareActivity : Activity() {
         }
     }
     private fun sharingPage() {
-        card {
-            cardTitle("由你主动分享", "文字粘贴和文件选择均由你发起")
-            addView(text("内容加密直传。收到文字后手动复制，收到文件先确认接收，再选择保存位置。",14,p.muted).apply { setPadding(0,dp(14),0,0) })
-        }
-        card {
-            cardTitle("保持前台连接", "离开应用会暂停，系统文件选择期间除外")
-            addView(text("空闲 3 分钟或连接满 10 分钟后需重新连接。单个文件最大 64 MiB，传输上限 2 MiB/s。",14,p.muted).apply { setPadding(0,dp(14),0,0) })
+        if(managedConnections()) {
+            card {
+                cardTitle("已授权设备自动重连", "连接生命周期由剪贴板共享服务管理")
+                addView(text("新复制的文字按共享开关实时发送；接收内容先进入 FloatClip 历史，并可选择写入系统剪贴板。",14,p.muted).apply { setPadding(0,dp(14),0,0) })
+            }
+            card {
+                cardTitle("Android 11 剪贴板限制", "后台连接不等于后台可读取其他应用的剪贴板")
+                addView(text("在其他应用前台复制时，系统可能不允许 FloatClip 读取内容；连接和接收仍可保持。该行为需要在当前 OriginOS 设备上继续验收。",14,p.muted).apply { setPadding(0,dp(14),0,0) })
+            }
+        } else {
+            card {
+                cardTitle("由你主动分享", "文字粘贴和文件选择均由你发起")
+                addView(text("内容加密直传。收到文字后手动复制，收到文件先确认接收，再选择保存位置。",14,p.muted).apply { setPadding(0,dp(14),0,0) })
+            }
+            card {
+                cardTitle("保持前台连接", "离开应用会暂停，系统文件选择期间除外")
+                addView(text("空闲 3 分钟或连接满 10 分钟后需重新连接。单个文件最大 64 MiB，传输上限 2 MiB/s。",14,p.muted).apply { setPadding(0,dp(14),0,0) })
+            }
         }
     }
     private fun listen(ip: String, nearby: Boolean = true) {
+        if(managedConnections()) {
+            if(nearby) beginManagedPairing()
+            else note("持续剪贴板同步不使用临时邀请，请通过附近设备完成授权")
+            return
+        }
         disconnect(); val generation=epoch
         val messages=object:ShareSession.Events {
             override fun text(id:UUID,value:String,outgoing:Boolean)=ui { if(generation==epoch) { sharedText(id,value,outgoing,pair?.peerIdentity() ?: ""); add(Received(text=value,outgoing=outgoing)); note(if(outgoing) "文字已送达" else "收到文字"); if(tab==0) contentChanged() } }
@@ -528,6 +590,7 @@ open class ShareActivity : Activity() {
         render()
     }
     private fun disconnect(message:String="添加设备，开始共享") {
+        if(managedConnections()&&pauseManagedConnections()){epoch++;session=null;discovering=false;status="共享已暂停";return}
         epoch++; pairDialog?.dismiss(); pairDialog=null; pair?.close(); pair=null; discovering=false; if(::transport.isInitialized) transport.close(); session=null; invitation=""; offer=null; phase="未连接"; status=message
     }
     private fun checkUpdate() {

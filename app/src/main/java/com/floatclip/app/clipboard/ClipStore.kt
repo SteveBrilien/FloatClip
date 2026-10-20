@@ -46,6 +46,26 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
     }
 
     fun delete(id: Long) = synchronized(LOCK) { persist(entries().filterNot { it.id == id }) }
+    /** Idempotent delivery; retain organization when identical content is copied again by the same source. */
+    fun receiveShared(entry: com.floatclip.share.ClipboardSync.Entry) = synchronized(LOCK) {
+        val snapshot=unifiedSnapshot();val array=snapshot.getJSONArray("entries");val key=entry.id.toString()
+        if((0 until array.length()).any{array.getJSONObject(it).getString("id")==key})return@synchronized
+        val duplicate=(0 until array.length()).firstOrNull {
+            val row=array.getJSONObject(it);row.getString("text")==entry.text && row.getJSONObject("source").getString("id")==entry.source.id.toString()
+        }
+        val old=duplicate?.let{array.getJSONObject(it)}
+        if(duplicate!=null)array.remove(duplicate)
+        if(array.length()>=MAX_ITEMS) {
+            val removable=(0 until array.length()).filter{!array.getJSONObject(it).getBoolean("pinned")}.minByOrNull{array.getJSONObject(it).getLong("updatedAt")}
+                ?:error("置顶记录已满")
+            array.remove(removable)
+        }
+        val now=System.currentTimeMillis()
+        array.put(JSONObject().put("id",key).put("text",entry.text).put("pinned",old?.optBoolean("pinned")?:false)
+            .put("category",old?.optString("category")?:CategoryStore.DEFAULT_CATEGORY).put("createdAt",old?.optLong("createdAt")?:now).put("updatedAt",now)
+            .put("source",JSONObject().put("id",entry.source.id.toString()).put("name",entry.source.name).put("platform",entry.source.platform)))
+        commitUnified(snapshot.getString("revision"),array)
+    }
     fun restore(entry: ClipEntry) = synchronized(LOCK) {
         val current = entries().toMutableList()
         if(current.any { it.key == entry.key || it.id == entry.id }) return@synchronized

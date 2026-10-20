@@ -1273,7 +1273,7 @@ open class MainActivity : Activity() {
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1))
     }
 
-    private fun cardBackground(): GradientDrawable = roundedBackground(colors.cardBackground, 14f)
+    private fun cardBackground(): GradientDrawable = roundedBackground(colors.cardBackground, 16f)
 
     private fun roundedBackground(color: Int, radiusDp: Float, border: Boolean = false): GradientDrawable = GradientDrawable().apply {
         setColor(color)
@@ -1338,36 +1338,37 @@ open class MainActivity : Activity() {
             OverlayThemeMode.LIGHT -> false
             OverlayThemeMode.DARK -> true
         }
+        // Keep the app shell on the same token family as DeviceActivity / ShareDesign.
         return if (dark) {
             AppColors(
-                pageBackground = Color.rgb(18, 19, 22),
-                cardBackground = Color.rgb(29, 31, 36),
-                primaryText = Color.rgb(244, 245, 247),
-                secondaryText = Color.rgb(166, 170, 180),
-                dividerColor = Color.rgb(52, 55, 62),
-                accent = Color.rgb(122, 157, 255),
-                accentTextOnFill = Color.rgb(14, 22, 42),
-                actionBackground = Color.rgb(37, 47, 70),
-                fieldBackground = Color.rgb(38, 40, 46),
-                borderColor = Color.rgb(53, 56, 63),
-                navigationBackground = Color.rgb(23, 25, 29),
-                selectedNavigationBackground = Color.rgb(35, 42, 58),
+                pageBackground = Color.rgb(12, 20, 34),       // #0C1422
+                cardBackground = Color.rgb(22, 34, 53),       // #162235
+                primaryText = Color.rgb(237, 243, 252),       // #EDF3FC
+                secondaryText = Color.rgb(169, 184, 205),     // #A9B8CD
+                dividerColor = Color.rgb(45, 60, 82),         // #2D3C52
+                accent = Color.rgb(141, 187, 255),            // #8DBBFF
+                accentTextOnFill = Color.rgb(12, 20, 34),
+                actionBackground = Color.rgb(36, 59, 90),     // #243B5A
+                fieldBackground = Color.rgb(27, 42, 64),
+                borderColor = Color.rgb(45, 60, 82),
+                navigationBackground = Color.rgb(12, 20, 34),
+                selectedNavigationBackground = Color.rgb(36, 59, 90),
                 dark = true,
             )
         } else {
             AppColors(
-                pageBackground = Color.rgb(247, 248, 250),
+                pageBackground = Color.rgb(244, 247, 252),    // #F4F7FC
                 cardBackground = Color.WHITE,
-                primaryText = Color.rgb(25, 27, 31),
-                secondaryText = Color.rgb(105, 110, 120),
-                dividerColor = Color.rgb(230, 232, 237),
-                accent = Color.rgb(55, 100, 245),
+                primaryText = Color.rgb(25, 40, 63),          // #19283F
+                secondaryText = Color.rgb(89, 108, 133),      // #596C85
+                dividerColor = Color.rgb(223, 231, 242),      // #DFE7F2
+                accent = Color.rgb(36, 93, 206),              // #245DCE
                 accentTextOnFill = Color.WHITE,
-                actionBackground = Color.rgb(241, 245, 255),
-                fieldBackground = Color.rgb(243, 244, 247),
-                borderColor = Color.rgb(233, 235, 240),
-                navigationBackground = Color.rgb(252, 252, 253),
-                selectedNavigationBackground = Color.rgb(238, 243, 255),
+                actionBackground = Color.rgb(235, 242, 255),  // #EBF2FF
+                fieldBackground = Color.rgb(240, 243, 248),
+                borderColor = Color.rgb(223, 231, 242),
+                navigationBackground = Color.rgb(244, 247, 252),
+                selectedNavigationBackground = Color.rgb(235, 242, 255),
                 dark = false,
             )
         }

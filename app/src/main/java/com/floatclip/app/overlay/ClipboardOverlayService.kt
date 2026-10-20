@@ -559,7 +559,7 @@ class ClipboardOverlayService : Service() {
         val pinButton = iconButton(
             R.drawable.ic_pin,
             if (panelPinnedMode) "退出固定模式" else "固定模式",
-            if (panelPinnedMode) ACCENT_BLUE else palette.secondaryText,
+            if (panelPinnedMode) accentColor(palette) else palette.secondaryText,
         ) { togglePanelPinnedMode() }
         panelPinButton = pinButton
         header.addView(pinButton, LinearLayout.LayoutParams(dp(40), dp(40)))
@@ -789,8 +789,8 @@ class ClipboardOverlayService : Service() {
                 maxLines=1
                 ellipsize=android.text.TextUtils.TruncateAt.END
                 setPadding(dp(14),0,dp(14),0)
-                setTextColor(if(selected) ACCENT_BLUE else palette.secondaryText)
-                background=roundedBackground(if(selected) withAlpha(ACCENT_BLUE,if(palette.isDark)70 else 28) else withAlpha(palette.rowBackground,if(palette.isDark)175 else 205),12f)
+                setTextColor(if(selected) accentColor(palette) else palette.secondaryText)
+                background=roundedBackground(if(selected) withAlpha(accentColor(palette),if(palette.isDark)70 else 28) else withAlpha(palette.rowBackground,if(palette.isDark)175 else 205),12f)
                 contentDescription="剪贴板来源：${source.name}"
                 setOnClickListener {
                     if(activeSource!=source.id){
@@ -819,9 +819,9 @@ class ClipboardOverlayService : Service() {
                     textSize = 12f
                     gravity = Gravity.CENTER
                     setPadding(dp(13), 0, dp(13), 0)
-                    setTextColor(if (selected) ACCENT_BLUE else palette.secondaryText)
+                    setTextColor(if (selected) accentColor(palette) else palette.secondaryText)
                     background = roundedBackground(
-                        if (selected) withAlpha(ACCENT_BLUE, if (palette.isDark) 70 else 28) else withAlpha(palette.rowBackground, if (palette.isDark) 175 else 205),
+                        if (selected) withAlpha(accentColor(palette), if (palette.isDark) 70 else 28) else withAlpha(palette.rowBackground, if (palette.isDark) 175 else 205),
                         12f,
                     )
                     setOnClickListener {
@@ -901,7 +901,7 @@ class ClipboardOverlayService : Service() {
                 setPadding(dp(10), 0, dp(12), 0)
                 minimumHeight = dp(48)
                 background = android.graphics.drawable.StateListDrawable().apply {
-                    addState(intArrayOf(android.R.attr.state_pressed), roundedBackground(withAlpha(ACCENT_BLUE, 35), 9f))
+                    addState(intArrayOf(android.R.attr.state_pressed), roundedBackground(withAlpha(accentColor(palette), 35), 9f))
                     addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
                 }
                 addView(ImageView(this@ClipboardOverlayService).apply {
@@ -936,7 +936,7 @@ class ClipboardOverlayService : Service() {
             row("‹ 返回") { showEntryMenu(entry, anchor = anchor) }
             categoryStore.categories().distinct().forEach { category ->
                 row(if (category == entry.category) "✓  $category" else category,
-                    if (category == entry.category) ACCENT_BLUE else palette.primaryText) {
+                    if (category == entry.category) accentColor(palette) else palette.primaryText) {
                     store.updateCategory(entry.id, category)
                     dismissEntryActionLayer(animated = false)
                     renderCategoryBar()
@@ -1050,7 +1050,7 @@ class ClipboardOverlayService : Service() {
         runCatching { windowManager.updateViewLayout(scrim, scrimParams) }
 
         button?.apply {
-            imageTintList = ColorStateList.valueOf(if (panelPinnedMode) ACCENT_BLUE else palette.secondaryText)
+            imageTintList = ColorStateList.valueOf(if (panelPinnedMode) accentColor(palette) else palette.secondaryText)
             contentDescription = if (panelPinnedMode) "退出固定模式" else "固定模式"
         }
     }
@@ -1145,6 +1145,9 @@ class ClipboardOverlayService : Service() {
 
     private fun percentAlpha(percent: Int): Int = (255f * percent.coerceIn(0, 100) / 100f).toInt().coerceIn(0, 255)
 
+    private fun accentColor(palette: OverlayPalette): Int =
+        if (palette.isDark) Color.rgb(141, 187, 255) else Color.rgb(36, 93, 206)
+
     private fun withAlpha(color: Int, alpha: Int): Int = Color.argb(
         alpha.coerceIn(0, 255),
         Color.red(color),
@@ -1196,6 +1199,6 @@ class ClipboardOverlayService : Service() {
         private const val MENU_PIN = 2
         private const val MENU_DELETE = 3
         private const val MENU_CATEGORY_BASE = 1000
-        private val ACCENT_BLUE = Color.rgb(92, 132, 247)
+
     }
 }

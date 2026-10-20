@@ -57,7 +57,7 @@ class NativeBridge(private val activity: Activity, private val legacy: (String) 
             (activity as? NodeActivity)?.applyBars(mode)
             true
         }
-        "legacy.open" -> { val page = args.getString("page"); require(page in listOf("clipboard", "lan")); legacy(page); true }
+        "legacy.open" -> { val page = args.getString("page"); require(page == "clipboard") { "旧连接页面已移除" }; legacy(page); true }
         "file.begin" -> {
             check(transfer == null && waitingDestination == null) { "请先完成当前文件保存" }
             val name = args.getString("name").replace(Regex("[\\\\/\\p{Cntrl}\\u202a-\\u202e\\u2066-\\u2069]"), "_").take(180)

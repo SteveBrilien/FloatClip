@@ -89,7 +89,7 @@ open class MainActivity : Activity() {
         overlayPreferences = OverlayPreferences(this)
         vaultSettings = VaultSettings(this)
         vaultBackupManager = VaultBackupManager(this)
-        currentPage = savedInstanceState?.getInt(STATE_PAGE, PAGE_CLIPBOARD) ?: PAGE_CLIPBOARD
+        currentPage = if(savedInstanceState?.getInt(STATE_PAGE, PAGE_CLIPBOARD)==PAGE_SETTINGS) PAGE_SETTINGS else PAGE_CLIPBOARD
         searchQuery = savedInstanceState?.getString("searchQuery").orEmpty()
         sourceFilter = savedInstanceState?.getString("sourceFilter").orEmpty()
         settingsSection = savedInstanceState?.getString("settingsSection").orEmpty()
@@ -210,9 +210,8 @@ open class MainActivity : Activity() {
 
         renderHeader()
         when (currentPage) {
-            PAGE_CLIPBOARD -> renderClipboardPage()
             PAGE_SETTINGS -> renderSettingsPage()
-            else -> renderStatusPage()
+            else -> renderClipboardPage()
         }
         root.requestFocus()
     }
@@ -254,39 +253,6 @@ open class MainActivity : Activity() {
         }
         content.addView(bar)
         spacer(8)
-    }
-
-    private fun renderStatusPage() {
-        val enabled = overlayPreferences.overlayEnabled()
-        addCard(card().apply {
-            addView(LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                addView(LinearLayout(this@MainActivity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    addView(textView("悬浮球", 17f, true))
-                    addView(textView(
-                        when {
-                            enabled -> "运行中"
-                            !Settings.canDrawOverlays(this@MainActivity) -> "需要悬浮窗权限"
-                            else -> "未开启"
-                        }, 12.5f, false, colors.secondaryText,
-                    ).apply { setPadding(0, dp(4), 0, 0) })
-                }, LinearLayout.LayoutParams(0, -2, 1f))
-                addView(actionButton(if (enabled) "关闭" else "开启", !enabled) {
-                    if (enabled) stopOverlay() else startOverlay()
-                    render()
-                }, LinearLayout.LayoutParams(dp(92), dp(44)))
-            })
-        })
-        spacer(12)
-        addCard(card().apply {
-            addView(settingRow("权限与后台", "", "›") {
-                currentPage = PAGE_SETTINGS
-                settingsSection = "权限与后台"
-                render()
-            })
-        })
     }
 
     private fun showUsageHelp() {
@@ -745,45 +711,6 @@ open class MainActivity : Activity() {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)),
         )
         return root
-    }
-
-    private fun bottomNavigation(): View {
-        val bar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(dp(12), dp(4), dp(12), dp(4))
-            setBackgroundColor(colors.navigationBackground)
-        }
-        listOf("状态", "剪贴板", "设置").forEachIndexed { index, label ->
-            val selected = currentPage == index
-            bar.addView(
-                TextView(this).apply {
-                    text = label
-                    textSize = 13.5f
-                    gravity = Gravity.CENTER
-                    setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
-                    setTextColor(if (selected) colors.accent else colors.secondaryText)
-                    background = null
-                    setOnClickListener {
-                        if (currentPage != index) {
-                            currentPage = index
-                            render()
-                        }
-                    }
-                },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
-                    if (index > 0) marginStart = dp(6)
-                },
-            )
-        }
-        return bar
-    }
-
-    private fun infoRow(title: String, detail: String): View = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(0, dp(8), 0, dp(8))
-        addView(textView(title, 14.5f, false))
-        addView(textView(detail, 12f, false, colors.secondaryText).apply { maxLines = 3 })
     }
 
     private fun historyCategorySelector(): View {
@@ -1413,7 +1340,6 @@ open class MainActivity : Activity() {
     )
 
     companion object {
-        private const val PAGE_STATUS = 0
         private const val PAGE_CLIPBOARD = 1
         private const val PAGE_SETTINGS = 2
         private const val STATE_PAGE = "current_page"

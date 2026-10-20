@@ -91,7 +91,7 @@ public sealed class LocalClipboardWindow:Window
     void ApplyPalette()
     {
         dark=mode=="dark"||mode=="system"&&(Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize","AppsUseLightTheme",1) as int?)==0;
-        Background=B(dark?"#151D2B":"#F4F7FC");surface=B(dark?"#223047":"#FFFFFF");text=B(dark?"#EDF3FF":"#1B2940");muted=B(dark?"#B3C1D6":"#5C6C83");line=B(dark?"#344158":"#E6ECF5");tint=B(dark?"#2D456B":"#E9F1FF");accent=B(dark?"#9BBEFF":"#2563EB");Foreground=text;
+        Background=B(dark?"#0C1422":"#F4F7FC");surface=B(dark?"#162235":"#FFFFFF");text=B(dark?"#EDF3FC":"#19283F");muted=B(dark?"#A9B8CD":"#596C85");line=B(dark?"#2D3C52":"#DFE7F2");tint=B(dark?"#243B5A":"#EBF2FF");accent=B(dark?"#8DBBFF":"#245DCE");Foreground=text;
         search.Background=Brushes.Transparent;search.Foreground=text;search.BorderThickness=new(0);search.Padding=new(0);search.FontSize=16;search.MinHeight=48;search.VerticalContentAlignment=VerticalAlignment.Center;
     }
     FrameworkElement Glyph(string code,int size=24)=>new TextBlock{Text=code,FontFamily=new FontFamily("Segoe MDL2 Assets"),FontSize=size,VerticalAlignment=VerticalAlignment.Center,HorizontalAlignment=HorizontalAlignment.Center,Foreground=muted};
@@ -139,7 +139,7 @@ public sealed class LocalClipboardWindow:Window
     FrameworkElement Card(JsonObject clip,string own)
     {
         string id=clip["id"]!.GetValue<string>(),value=clip["text"]!.GetValue<string>(),platform=clip["source"]!["platform"]!.GetValue<string>();bool pinned=clip["pinned"]!.GetValue<bool>();
-        var color=B(!sourceColors?(dark?"#9BBEFF":"#2563EB"):platform=="android"?(dark?"#83D9BE":"#14755F"):platform=="ipad"?(dark?"#C8ACEF":"#7650A3"):(dark?"#9BBEFF":"#2563EB"));
+        var color=B(!sourceColors?(dark?"#8DBBFF":"#245DCE"):platform=="android"?(dark?"#83D9BE":"#14755F"):platform=="ipad"?(dark?"#C8ACEF":"#7650A3"):(dark?"#8DBBFF":"#245DCE"));
         Color mix(Color a,Color b,double f)=>Color.FromRgb((byte)(a.R*(1-f)+b.R*f),(byte)(a.G*(1-f)+b.G*f),(byte)(a.B*(1-f)+b.B*f));
         var row=new Grid{Tag="clip",Margin=new(0,0,0,10),ClipToBounds=true};
         var actionGrid=new Grid{Width=148,HorizontalAlignment=HorizontalAlignment.Right,Visibility=Visibility.Hidden};actionGrid.ColumnDefinitions.Add(new());actionGrid.ColumnDefinitions.Add(new());
@@ -185,7 +185,7 @@ public sealed class LocalClipboardWindow:Window
         void Option(string label,bool selected,Action<bool> change){var check=new CheckBox{Content=label,IsChecked=selected,Foreground=text,FontSize=15,MinHeight=48,VerticalContentAlignment=VerticalAlignment.Center};check.Click+=(_,_)=>Guard(()=>{change(check.IsChecked==true);SavePreferences();Refresh();});panel.Children.Add(check);}
         Option("收录新复制的文字",capture,v=>capture=v);Option("设备特征色",sourceColors,v=>sourceColors=v);Option("半透明色块",translucent,v=>translucent=v);
         panel.Children.Add(Button("剪贴板共享",Sharing));
-        panel.Children.Add(Button("iPad 与跨网设备",()=>new UnifiedWindow{Owner=this}.Show()));
+        panel.Children.Add(Button("跨网设备（iPad / Web）",()=>new UnifiedWindow{Owner=this}.Show()));
         var actions=new WrapPanel{Margin=new(0,14,0,12)};actions.Children.Add(Button("合并导入",Import));actions.Children.Add(Button("导出备份",Export));panel.Children.Add(actions);
         var update=Button("检查更新",()=>{});update.Click+=async(_,_)=>{update.IsEnabled=false;try{var r=await ShareUpdates.Check();if(r.Build>ShareUpdates.Build&&MessageBox.Show(window,"发现 "+r.Version+"，打开下载地址？","FloatClip",MessageBoxButton.OKCancel)==MessageBoxResult.OK)System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(r.Url){UseShellExecute=true});else update.Content="当前版本 0.7.1";}catch{update.Content="检查失败，点击重试";}finally{update.IsEnabled=true;}};panel.Children.Add(update);
         panel.Children.Add(new TextBlock{Text=hotkey?"快捷键 Win + Shift + V":"可从系统托盘打开剪贴板",Foreground=muted,FontSize=14,Margin=new(0,16,0,0)});window.Content=new ScrollViewer{Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};window.ShowDialog();

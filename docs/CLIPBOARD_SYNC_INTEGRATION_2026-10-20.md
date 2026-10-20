@@ -436,3 +436,20 @@ Windows 最终返回 OBEX 连接超时：“连接方在一段时间后没有正
 9. 测试 master/send/receive/apply/reconnect/per-device 开关，以及撤销授权后旧 token 不能重连。
 
 发布边界不变：以上均为开发分支与测试 artifact；未发布正式 APK、未更新 feed、未部署 PWA、未 push 到 main。
+
+### 01:19 最终 Windows 真实扫描补充
+
+最终 Windows 测试包 `artifact-f00935ca3271467ba5d923aef9f3782a` 已下载到授权电脑并校验 SHA-256：
+`fe9711e0dac6bd86ee4b51b9afa4287eeada0269594cef98cb2306c493746239`。
+
+使用该最终包在真实 Windows 上：
+- 开启剪贴板共享；
+- 进入“通过蓝牙添加（推荐）”；
+- 当前手机尚未安装/开放新 FloatClip pairing service。
+
+WinRT service-UUID 定向发现能在数秒内结束，并准确显示：
+“未发现处于‘添加设备’窗口的已配对 FloatClip 蓝牙设备”。
+
+这验证了新的定向 SDP/RFCOMM service discovery 在用户真实 Windows + Intel Bluetooth 上运行正常，并解决了早期逐个轮询耳机/手柄导致长时间停留在“正在查找”的问题。
+
+测试用 Windows Artifact publication 在下载完成后均已撤销；仅保留 Android APK 的临时测试下载 publication，供手机安装，仍不属于正式发布。

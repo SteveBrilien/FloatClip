@@ -4,6 +4,8 @@ import android.content.Context
 import com.floatclip.app.clipboard.ClipStore
 import com.floatclip.app.security.VaultCipher
 import com.floatclip.app.sync.SyncPreferences
+import com.floatclip.app.sync.SyncPolicy
+import com.floatclip.share.ShareWire
 import com.floatclip.share.ClipboardSync
 import org.junit.Assert.*
 import org.junit.Test
@@ -48,4 +50,36 @@ class ClipboardSyncStorageTest {
         val store=ClipStore(context(),codec);store.addText("same");store.receiveShared(ClipboardSync.Entry(UUID.randomUUID(),remote,1,100,"same"))
         assertEquals(2,store.entries().size);assertEquals(2,store.entries().map{it.sourceDeviceId}.distinct().size)
     }
+    private class PolicyFixture {
+        var saved: ByteArray?=null
+        val frames=mutableListOf<ShareWire.Frame>()
+        val local=ClipboardSync.Device(UUID.fromString("00000000-0000-0000-0000-000000000001"),"手机","android")
+        fun engine()=ClipboardSync(local,object:ClipboardSync.Storage{
+            override fun load():ByteArray?=saved
+            override fun save(bytes:ByteArray){saved=bytes.copyOf()}
+        },object:ClipboardSync.Events{
+            override fun send(peer:String,frame:ShareWire.Frame){frames.add(frame)}
+            override fun history(entry:ClipboardSync.Entry)=Unit
+            override fun apply(entry:ClipboardSync.Entry)=Unit
+        })
+        fun epoch(engine:ClipboardSync):ByteArray{frames.clear();engine.connected("a".repeat(64));return frames.last{it.type==ClipboardSync.HELLO}.data.copyOfRange(2,18)}
+    }
+    @Test fun policySurvivesInterruptedServiceAndCoalescedToggles(){
+        val prefs=SyncPreferences(context());prefs.save(enabled=true);val fixture=PolicyFixture();val first=fixture.engine();SyncPolicy.apply(prefs,first);val original=fixture.epoch(first)
+        val unchanged=prefs.policy();prefs.save(reconnect=false);assertEquals(unchanged.receiveGeneration,prefs.policy().receiveGeneration)
+        val restart=fixture.engine();SyncPolicy.apply(prefs,restart);assertArrayEquals(original,fixture.epoch(restart))
+        // The service never processed either preference event before its process was killed.
+        prefs.save(enabled=false);prefs.save(enabled=true);assertNotEquals(prefs.policy().receiveGeneration,prefs.policy().appliedReceive)
+        val resumed=fixture.engine();SyncPolicy.apply(prefs,resumed);assertFalse(original.contentEquals(fixture.epoch(resumed)));assertEquals(1,resumed.remembered())
+        assertEquals(prefs.policy().receiveGeneration,prefs.policy().appliedReceive)
+        val beforeFastToggle=fixture.epoch(resumed);prefs.save(receiving=false);prefs.save(receiving=true);SyncPolicy.apply(prefs,resumed);assertFalse(beforeFastToggle.contentEquals(fixture.epoch(resumed)))
+    }
+    @Test fun queuedCopiesKeepTheirCaptureConsentAfterSendingIsResumed(){
+        val prefs=SyncPreferences(context());prefs.save(enabled=true);val fixture=PolicyFixture();val engine=fixture.engine();SyncPolicy.apply(prefs,engine)
+        val previous=prefs.policy().sendGeneration;prefs.save(sending=false);val privateCapture=prefs.policy().sendGeneration.takeIf{prefs.sending()};prefs.save(sending=true);val current=SyncPolicy.apply(prefs,engine)
+        assertFalse(SyncPolicy.mayShare(current,previous));assertFalse(SyncPolicy.mayShare(current,privateCapture));assertTrue(SyncPolicy.mayShare(current,current.sendGeneration))
+        assertNull(engine.copied("private queued content",100,!SyncPolicy.mayShare(current,privateCapture)))
+        assertFalse(fixture.saved!!.toString(Charsets.UTF_8).contains("private queued content"))
+    }
+
 }

@@ -78,7 +78,9 @@ open class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        registerReceiver(sharedHistoryChanged,IntentFilter(ClipboardSyncService.HISTORY_CHANGED),"$packageName.permission.INTERNAL",null)
+        val historyFilter=IntentFilter(ClipboardSyncService.HISTORY_CHANGED)
+        if(android.os.Build.VERSION.SDK_INT>=33)registerReceiver(sharedHistoryChanged,historyFilter,"$packageName.permission.INTERNAL",null,Context.RECEIVER_NOT_EXPORTED)
+        else registerReceiver(sharedHistoryChanged,historyFilter,"$packageName.permission.INTERNAL",null)
         if(SyncPreferences(this).enabled())SyncRuntime.refresh(this)
         IntegrationRegistry.initialize(this)
         categoryStore = CategoryStore(this)

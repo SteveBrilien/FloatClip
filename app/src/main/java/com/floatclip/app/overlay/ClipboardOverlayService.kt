@@ -116,7 +116,9 @@ class ClipboardOverlayService : Service() {
     @SuppressLint("UnspecifiedRegisterReceiverFlag") // registration requires a package-scoped signature permission
     override fun onCreate() {
         super.onCreate()
-        registerReceiver(sharedHistoryChanged,IntentFilter(com.floatclip.app.sync.ClipboardSyncService.HISTORY_CHANGED),"$packageName.permission.INTERNAL",null)
+        val historyFilter=IntentFilter(com.floatclip.app.sync.ClipboardSyncService.HISTORY_CHANGED)
+        if(android.os.Build.VERSION.SDK_INT>=33)registerReceiver(sharedHistoryChanged,historyFilter,"$packageName.permission.INTERNAL",null,Context.RECEIVER_NOT_EXPORTED)
+        else registerReceiver(sharedHistoryChanged,historyFilter,"$packageName.permission.INTERNAL",null)
         windowManager = getSystemService(WindowManager::class.java)
         store = ClipStore(this)
         clipboard = ClipboardRepository(this)

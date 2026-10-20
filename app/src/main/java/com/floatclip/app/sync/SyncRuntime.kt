@@ -34,19 +34,21 @@ object SyncRuntime {
     fun file(offer: ShareWire.Offer,file: File,outgoing: Boolean){observer?.get()?.file(offer,file,outgoing)}
     fun pair(context: Context){check(SyncPreferences(context).enabled()){ "请先开启剪贴板共享" };context.startForegroundService(Intent(context,ClipboardSyncService::class.java).setAction(ClipboardSyncService.PAIR))}
     fun refresh(context: Context) {
-        if(SyncPreferences(context).enabled())context.startForegroundService(Intent(context,ClipboardSyncService::class.java))
-        else {current()?.pauseImmediately();context.stopService(Intent(context,ClipboardSyncService::class.java))}
+        val intent=Intent(context,ClipboardSyncService::class.java)
+        if(SyncPreferences(context).enabled())context.startForegroundService(intent)
+        else {current()?.pauseImmediately();context.stopService(intent)}
     }
     fun stamp(clip: ClipData): String {
         val value=if(clip.itemCount>0)clip.getItemAt(0).text?.toString().orEmpty() else ""
         return clip.description.timestamp.toString()+":"+ShareWire.digest(value.toByteArray(Charsets.UTF_8)).joinToString(""){"%02x".format(it.toInt() and 255)}
     }
     fun observe(context: Context,clip: ClipData) {
-        if(!SyncPreferences(context).enabled()||ClipboardWrites.isOwnClip(context,clip.description))return
+        val policy=SyncPreferences(context).policy()
+        if(!policy.enabled||ClipboardWrites.isOwnClip(context,clip.description))return
         val event=stamp(clip)
         if(clip.description.extras?.getBoolean("android.content.extra.IS_SENSITIVE",false)==true){current()?.copied("",event,true);return}
         val value=if(clip.itemCount>0)clip.getItemAt(0).text?.toString().orEmpty() else ""
         if(value.isBlank()||value.toByteArray(Charsets.UTF_8).size>com.floatclip.share.ClipboardSync.MAX_BYTES){current()?.copied("",event,true);return}
-        current()?.copied(value,event)
+        current()?.copied(value,event,shareGeneration=policy.sendGeneration.takeIf{policy.sending})
     }
 }

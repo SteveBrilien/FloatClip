@@ -81,6 +81,8 @@ public sealed class ClipboardSyncEngine
             return frame.Type==SyncProtocol.Ack&&state.Receive&&p.Send&&p.SeenId==frame.Id;
         }
     }
+    public void InvalidateApplications(){lock(gate)applicationGrant++;}
+    public void RenewReceiveGrant(){lock(gate){var next=state.Copy();next.Epoch=Guid.NewGuid();Save(next);applicationGrant++;foreach(string key in connected.ToArray())Hello(key);}}
     public void Configure(bool enabled,bool sending,bool receiving,bool applying)
     {
         lock(gate)

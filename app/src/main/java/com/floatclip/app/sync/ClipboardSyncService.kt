@@ -74,20 +74,22 @@ class ClipboardSyncService: Service() {
     }
     fun firstSession(): ShareSession?=links.values.firstOrNull()?.session
 
+    private data class Queued(val frame: ShareWire.Frame,val sendGeneration: String,val receiveGeneration: String)
     private inner class Link(val key: String,val session: ShareSession) {
         private val writer=Executors.newSingleThreadExecutor()
-        private val pending=ConcurrentHashMap<Int,ShareWire.Frame>()
+        private val pending=ConcurrentHashMap<Int,Queued>()
         private val scheduled=AtomicBoolean()
         fun send(frame: ShareWire.Frame) {
             if(closing||paused)return
-            pending[frame.type]=frame
+            val p=prefs.policy();pending[frame.type]=Queued(frame,p.appliedSend,p.appliedReceive)
             schedule()
         }
         private fun schedule(){if(scheduled.compareAndSet(false,true))runCatching {writer.execute {
             try {
                 while(!closing&&!paused&&prefs.enabled()&&links[key]===this) {
-                    val frame=listOf(ClipboardSync.HELLO,ClipboardSync.ACK,ClipboardSync.CLIP).firstNotNullOfOrNull{pending.remove(it)}?:break
-                    if((frame.type!=ClipboardSync.CLIP||prefs.sending())&&(frame.type!=ClipboardSync.ACK||prefs.receiving())&&authorized(key)&&engine.maySend(key,frame))runCatching {session.sendSync(frame)}.onFailure{session.close()}
+                    val queued=listOf(ClipboardSync.HELLO,ClipboardSync.ACK,ClipboardSync.CLIP).firstNotNullOfOrNull{pending.remove(it)}?:break
+                    val frame=queued.frame;val p=prefs.policy()
+                    if((frame.type!=ClipboardSync.CLIP||p.sending&&queued.sendGeneration==p.sendGeneration)&&(frame.type!=ClipboardSync.ACK||p.receiving&&queued.receiveGeneration==p.receiveGeneration)&&authorized(key)&&engine.maySend(key,frame))runCatching {session.sendSync(frame)}.onFailure{session.close()}
                 }
             } finally {scheduled.set(false);if(pending.isNotEmpty()&&!closing&&!paused&&links[key]===this)schedule()}
         }}.onFailure{scheduled.set(false)}}
@@ -119,12 +121,12 @@ class ClipboardSyncService: Service() {
                 engine=ClipboardSync(ClipboardSync.Device(UUID.fromString(local.getString("id")),local.getString("name"),"android"),EncryptedSyncStorage(this),object:ClipboardSync.Events {
                     override fun send(peer: String,frame: ShareWire.Frame){links[peer]?.send(frame)}
                     override fun history(entry: ClipboardSync.Entry){library.receiveShared(entry);historyChanged()}
-                    override fun apply(entry: ClipboardSync.Entry){val grant=engine.applicationGrant();main.post {
+                    override fun apply(entry: ClipboardSync.Entry){val grant=engine.applicationGrant();val generation=prefs.policy().appliedApply;main.post {
                         val current=runCatching{clipboard.primaryClip}.getOrNull()
                         if(current!=null&&!ClipboardWrites.isOwnClip(this@ClipboardSyncService,current.description)&&SyncRuntime.stamp(current)!=lastCapture) {
                             SyncRuntime.observe(this@ClipboardSyncService,current);return@post
                         }
-                        if(!closing&&!paused&&prefs.enabled()&&prefs.receiving()&&prefs.applying()&&engine.mayApply(entry,grant)) {
+                        if(!closing&&!paused&&prefs.enabled()&&prefs.receiving()&&prefs.applying()&&prefs.policy().applyGeneration==generation&&engine.peerViews().any{it.device.id==entry.source.id&&authorized(it.key)}&&engine.mayApply(entry,grant)) {
                             runCatching{ClipboardWrites.write(this@ClipboardSyncService,clipboard,entry.text)}.onFailure{setStatus("内容已收到，当前系统未允许写入剪贴板")}
                         }
                     }}
@@ -133,7 +135,7 @@ class ClipboardSyncService: Service() {
                 // service was stopped, stale sync metadata must not resurrect those peers.
                 for(key in engine.peerKeys())if(!authorized(key))engine.forget(key)
                 configureEngine();setStatus("等待已授权设备 · Android 11 后台读取受系统限制")
-                actor.scheduleWithFixedDelay({if(!closing&&!paused&&::engine.isInitialized){for(key in links.keys)runCatching{engine.retry(key,System.currentTimeMillis())};refreshHosts()}},10,10,TimeUnit.SECONDS)
+                actor.scheduleWithFixedDelay({if(!closing&&!paused&&::engine.isInitialized){for(key in links.keys)runCatching{configureEngine();engine.retry(key,System.currentTimeMillis())};refreshHosts()}},10,10,TimeUnit.SECONDS)
                 refreshHosts()
             }.onFailure {setStatus("无法读取共享状态，请保留数据后检查存储");pauseImmediately()}
         }
@@ -151,12 +153,12 @@ class ClipboardSyncService: Service() {
         actor.execute {if(::engine.isInitialized&&!closing){runCatching{configureEngine();refreshHosts()}.onFailure{setStatus("共享配置未保存，已暂停");pauseImmediately()}}}
         return START_STICKY
     }
-    private fun configureEngine(){paused=!prefs.enabled();engine.configure(prefs.enabled(),prefs.sending(),prefs.receiving(),prefs.applying())}
-    fun copied(text: String,event: String,excluded: Boolean=false) {
+    private fun configureEngine(){paused=!SyncPolicy.apply(prefs,engine).enabled}
+    fun copied(text: String,event: String,excluded: Boolean=false,shareGeneration: String?=null) {
         if(closing||paused||!prefs.enabled())return
         actor.execute {
             if(!closing&&!paused&&::engine.isInitialized&&event!=lastCapture&&prefs.enabled()) {
-                runCatching {if(!excluded)library.addText(text);engine.copied(text,System.currentTimeMillis(),excluded);lastCapture=event;if(!excluded)historyChanged()}
+                runCatching {configureEngine();val p=prefs.policy();val mayShare=!excluded&&SyncPolicy.mayShare(p,shareGeneration);if(!excluded)library.addText(text);engine.copied(text,System.currentTimeMillis(),!mayShare);lastCapture=event;if(!excluded)historyChanged()}
                     .onFailure{setStatus("当前内容未同步，请检查存储或文字长度")}
             }
         }
@@ -191,9 +193,9 @@ class ClipboardSyncService: Service() {
                     override fun attached(session: ShareSession){actor.execute {
                         if(closing||paused||!prefs.enabled()||connectionTokens[peer]!=token||!authorized(peer)){session.close();return@execute}
                         links.remove(peer)?.close();links[peer]=Link(peer,session)
-                        runCatching{engine.connected(peer);setStatus("${links.size} 台设备已连接 · 加密共享")}.onFailure{links.remove(peer)?.close();setStatus("设备授权状态未保存")}
+                        runCatching{configureEngine();engine.connected(peer);setStatus("${links.size} 台设备已连接 · 加密共享")}.onFailure{links.remove(peer)?.close();setStatus("设备授权状态未保存")}
                     }}
-                    override fun sync(frame: ShareWire.Frame){if(!closing)actor.execute{if(!closing&&!paused&&prefs.enabled()&&(frame.type!=ClipboardSync.CLIP||prefs.receiving())&&authorized(peer)&&connectionTokens[peer]==token)runCatching{engine.accept(peer,frame,System.currentTimeMillis())}.onFailure{links.remove(peer)?.close();setStatus("设备授权或同步校验失败，请重新核对")}}}
+                    override fun sync(frame: ShareWire.Frame){if(!closing)actor.execute{if(!closing&&!paused&&prefs.enabled()&&(frame.type!=ClipboardSync.CLIP||prefs.receiving())&&authorized(peer)&&connectionTokens[peer]==token)runCatching{configureEngine();engine.accept(peer,frame,System.currentTimeMillis())}.onFailure{links.remove(peer)?.close();setStatus("设备授权或同步校验失败，请重新核对")}}}
                     override fun text(id: UUID,value: String,outgoing: Boolean)=Unit
                     override fun offered(offer: ShareWire.Offer){main.post{if(SyncRuntime.hasObserver())SyncRuntime.offer(peer,offer) else links[peer]?.session?.reject(offer.id)}}
                     override fun progress(id: UUID,name: String,done: Long,total: Long,outgoing: Boolean){main.post{SyncRuntime.progress(name,done,total,outgoing)}}

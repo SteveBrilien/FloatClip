@@ -70,6 +70,12 @@ public final class ClipboardSync {
         if(frame.type==CLIP)return state.send&&p.receive&&p.pending!=null&&p.pending.id.equals(frame.id)&&Arrays.equals(frame.data,payload(p.pending,p.pendingEpoch));
         return frame.type==ACK&&state.receive&&p.send&&frame.id.equals(p.seenId);
     }
+    public synchronized void invalidateApplications(){applicationGrant++;}
+    /** Durable receive consent can change even if an async adapter coalesced off/on into true. */
+    public synchronized void renewReceiveGrant() throws Exception {
+        State next=state.copy();next.epoch=UUID.randomUUID();save(next);applicationGrant++;
+        for(String key:new ArrayList<>(connected))emitHello(key);
+    }
     public synchronized void configure(boolean enabled,boolean send,boolean receive,boolean apply) throws Exception {
         State next=state.copy();
         // A new receive grant cannot revive packets queued under the old grant.

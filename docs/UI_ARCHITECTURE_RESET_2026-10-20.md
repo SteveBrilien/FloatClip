@@ -249,3 +249,33 @@ iPad / 跨网能力保留，但不再作为另一套 FloatClip 产品壳。现�
   - artifact artifact-d8cc21a1880c49beb0824e52fc5e5c06
 
 真实性边界不变：蓝牙首次配对和受信关系已经真机成功，但 Windows → Android 的测试文字没有进入手机历史，因此内容实时同步仍是下一优先级，不得以 UI 状态替代验收。
+
+### 2026-10-21 11:58：从“统一色板”升级为真正的设计系统统一
+
+用户指出上一轮把“统一”理解得过浅：仅统一色值与部分圆角并不足以让设置页、设备页、剪贴板首页和悬浮窗属于同一套产品。后续统一维度正式扩展为：容器结构、边缘/描边、圆角、留白、Fluent 线性图标、字号层级、开关几何、选中态、透明层级与反馈。
+
+本轮实现：
+- 页面卡片统一为 16dp 圆角、1dp 低对比描边、16dp 内边距和轻微 1dp elevation。
+- 设置主入口补充 22dp Fluent-like 线性图标；原有置顶、拖动、复制等填充图标也收敛为 1.8dp 线性图标。
+- Android 原生 Switch 被固定几何的 FloatClip FluentSwitch 取代：44×28dp、统一轨道/滑块、140ms 动画、轻触觉反馈，避免 OriginOS/OEM 皮肤导致页面风格漂移。
+- 主题分段不再使用整块实心蓝选中，而改为浅蓝 surface + 蓝色文字，与来源/分类选中态一致。
+- 悬浮窗默认面板透明度从 96% 调整到 90%。
+- “半透明色块”修正为真正的 alpha 透明：此前只是 RGB 混色，视觉上仍为完全不透明卡片；现在悬浮条目在打开该选项后使用真实透明度。
+- 来源/分类 chip 在半透明模式下同步降低未选中 surface alpha。
+- 新增“条目高度”分段设置：1 行 / 2 行 / 3 行，默认 2 行；同一参数同时驱动主剪贴板和悬浮剪贴板的 ClipboardCard，避免两处密度分叉。
+- 保留用户显式设置：如果用户曾手动关闭“半透明色块”，升级后仍尊重已保存选择；未保存过该值时默认开启。
+
+回归测试新增 OverlayAppearanceTest：
+- 默认 panel alpha = 90；
+- 默认 item lines = 2；
+- 默认 translucent cards = true；
+- 1/2/3 行设置会真实改变 ClipboardCard.maxLines。
+
+最终冻结源码 Gate：
+- task-floatclip_sync_android_verify_offline-583d3208414f48189849
+- assembleDebug PASS
+- testDebugUnitTest PASS
+- lintDebug PASS
+- artifact artifact-4034175953fa4aceb2f8a4786cef011a
+
+本节只涉及视觉系统与剪贴板密度控制，不改变此前关于实时同步闭环尚未完成的真实性边界。

@@ -790,7 +790,8 @@ class ClipboardOverlayService : Service() {
                 ellipsize=android.text.TextUtils.TruncateAt.END
                 setPadding(dp(14),0,dp(14),0)
                 setTextColor(if(selected) accentColor(palette) else palette.secondaryText)
-                background=roundedBackground(if(selected) withAlpha(accentColor(palette),if(palette.isDark)70 else 28) else withAlpha(palette.rowBackground,if(palette.isDark)175 else 205),12f)
+                val chipAlpha=if(overlayPreferences.translucentCards()) { if(palette.isDark) 145 else 155 } else { if(palette.isDark) 190 else 220 }
+                background=roundedBackground(if(selected) withAlpha(accentColor(palette),if(palette.isDark)70 else 34) else withAlpha(palette.rowBackground,chipAlpha),12f)
                 contentDescription="剪贴板来源：${source.name}"
                 setOnClickListener {
                     if(activeSource!=source.id){
@@ -820,8 +821,9 @@ class ClipboardOverlayService : Service() {
                     gravity = Gravity.CENTER
                     setPadding(dp(13), 0, dp(13), 0)
                     setTextColor(if (selected) accentColor(palette) else palette.secondaryText)
+                    val chipAlpha=if(overlayPreferences.translucentCards()) { if(palette.isDark) 145 else 155 } else { if(palette.isDark) 190 else 220 }
                     background = roundedBackground(
-                        if (selected) withAlpha(accentColor(palette), if (palette.isDark) 70 else 28) else withAlpha(palette.rowBackground, if (palette.isDark) 175 else 205),
+                        if (selected) withAlpha(accentColor(palette), if (palette.isDark) 70 else 34) else withAlpha(palette.rowBackground, chipAlpha),
                         12f,
                     )
                     setOnClickListener {

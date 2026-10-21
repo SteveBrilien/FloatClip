@@ -23,13 +23,14 @@ class OverlayPreferences(context: Context) {
     fun keepAliveEnabled(): Boolean = prefs.getBoolean(KEY_KEEP_ALIVE_ENABLED, true)
     fun overlayEnabled(): Boolean = prefs.getBoolean(KEY_OVERLAY_ENABLED, false)
     fun sourceColors(): Boolean = prefs.getBoolean("source_colors", true)
-    fun translucentCards(): Boolean = prefs.getBoolean("translucent_cards", false)
+    fun translucentCards(): Boolean = prefs.getBoolean("translucent_cards", true)
     fun saveSourceColors(value: Boolean) { prefs.edit().putBoolean("source_colors",value).apply() }
     fun saveTranslucentCards(value: Boolean) { prefs.edit().putBoolean("translucent_cards",value).apply() }
 
     fun panelAlphaPercent(): Int = prefs.getInt(KEY_PANEL_ALPHA_PERCENT, DEFAULT_PANEL_ALPHA_PERCENT).coerceIn(45, 100)
     fun panelWidthDp(): Int = prefs.getInt(KEY_PANEL_WIDTH_DP, DEFAULT_PANEL_WIDTH_DP).coerceIn(280, 420)
     fun panelHeightDp(): Int = prefs.getInt(KEY_PANEL_HEIGHT_DP, DEFAULT_PANEL_HEIGHT_DP).coerceIn(300, 620)
+    fun entryLineCount(): Int = prefs.getInt(KEY_ENTRY_LINE_COUNT, DEFAULT_ENTRY_LINE_COUNT).coerceIn(1, 3)
     fun panelX(defaultValue: Int): Int = prefs.getInt(KEY_PANEL_X, defaultValue)
     fun panelY(defaultValue: Int): Int = prefs.getInt(KEY_PANEL_Y, defaultValue)
 
@@ -77,6 +78,11 @@ class OverlayPreferences(context: Context) {
         prefs.edit().putInt(KEY_PANEL_HEIGHT_DP, value.coerceIn(300, 620)).apply()
     }
 
+    fun saveEntryLineCount(value: Int) {
+        prefs.edit().putInt(KEY_ENTRY_LINE_COUNT, value.coerceIn(1, 3)).apply()
+    }
+
+
     fun savePanelPosition(x: Int, y: Int) {
         prefs.edit().putInt(KEY_PANEL_X, x).putInt(KEY_PANEL_Y, y).apply()
     }
@@ -94,6 +100,7 @@ class OverlayPreferences(context: Context) {
             .remove(KEY_PANEL_ALPHA_PERCENT)
             .remove(KEY_PANEL_WIDTH_DP)
             .remove(KEY_PANEL_HEIGHT_DP)
+            .remove(KEY_ENTRY_LINE_COUNT)
             .remove(KEY_PANEL_X)
             .remove(KEY_PANEL_Y)
             .remove(KEY_THEME_MODE)
@@ -105,9 +112,10 @@ class OverlayPreferences(context: Context) {
         const val DEFAULT_BUBBLE_ALPHA_PERCENT = 76
         const val DEFAULT_EDGE_HIDE_PERCENT = 38
         const val DEFAULT_BUBBLE_MOTION_SENSITIVITY_PERCENT = 65
-        const val DEFAULT_PANEL_ALPHA_PERCENT = 96
+        const val DEFAULT_PANEL_ALPHA_PERCENT = 90
         const val DEFAULT_PANEL_WIDTH_DP = 352
         const val DEFAULT_PANEL_HEIGHT_DP = 430
+        const val DEFAULT_ENTRY_LINE_COUNT = 2
 
         private const val KEY_BUBBLE_Y = "bubble_y"
         private const val KEY_BUBBLE_RIGHT = "bubble_right"
@@ -120,6 +128,7 @@ class OverlayPreferences(context: Context) {
         private const val KEY_PANEL_ALPHA_PERCENT = "panel_alpha_percent"
         private const val KEY_PANEL_WIDTH_DP = "panel_width_dp"
         private const val KEY_PANEL_HEIGHT_DP = "panel_height_dp"
+        private const val KEY_ENTRY_LINE_COUNT = "entry_line_count"
         private const val KEY_PANEL_X = "panel_x"
         private const val KEY_PANEL_Y = "panel_y"
         private const val KEY_THEME_MODE = "theme_mode"

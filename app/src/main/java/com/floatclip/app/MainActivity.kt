@@ -52,6 +52,7 @@ import android.content.IntentFilter
 import com.floatclip.app.sync.SyncPreferences
 import com.floatclip.app.sync.SyncRuntime
 import com.floatclip.app.sync.ClipboardSyncService
+import com.floatclip.app.ui.FluentSwitch
 
 open class MainActivity : Activity() {
     private lateinit var categoryStore: CategoryStore
@@ -469,16 +470,19 @@ open class MainActivity : Activity() {
         })
         spacer(12)
         addCard(card().apply {
-            listOf("外观", "剪贴板共享", "权限与后台", "备份与恢复").forEachIndexed { index, title ->
-                if (index > 0) addView(divider())
-                addView(settingRow(title, "", "›") { settingsSection = title; render() })
-            }
+            addView(settingRow("外观", "", "›", R.drawable.ic_appearance) { settingsSection="外观"; render() })
             addView(divider())
-            addView(settingRow("分类","","›") { currentPage=PAGE_CLIPBOARD;categoryManagement=true;render() })
+            addView(settingRow("剪贴板共享", "", "›", R.drawable.ic_share) { settingsSection="剪贴板共享"; render() })
             addView(divider())
-            addView(settingRow("检查更新","","›") { checkClientUpdate() })
+            addView(settingRow("权限与后台", "", "›", R.drawable.ic_shield) { settingsSection="权限与后台"; render() })
             addView(divider())
-            addView(settingRow("关于", "", "›") {
+            addView(settingRow("备份与恢复", "", "›", R.drawable.ic_backup) { settingsSection="备份与恢复"; render() })
+            addView(divider())
+            addView(settingRow("分类","","›", R.drawable.ic_category) { currentPage=PAGE_CLIPBOARD;categoryManagement=true;render() })
+            addView(divider())
+            addView(settingRow("检查更新","","›", R.drawable.ic_update) { checkClientUpdate() })
+            addView(divider())
+            addView(settingRow("关于", "", "›", R.drawable.ic_info) {
                 android.app.AlertDialog.Builder(this@MainActivity).setTitle("FloatClip ${versionName()}")
                     .setMessage("Android 悬浮剪贴板")
                     .setPositiveButton("关闭", null)
@@ -585,6 +589,18 @@ open class MainActivity : Activity() {
                         "dp",
                     ) { overlayPreferences.savePanelHeightDp(it) },
                 )
+                addView(divider())
+                addView(
+                    segmentedSetting(
+                        "条目高度",
+                        listOf(1 to "1 行", 2 to "2 行", 3 to "3 行"),
+                        overlayPreferences.entryLineCount(),
+                    ) { lines ->
+                        overlayPreferences.saveEntryLineCount(lines)
+                        notifyOverlayAppearanceChanged()
+                        render()
+                    },
+                )
                 spacerInside(this, 8)
                 addView(
                     compactTextAction("恢复默认外观") {
@@ -663,9 +679,34 @@ open class MainActivity : Activity() {
         text = label
         textSize = 13f
         gravity = Gravity.CENTER
-        setTextColor(if (selected) colors.accentTextOnFill else colors.primaryText)
-        background = roundedBackground(if (selected) colors.accent else colors.fieldBackground, 12f, !selected)
+        setTextColor(if (selected) colors.accent else colors.primaryText)
+        background = roundedBackground(if (selected) colors.actionBackground else colors.fieldBackground, 12f, true)
         setOnClickListener { action() }
+    }
+
+    private fun segmentedSetting(
+        title: String,
+        choices: List<Pair<Int,String>>,
+        selected: Int,
+        onSelected: (Int) -> Unit,
+    ): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(0, dp(7), 0, dp(7))
+        addView(textView(title, 14.5f, false), LinearLayout.LayoutParams(-1, dp(30)))
+        addView(LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            choices.forEachIndexed { index, (value,label) ->
+                val active=value==selected
+                addView(TextView(this@MainActivity).apply {
+                    text=label
+                    textSize=13f
+                    gravity=Gravity.CENTER
+                    setTextColor(if(active) colors.accent else colors.secondaryText)
+                    background=roundedBackground(if(active) colors.actionBackground else colors.fieldBackground,12f,true)
+                    setOnClickListener { if(!active) onSelected(value) }
+                },LinearLayout.LayoutParams(0,dp(42),1f).apply { if(index>0)marginStart=dp(7) })
+            }
+        })
     }
 
     private fun sliderSetting(
@@ -1102,32 +1143,53 @@ open class MainActivity : Activity() {
         return row
     }
 
-    private fun settingRow(title: String, subtitle: String, actionLabel: String, action: () -> Unit): View {
+    private fun settingRow(
+        title: String,
+        subtitle: String,
+        actionLabel: String,
+        action: () -> Unit,
+    ): View = settingRow(title, subtitle, actionLabel, null, action)
+
+    private fun settingRow(
+        title: String,
+        subtitle: String,
+        actionLabel: String,
+        iconRes: Int?,
+        action: () -> Unit,
+    ): View {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(2), dp(5), dp(2), dp(5))
-            minimumHeight = dp(52)
+            setPadding(0, dp(6), 0, dp(6))
+            minimumHeight = dp(56)
             background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(colors.actionBackground), null, null)
             setOnClickListener { action() }
         }
+        if(iconRes!=null) row.addView(ImageView(this).apply {
+            setImageResource(iconRes)
+            imageTintList=ColorStateList.valueOf(colors.secondaryText)
+            importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        },LinearLayout.LayoutParams(dp(22),dp(22)).apply { marginEnd=dp(12) })
         val labels = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(textView(title, 15f, false))
-            if (subtitle.isNotBlank()) addView(textView(subtitle, 11.5f, false, colors.secondaryText).apply {
+            addView(textView(title, 15f, true))
+            if (subtitle.isNotBlank()) addView(textView(subtitle, 12f, false, colors.secondaryText).apply {
                 maxLines = 2
-                setPadding(0, dp(3), dp(8), 0)
+                setPadding(0, dp(4), dp(8), 0)
             })
         }
         row.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
         if (actionLabel == "已开启" || actionLabel == "已关闭") {
-            row.addView(android.widget.Switch(this).apply {
-                isChecked = actionLabel == "已开启"
-                thumbTintList = ColorStateList.valueOf(if (isChecked) colors.accent else colors.secondaryText)
-                contentDescription = title
-                setOnCheckedChangeListener { _, _ -> action() }
-            }, LinearLayout.LayoutParams(-2, dp(44)))
+            row.addView(FluentSwitch(this).apply {
+                contentDescription=title
+                bind(
+                    actionLabel=="已开启",
+                    colors.accent,
+                    colors.dividerColor,
+                    colors.secondaryText,
+                ) { action() }
+            }, LinearLayout.LayoutParams(dp(44), dp(28)).apply { marginStart=dp(12) })
         } else {
             if (actionLabel != "›" && actionLabel != "设置" && actionLabel != "打开") {
                 row.addView(textView(actionLabel, 12f, false, colors.secondaryText).apply {
@@ -1137,17 +1199,17 @@ open class MainActivity : Activity() {
             row.addView(ImageView(this).apply {
                 setImageResource(R.drawable.ic_chevron_right)
                 imageTintList = ColorStateList.valueOf(colors.secondaryText)
-                setPadding(0, 0, 0, 0)
-            }, LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart=dp(8) })
+                importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, LinearLayout.LayoutParams(dp(20), dp(20)).apply { marginStart=dp(8) })
         }
         return row
     }
 
     private fun card(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(14), dp(12), dp(14), dp(12))
+        setPadding(dp(16), dp(16), dp(16), dp(16))
         background = cardBackground()
-        elevation = 0f
+        elevation = dp(1).toFloat()
     }
 
     private fun addCard(view: View, topMarginDp: Int = 0) {
@@ -1171,7 +1233,7 @@ open class MainActivity : Activity() {
         gravity = Gravity.CENTER
         setPadding(dp(12), 0, dp(12), 0)
         setTextColor(if (primary) colors.accentTextOnFill else colors.primaryText)
-        background = roundedBackground(if (primary) colors.accent else colors.cardBackground, 14f, !primary)
+        background = roundedBackground(if (primary) colors.accent else colors.cardBackground, 12f, !primary)
         setOnClickListener { action() }
     }
 
@@ -1183,7 +1245,7 @@ open class MainActivity : Activity() {
         minimumHeight = dp(40)
         setPadding(dp(12), dp(8), dp(12), dp(8))
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        background = roundedBackground(colors.actionBackground, 10f)
+        background = roundedBackground(colors.actionBackground, 12f)
         setOnClickListener { action() }
     }
 
@@ -1200,7 +1262,7 @@ open class MainActivity : Activity() {
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1))
     }
 
-    private fun cardBackground(): GradientDrawable = roundedBackground(colors.cardBackground, 16f)
+    private fun cardBackground(): GradientDrawable = roundedBackground(colors.cardBackground, 16f, true)
 
     private fun roundedBackground(color: Int, radiusDp: Float, border: Boolean = false): GradientDrawable = GradientDrawable().apply {
         setColor(color)

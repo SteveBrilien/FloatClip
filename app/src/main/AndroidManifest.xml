@@ -46,6 +46,11 @@
             android:name=".overlay.ClipboardOverlayService"
             android:exported="false"
             android:stopWithTask="false" />
+        <provider android:name=".capture.CaptureBootstrapProvider"
+            android:authorities="${applicationId}.capture"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+
         <service
             android:name=".sync.ClipboardSyncService"
             android:exported="false"

@@ -164,6 +164,19 @@ public final class ClipboardSync {
         if(wins&&state.apply)events.apply(entry);
         events.send(key,new ShareWire.Frame(ACK,entry.id,hash));
     }
+    /** Durable outbox drives transport recovery even when no UI or socket is open. */
+    public synchronized Set<String> pendingPeers(long now) throws Exception {
+        Set<String> result=new LinkedHashSet<>();State next=null;
+        for(Map.Entry<String,Peer> row:state.peers.entrySet()) {
+            Peer p=row.getValue();if(p.pending==null)continue;
+            long age=now-p.queuedAt;
+            if(!state.enabled||!state.send||!p.enabled||!p.receive||age<0||age>RETRY_TTL||!Objects.equals(p.epoch,p.pendingEpoch)) {
+                if(next==null)next=state.copy();next.peers.get(row.getKey()).pending=null;
+            } else result.add(row.getKey());
+        }
+        if(next!=null)save(next);
+        return result;
+    }
     public synchronized void retry(String key,long now) throws Exception {flush(key,now);}
     private void flush(String key,long now) throws Exception {
         Peer p=state.peers.get(key);

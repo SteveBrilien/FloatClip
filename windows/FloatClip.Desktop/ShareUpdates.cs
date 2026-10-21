@@ -8,8 +8,8 @@ namespace FloatClip.Share;
 public sealed record UpdateRelease(int Build,string Version,string Notes,string Url);
 public static class ShareUpdates
 {
-    public const int Build=14;
-    public const string Version="0.7.1",Feed="https://raw.githubusercontent.com/SteveBrilien/FloatClip/main/updates/share-preview.json";
+    public const int Build=17;
+    public const string Version="0.7.2",Feed="https://raw.githubusercontent.com/SteveBrilien/FloatClip/main/updates/share-preview.json";
     public static async Task<UpdateRelease> Check() {
         using var http=new HttpClient{Timeout=TimeSpan.FromSeconds(15)};
         http.DefaultRequestHeaders.UserAgent.ParseAdd("FloatClip-Share/"+Version);

@@ -37,6 +37,27 @@ public final class TransportCryptoChecks {
         Files.write(vectors.resolve("bt-payload.bin"),payload);
         Files.write(vectors.resolve("bt-reply.bin"),reply);
 
+        // An idle receive must not monopolize the transmit direction (the real session pattern).
+        java.io.PipedInputStream idleInput=new java.io.PipedInputStream();
+        java.io.PipedOutputStream wakeReader=new java.io.PipedOutputStream(idleInput);
+        java.util.concurrent.CountDownLatch waiting=new java.util.concurrent.CountDownLatch(1);
+        java.io.InputStream observed=new java.io.FilterInputStream(idleInput){
+            @Override public int read()throws java.io.IOException{waiting.countDown();return super.read();}
+        };
+        var duplexClient=TransportCrypto.Records.client(material);
+        var duplexServer=TransportCrypto.Records.server(material);
+        var workers=java.util.concurrent.Executors.newFixedThreadPool(2);
+        java.io.ByteArrayOutputStream duplexOut=new java.io.ByteArrayOutputStream();
+        try{
+            var blocked=workers.submit(()->duplexClient.read(observed));
+            yes(waiting.await(1,java.util.concurrent.TimeUnit.SECONDS));
+            var sending=workers.submit(()->{duplexClient.write(duplexOut,payload);return true;});
+            yes(sending.get(1,java.util.concurrent.TimeUnit.SECONDS));
+            yes(Arrays.equals(payload,duplexServer.open(duplexOut.toByteArray())));
+            wakeReader.write(duplexServer.seal(reply));wakeReader.flush();
+            yes(Arrays.equals(reply,blocked.get(1,java.util.concurrent.TimeUnit.SECONDS)));
+        }finally{wakeReader.close();idleInput.close();workers.shutdownNow();}
+
         // Full interactive handshake over in-memory pipes: no token is ever sent on the wire.
         java.io.PipedInputStream serverIn=new java.io.PipedInputStream(),clientIn=new java.io.PipedInputStream();
         java.io.PipedOutputStream clientOut=new java.io.PipedOutputStream(serverIn),serverOut=new java.io.PipedOutputStream(clientIn);

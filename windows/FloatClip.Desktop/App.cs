@@ -22,10 +22,25 @@ public static class Program
         try {
             if(args.Length==4 && args[0]=="--qa-nearby") { Acceptance.RunNearby(args[1],args[2],args[3]); return; }
             if(args.Length==3 && args[0]=="--qa") { Acceptance.Run(args[1],args[2]); return; }
+            if(args.Length==0||args.All(a=>a is "--clipboard" or "--background" or "--main" or "--enable-autostart" or "--web"))
+            {
+                bool background=args.Contains("--background");
+                using var instance=new DesktopSingleInstance();
+                if(!instance.IsOwner){instance.Signal(background?(byte)0:args.Contains("--main")?(byte)2:(byte)1);return;}
+                var resident=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};
+                resident.Resources.MergedDictionaries.Add(new ResourceDictionary{Source=new Uri("pack://application:,,,/DesktopControls.xaml")});
+                using var host=new ClipboardHost();
+                instance.Listen(action=>resident.Dispatcher.BeginInvoke(new Action(()=>{
+                    if(action==1)host.ShowPopup();else if(action==2)host.ShowLibrary();
+                })));
+                if(args.Contains("--enable-autostart"))WindowsStartup.SetEnabled(true);
+                host.Start(background);
+                if(args.Contains("--main"))host.ShowLibrary();
+                if(args.Contains("--web"))new UnifiedWindow().Show();
+                resident.Run();return;
+            }
             var app=new Application();
-            if(args.Length==0) { app.Run(new LocalClipboardWindow(new ClipboardVault())); return; }
             if(args.Length==1 && args[0]=="--web") { app.Run(new UnifiedWindow()); return; }
-            if(args.Length==1 && args[0]=="--clipboard") { app.Run(new LocalClipboardWindow(new ClipboardVault())); return; }
             var window=new MainWindow();
             if(args.Length==3 && args[0]=="--capture") {
                 window.SetTheme(args[1],false);

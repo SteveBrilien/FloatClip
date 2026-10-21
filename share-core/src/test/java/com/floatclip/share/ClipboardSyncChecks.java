@@ -79,6 +79,17 @@ public final class ClipboardSyncChecks {
         Pair independent=new Pair();independent.enable();independent.a.copied("outgoing must survive receive-only renewal",now,false);independent.a.renewReceiveGrant();independent.pump();yes(independent.bh.size()==1);
         Memory damaged=new Memory();damaged.data=new byte[]{1,2,3};rejects(()->new ClipboardSync(A,damaged,p.events(true)));
 
+        Pair recovery=new Pair();recovery.enable();recovery.disconnect();
+        recovery.a.copied("retry without opening UI",now,false);
+        yes(recovery.a.pendingPeers(now).equals(Set.of(BKEY)));
+        recovery.restartA();yes(recovery.a.pendingPeers(now).contains(BKEY));
+        recovery.connect();yes(recovery.a.pendingPeers(now).isEmpty());
+        recovery.disconnect();recovery.a.copied("expires offline",now,false);
+        yes(recovery.a.pendingPeers(now+ClipboardSync.RETRY_TTL+1).isEmpty());
+        recovery.restartA();recovery.connect();yes(recovery.bh.size()==1);
+        recovery.disconnect();recovery.a.copied("revoked",now,false);recovery.a.configure(true,false,true,true);
+        yes(recovery.a.pendingPeers(now).isEmpty());
+
         Path vectors=Paths.get(args[0]);Files.createDirectories(vectors);
         UUID epoch=UUID.fromString("10213243-5465-7687-98a9-bacbdcedfe0f");
         ClipboardSync.Entry sample=new ClipboardSync.Entry(UUID.fromString("00112233-4455-6677-8899-aabbccddeeff"),A,1234,1700000000000L,"FloatClip 同步 📋\n  exact text\r\n");

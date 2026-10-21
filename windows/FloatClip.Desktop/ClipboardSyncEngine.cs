@@ -186,6 +186,21 @@ public sealed class ClipboardSyncEngine
             send(key,new(SyncProtocol.Ack,entry.Id,hash));
         }
     }
+    public string[] PendingPeers(long now)
+    {
+        lock(gate)
+        {
+            var result=new List<string>();State? next=null;
+            foreach(var row in state.Peers)
+            {
+                var p=row.Value;if(p.Pending==null)continue;long age=now-p.QueuedAt;
+                if(!state.Enabled||!state.Send||!p.Enabled||!p.Receive||age<0||age>SyncProtocol.RetryTtl||p.Epoch!=p.PendingEpoch)
+                {next??=state.Copy();next.Peers[row.Key].Pending=null;}
+                else result.Add(row.Key);
+            }
+            if(next!=null)Save(next);return result.ToArray();
+        }
+    }
     public void Retry(string key,long now){lock(gate)Flush(key,now);}
     void Flush(string key,long now)
     {

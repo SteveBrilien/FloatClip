@@ -6,8 +6,8 @@ import javax.net.ssl.HttpsURLConnection
 
 /** Explicit user initiated checks. Downloads open in the system browser. */
 internal object ShareUpdates {
-    const val BUILD = 15
-    const val VERSION = "0.7.1"
+    const val BUILD = 17
+    const val VERSION = "0.7.2"
     const val FEED = "https://raw.githubusercontent.com/SteveBrilien/FloatClip/main/updates/share-preview.json"
     const val DEV_FEED = "https://raw.githubusercontent.com/SteveBrilien/FloatClip/main/updates/share-dev.json"
     enum class Channel(val feed:String,val wire:String,val label:String) {

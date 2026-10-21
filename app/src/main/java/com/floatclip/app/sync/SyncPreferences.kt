@@ -12,6 +12,11 @@ class SyncPreferences(context: Context) {
     fun enabled()=prefs.getBoolean("enabled",false)
     fun reconnect()=prefs.getBoolean("reconnect",true)
     fun keepAlive()=prefs.getBoolean("keep_alive",true)
+    fun backgroundCapture()=prefs.getBoolean("adb_background_capture",false)
+    fun saveBackgroundCapture(value:Boolean)=synchronized(prefs) {
+        check(prefs.edit().putBoolean("adb_background_capture",value)
+            .putString("send_generation",UUID.randomUUID().toString()).commit()){"无法保存后台采集开关"}
+    }
     fun sending()=prefs.getBoolean("send",true)
     fun receiving()=prefs.getBoolean("receive",true)
     fun applying()=prefs.getBoolean("apply",true)

@@ -72,35 +72,36 @@ public final class TransportCrypto {
         private final byte[] sendKey,receiveKey;
         private final int sendPrefix,receivePrefix;
         private long sendCounter,receiveCounter;
+        private final Object sendLock=new Object(),receiveLock=new Object();
         private Records(byte[] sendKey,byte[] receiveKey,int sendPrefix,int receivePrefix){
             this.sendKey=sendKey.clone();this.receiveKey=receiveKey.clone();this.sendPrefix=sendPrefix;this.receivePrefix=receivePrefix;
         }
         public static Records client(Material material){return new Records(material.clientToServer,material.serverToClient,C2S,S2C);}
         public static Records server(Material material){return new Records(material.serverToClient,material.clientToServer,S2C,C2S);}
 
-        public synchronized byte[] seal(byte[] plain)throws IOException{
+        public byte[] seal(byte[] plain)throws IOException{synchronized(sendLock){
             if(plain==null||plain.length>MAX_RECORD)throw new IOException("Secure record too large");
             long counter=sendCounter;if(counter==Long.MAX_VALUE)throw new IOException("Secure record counter exhausted");
             byte[] header=header(counter,plain.length),nonce=nonce(sendPrefix,counter);
             byte[] encrypted=crypt(Cipher.ENCRYPT_MODE,sendKey,nonce,aad(sendPrefix,header),plain);
             sendCounter++;
             return join(header,encrypted);
-        }
-        public synchronized byte[] open(byte[] record)throws IOException{
+        }}
+        public byte[] open(byte[] record)throws IOException{synchronized(receiveLock){
             if(record==null||record.length<12+16)throw new IOException("Secure record truncated");
             DataInputStream in=new DataInputStream(new ByteArrayInputStream(record));long counter=in.readLong();int length=in.readInt();
             if(counter!=receiveCounter||length<0||length>MAX_RECORD||record.length!=12+length+16)throw new IOException("Secure record sequence");
             byte[] encrypted=new byte[length+16];in.readFully(encrypted);
             byte[] plain=crypt(Cipher.DECRYPT_MODE,receiveKey,nonce(receivePrefix,counter),aad(receivePrefix,Arrays.copyOf(record,12)),encrypted);
             receiveCounter++;return plain;
-        }
-        public synchronized void write(OutputStream out,byte[] plain)throws IOException{byte[] record=seal(plain);out.write(record);out.flush();}
-        public synchronized byte[] read(InputStream raw)throws IOException{
+        }}
+        public void write(OutputStream out,byte[] plain)throws IOException{synchronized(sendLock){byte[] record=seal(plain);out.write(record);out.flush();}}
+        public byte[] read(InputStream raw)throws IOException{synchronized(receiveLock){
             DataInputStream in=new DataInputStream(raw);byte[] header=new byte[12];int first=in.read();if(first<0)return null;header[0]=(byte)first;in.readFully(header,1,11);
             DataInputStream h=new DataInputStream(new ByteArrayInputStream(header));long counter=h.readLong();int length=h.readInt();
             if(counter!=receiveCounter||length<0||length>MAX_RECORD)throw new IOException("Secure record sequence");
             byte[] record=new byte[12+length+16];System.arraycopy(header,0,record,0,12);in.readFully(record,12,length+16);return open(record);
-        }
+        }}
         private static byte[] crypt(int mode,byte[] key,byte[] nonce,byte[] aad,byte[] data)throws IOException{
             try{
                 Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(mode,new SecretKeySpec(key,"AES"),new GCMParameterSpec(128,nonce));cipher.updateAAD(aad);return cipher.doFinal(data);

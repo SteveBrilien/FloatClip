@@ -68,6 +68,7 @@ public sealed class NativeClipboardSync: IDisposable
             foreach(string key in engine.Snapshot().Peers.Keys.ToArray())if(pairs.GetByKey(key).Length!=32)engine.Forget(key);
         }
         enabled=engine.Snapshot().Enabled;
+        Status=enabled?"等待已授权设备自动连接":"共享已关闭";
         pairs.Changed+=AuthorizationChanged;
         NetworkChange.NetworkAddressChanged+=NetworkChanged;
     }
@@ -271,8 +272,21 @@ public sealed class NativeClipboardSync: IDisposable
     }
     async Task RetryLoop()
     {
-        using var timer=new PeriodicTimer(TimeSpan.FromSeconds(10));
-        try{while(await timer.WaitForNextTickAsync(lifetime.Token))if(enabled)foreach(string key in links.Keys)try{engine.Retry(key,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());}catch{SetStatus("共享状态未保存，请检查本机存储");}}
+        using var timer=new PeriodicTimer(TimeSpan.FromSeconds(5));
+        try
+        {
+            while(await timer.WaitForNextTickAsync(lifetime.Token))if(enabled)
+            {
+                try
+                {
+                    long now=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    foreach(string key in links.Keys)engine.Retry(key,now);
+                    var pending=engine.PendingPeers(now).Where(key=>!links.ContainsKey(key)).ToArray();
+                    if(Automatic&&pending.Length>0){EnsureBluetooth();bluetooth?.Nudge(pending);}
+                }
+                catch{SetStatus("共享状态未保存，请检查本机存储");}
+            }
+        }
         catch(OperationCanceledException){}
     }
     sealed class Link: IDisposable

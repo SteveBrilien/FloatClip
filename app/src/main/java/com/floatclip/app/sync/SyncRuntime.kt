@@ -27,7 +27,11 @@ object SyncRuntime {
     fun setObserver(value: Observer){observer=WeakReference(value);current()?.refreshUi()}
     fun clearObserver(value: Observer){if(observer?.get()===value){observer=null;current()?.answerPairing(false)}}
     fun hasObserver()=observer?.get()!=null
-    fun changed(){current()?.let{observer?.get()?.changed(it)}}
+    const val STATE_CHANGED="com.floatclip.app.SYNC_STATE_CHANGED"
+    fun changed(){current()?.let{
+        observer?.get()?.changed(it)
+        it.sendBroadcast(Intent(STATE_CHANGED).setPackage(it.packageName),it.packageName+".permission.INTERNAL")
+    }}
     fun verify(code: String,answer: Consumer<Boolean>){val ui=observer?.get();if(ui==null)answer.accept(false) else ui.verify(code,answer)}
     fun offer(peer: String,offer: ShareWire.Offer){observer?.get()?.offer(peer,offer)}
     fun progress(name: String,done: Long,total: Long,outgoing: Boolean){observer?.get()?.progress(name,done,total,outgoing)}
@@ -41,6 +45,13 @@ object SyncRuntime {
     fun stamp(clip: ClipData): String {
         val value=if(clip.itemCount>0)clip.getItemAt(0).text?.toString().orEmpty() else ""
         return clip.description.timestamp.toString()+":"+ShareWire.digest(value.toByteArray(Charsets.UTF_8)).joinToString(""){"%02x".format(it.toInt() and 255)}
+    }
+    /** A deliberate copy of an existing row is a new local user action, not an echo. */
+    fun userCopied(context: Context,text: String) {
+        val policy=SyncPreferences(context).policy()
+        if(!policy.enabled||text.isBlank()||text.toByteArray(Charsets.UTF_8).size>com.floatclip.share.ClipboardSync.MAX_BYTES)return
+        current()?.copied(text,"user:"+java.util.UUID.randomUUID(),
+            shareGeneration=policy.sendGeneration.takeIf{policy.sending},recordHistory=false)
     }
     fun observe(context: Context,clip: ClipData) {
         val policy=SyncPreferences(context).policy()

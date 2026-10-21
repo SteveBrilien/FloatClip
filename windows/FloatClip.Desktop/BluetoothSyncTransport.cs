@@ -175,47 +175,50 @@ public sealed class BluetoothSyncTransport:IDisposable
         return discovered.Where(x=>x!=null).Cast<PairCandidate>().ToArray();
     }
 
-    public void Nudge()
+    public void Nudge(string[]? targets=null)
     {
-        if(disposed!=0)return;Start();_=Task.Run(ConnectBurst);
+        if(disposed!=0)return;Start();_=Task.Run(()=>ConnectBurst(targets));
     }
 
-    async Task ConnectBurst()
+    async Task ConnectBurst(string[]? targets)
     {
-        if(!await connectGate.WaitAsync(0,lifetime.Token))return;
+        bool entered=false;
         try
         {
-            foreach(string key in pairs.Keys())
+            if(!await connectGate.WaitAsync(0,lifetime.Token))return;
+            entered=true;
+            foreach(string key in pairs.Keys().Where(k=>targets==null||targets.Contains(k)))
             {
                 if(disposed!=0||!canAttach(key))continue;
                 var trusted=pairs.Describe(key);if(trusted==null)continue;
                 if(trusted.BluetoothAddress is ulong address && address!=0)
                 {
-                    if(await TryAddress(key,address))return;
+                    await TryAddress(key,address);
                 }
             }
             // Bootstrap only from OS-paired devices. No permanent inquiry loop is kept.
-            foreach(var candidate in await PairedDevices())
+            var candidates=await PairedDevices();
+            try { foreach(var candidate in candidates)
             {
                 try
                 {
                     if(disposed!=0)break;
                     foreach(string key in pairs.Keys())
                     {
-                        if(!canAttach(key)||pairs.Describe(key)?.BluetoothAddress!=null)continue;
+                        if((targets!=null&&!targets.Contains(key))||!canAttach(key)||pairs.Describe(key)?.BluetoothAddress!=null)continue;
                         if(await TryDevice(key,candidate))
                         {
                             pairs.RememberBluetooth(key,candidate.BluetoothAddress);
-                            return;
+                            break;
                         }
                     }
                 }
-                finally{candidate.Dispose();}
-            }
+                finally{}
+            }} finally{foreach(var candidate in candidates)candidate.Dispose();}
         }
         catch(OperationCanceledException){}
         catch(Exception e){if(disposed==0)status("蓝牙短连接暂不可用 · "+Friendly(e));}
-        finally{connectGate.Release();}
+        finally{if(entered)connectGate.Release();}
     }
 
     async Task<bool> TryAddress(string key,ulong address)
@@ -223,7 +226,9 @@ public sealed class BluetoothSyncTransport:IDisposable
         BluetoothDevice? device=null;
         try
         {
-            device=await BluetoothDevice.FromBluetoothAddressAsync(address);
+            using var deadline=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+            deadline.CancelAfter(TimeSpan.FromSeconds(10));
+            device=await BluetoothDevice.FromBluetoothAddressAsync(address).AsTask(deadline.Token);
             if(device==null)return false;
             return await TryDevice(key,device);
         }
@@ -234,9 +239,11 @@ public sealed class BluetoothSyncTransport:IDisposable
     async Task<bool> TryDevice(string key,BluetoothDevice device)
     {
         byte[] token=pairs.GetByKey(key);if(token.Length!=32||!canAttach(key))return false;
-        RfcommDeviceServicesResult result=await device.GetRfcommServicesForIdAsync(ServiceId,BluetoothCacheMode.Uncached);
+        using var discoveryDeadline=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        discoveryDeadline.CancelAfter(TimeSpan.FromSeconds(10));
+        RfcommDeviceServicesResult result=await device.GetRfcommServicesForIdAsync(ServiceId,BluetoothCacheMode.Uncached).AsTask(discoveryDeadline.Token);
         if(result.Error!=BluetoothError.Success)return false;
-        foreach(var service in result.Services)
+        try { foreach(var service in result.Services)
         {
             try
             {
@@ -258,8 +265,8 @@ public sealed class BluetoothSyncTransport:IDisposable
                 finally{if(!handedOff){sockets.TryRemove(socket,out _);socket.Dispose();}}
             }
             catch{}
-            finally{service.Dispose();}
-        }
+            finally{}
+        }} finally{foreach(var service in result.Services)service.Dispose();}
         return false;
     }
 
@@ -311,6 +318,7 @@ public sealed class BluetoothSyncTransport:IDisposable
         if(listener!=null)listener.ConnectionReceived-=ConnectionReceived;
         listener?.Dispose();provider=null;listener=null;
         foreach(var socket in sockets.Keys)socket.Dispose();sockets.Clear();
-        connectGate.Dispose();lifetime.Dispose();
+        // In-flight workers still own these managed handles and release in finally.
+        // Disposing here races both WaitAsync and connectGate.Release().
     }
 }

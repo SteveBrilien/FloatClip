@@ -23,6 +23,11 @@ object ClipboardWrites {
         manager.setPrimaryClip(clip)
     }
 
+    fun copyByUser(context: Context,manager: ClipboardManager,text: String) {
+        write(context,manager,text)
+        com.floatclip.app.sync.SyncRuntime.userCopied(context,text)
+    }
+
     fun isOwnClip(context: Context, description: ClipDescription): Boolean {
         val marker = description.extras?.getString(EXTRA)
         val expected = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(TOKEN, null)

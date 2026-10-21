@@ -57,6 +57,9 @@ class ClipboardSyncService: Service() {
     @Volatile private var lastCapture=""
     private lateinit var trust: android.content.SharedPreferences
     private lateinit var credentials: TrustedPeerStore
+    private var backgroundCapture: com.floatclip.app.capture.BackgroundClipboardCapture?=null
+    val backgroundCaptureConnected get()=backgroundCapture?.connected==true
+    fun captureBootstrap()=if(!closing&&!paused&&prefs.enabled()&&prefs.backgroundCapture())backgroundCapture?.bootstrap() else null
     private var bluetooth: BluetoothSyncTransport?=null
     private var bluetoothPairing: BluetoothPairHost?=null
     private val trustListener=android.content.SharedPreferences.OnSharedPreferenceChangeListener { _,_ -> if(!closing)actor.execute {
@@ -67,6 +70,7 @@ class ClipboardSyncService: Service() {
     private var registered=false
     @Volatile var status="正在准备共享";private set
     val connectedCount get()=links.size
+    @Volatile private var pendingOutgoingCount=0
     fun pairingOpen()=prefs.enabled()&&System.currentTimeMillis()<pairingUntil
     fun closePairing() {
         pairingUntil=0L
@@ -152,7 +156,17 @@ class ClipboardSyncService: Service() {
                 for(key in engine.peerKeys())if(!authorized(key))engine.forget(key)
                 configureEngine();setStatus("等待已授权设备 · Android 11 后台读取受系统限制")
                 refreshBluetooth()
-                actor.scheduleWithFixedDelay({if(!closing&&!paused&&::engine.isInitialized){for(key in links.keys)runCatching{configureEngine();engine.retry(key,System.currentTimeMillis())};refreshHosts();refreshBluetooth()}},10,10,TimeUnit.SECONDS)
+                actor.scheduleWithFixedDelay({
+                    if(!closing&&!paused&&::engine.isInitialized)runCatching {
+                        configureEngine()
+                        val now=System.currentTimeMillis()
+                        for(key in links.keys)engine.retry(key,now)
+                        refreshHosts();refreshBluetooth()
+                        val outbox=engine.pendingPeers(now);pendingOutgoingCount=outbox.size
+                        val pending=outbox.filterNot{links.containsKey(it)}.toSet()
+                        if(pending.isNotEmpty())bluetooth?.nudge(pending)
+                    }.onFailure{setStatus("待发送内容未保存，请检查本机存储")}
+                },5,5,TimeUnit.SECONDS)
                 refreshHosts()
             }.onFailure {setStatus("无法读取共享状态，请保留数据后检查存储");pauseImmediately()}
         }
@@ -172,12 +186,22 @@ class ClipboardSyncService: Service() {
         actor.execute {if(::engine.isInitialized&&!closing){runCatching{configureEngine();refreshHosts();refreshBluetooth();refreshBluetoothPairing()}.onFailure{setStatus("共享配置未保存，已暂停");pauseImmediately()}}}
         return if (prefs.keepAlive()) START_STICKY else START_NOT_STICKY
     }
-    private fun configureEngine(){paused=!SyncPolicy.apply(prefs,engine).enabled}
-    fun copied(text: String,event: String,excluded: Boolean=false,shareGeneration: String?=null) {
+    private fun configureEngine(){
+        paused=!SyncPolicy.apply(prefs,engine).enabled
+        if(closing||paused||!prefs.backgroundCapture()) {
+            backgroundCapture?.close();backgroundCapture=null
+        } else if(backgroundCapture==null) {
+            backgroundCapture=com.floatclip.app.capture.BackgroundClipboardCapture(prefs,
+                {text,event,excluded,generation->copied(text,event,excluded,generation)},
+                {refreshUi()})
+        }
+        backgroundCapture?.refreshConsent()
+    }
+    fun copied(text: String,event: String,excluded: Boolean=false,shareGeneration: String?=null,recordHistory: Boolean=true) {
         if(closing||paused||!prefs.enabled())return
         actor.execute {
             if(!closing&&!paused&&::engine.isInitialized&&event!=lastCapture&&prefs.enabled()) {
-                runCatching {configureEngine();refreshBluetooth();val p=prefs.policy();val mayShare=!excluded&&SyncPolicy.mayShare(p,shareGeneration);if(!excluded)library.addText(text);engine.copied(text,System.currentTimeMillis(),!mayShare);lastCapture=event;if(!excluded)historyChanged();if(mayShare)bluetooth?.nudge()}
+                runCatching {configureEngine();refreshBluetooth();val p=prefs.policy();val mayShare=!excluded&&SyncPolicy.mayShare(p,shareGeneration);if(!excluded&&recordHistory)library.addText(text);engine.copied(text,System.currentTimeMillis(),!mayShare);pendingOutgoingCount=engine.pendingPeers(System.currentTimeMillis()).size;lastCapture=event;if(!excluded&&recordHistory)historyChanged();if(mayShare)bluetooth?.nudge()}
                     .onFailure{setStatus("当前内容未同步，请检查存储或文字长度")}
             }
         }
@@ -186,6 +210,7 @@ class ClipboardSyncService: Service() {
     fun refreshUi(){SyncRuntime.changed()}
     fun pauseImmediately(){
         if(closing)return
+        backgroundCapture?.close();backgroundCapture=null
         paused=true;pairingUntil=0;pairRequest?.accept(false);pairRequest=null
         bluetoothPairing?.close();bluetoothPairing=null
         for(link in links.values)link.close();links.clear()
@@ -196,7 +221,7 @@ class ClipboardSyncService: Service() {
         if(closing||paused||!prefs.enabled()||!prefs.reconnect()){
             bluetooth?.close();bluetooth=null;return
         }
-        if(bluetooth!=null)return
+        if(bluetooth!=null){bluetooth?.start();return}
         bluetooth=BluetoothSyncTransport(this,credentials,::authorized,
             {key->!closing&&!paused&&prefs.enabled()&&prefs.reconnect()&&!links.containsKey(key)},
             {key->peerMessages(key,false)},
@@ -254,7 +279,7 @@ class ClipboardSyncService: Service() {
                 runCatching{configureEngine();engine.connected(peer);setStatus("${links.size} 台设备已连接 · 加密共享")}.onFailure{links.remove(peer)?.close();setStatus("设备授权状态未保存")}
             }}
             override fun sync(frame: ShareWire.Frame){if(!closing)actor.execute{if(!closing&&!paused&&prefs.enabled()&&(frame.type!=ClipboardSync.CLIP||prefs.receiving())&&authorized(peer)&&connectionTokens[peer]==token)runCatching{
-                configureEngine();engine.accept(peer,frame,System.currentTimeMillis())
+                configureEngine();engine.accept(peer,frame,System.currentTimeMillis());pendingOutgoingCount=engine.pendingPeers(System.currentTimeMillis()).size
                 if(frame.type==ClipboardSync.HELLO)engine.peerViews().firstOrNull{it.key==peer}?.let{credentials.rememberDevice(peer,it.device)}
             }.onFailure{links.remove(peer)?.close();setStatus("设备授权或同步校验失败，请重新核对")}}}
             override fun text(id: UUID,value: String,outgoing: Boolean)=Unit
@@ -316,12 +341,18 @@ class ClipboardSyncService: Service() {
             }
             .build()
     }
+    override fun dump(fd:java.io.FileDescriptor,writer:java.io.PrintWriter,args:Array<out String>?) {
+        writer.println("FloatClip sync: enabled=${prefs.enabled()} connectedPeers=${links.size} pendingOutgoing=$pendingOutgoingCount")
+        writer.println("ADB capture: enabled=${prefs.backgroundCapture()} connected=${backgroundCaptureConnected}")
+        writer.println("ADB capture frames=${backgroundCapture?.receivedFrames?:0} lastFrameAt=${backgroundCapture?.lastFrameAt?:0}")
+    }
     override fun onBind(intent: Intent?): IBinder?=null
     override fun onTaskRemoved(rootIntent: Intent?) {
         if(SyncKeepAliveScheduler.shouldRun(this))SyncKeepAliveScheduler.schedule(this)
         super.onTaskRemoved(rootIntent)
     }
     override fun onDestroy(){
+        backgroundCapture?.close();backgroundCapture=null
         closing=true;paused=true;pairRequest?.accept(false);pairRequest=null
         trust.unregisterOnSharedPreferenceChangeListener(trustListener)
         clipboard.removePrimaryClipChangedListener(clipListener)

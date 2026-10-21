@@ -94,6 +94,8 @@ class ClipboardOverlayService : Service() {
     private var activeCategory = ALL_CATEGORY
     private var activeSource = ""
     private var lastCapturedClipboard: String? = null
+    private var captureFocusPending=false
+    private val releaseCaptureFocus=Runnable { releaseClipboardFocus() }
 
     private val edgeHideRunnable = Runnable { hideBubbleAtEdge() }
     private val clipboardPollRunnable = object : Runnable {
@@ -204,6 +206,7 @@ class ClipboardOverlayService : Service() {
     }
 
     override fun onDestroy() {
+        releaseClipboardFocus()
         clipboardCaptureGeneration++
         handler.removeCallbacksAndMessages(null)
         bubbleMotion.cancel()
@@ -250,6 +253,7 @@ class ClipboardOverlayService : Service() {
     }
 
     private fun rebuildVisibleOverlay() {
+        releaseClipboardFocus()
         val reopenPanel = panelOpen && !panelCollapsing
         clipboardCaptureGeneration++
         handler.removeCallbacks(edgeHideRunnable)
@@ -277,7 +281,7 @@ class ClipboardOverlayService : Service() {
         panelCollapsing = false
         showBubble()
         if (foregroundStarted) getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, createNotification())
-        if (reopenPanel) handler.postDelayed({ expandPanel() }, 20L)
+        if (reopenPanel) handler.postDelayed({ expandPanel(false) }, 20L)
     }
 
     private fun showBubble(clearPanelWindows: Boolean = true, deferAppearance: Boolean = false) {
@@ -476,7 +480,7 @@ class ClipboardOverlayService : Service() {
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun expandPanel() {
+    private fun expandPanel(captureOnOpen:Boolean=true) {
         if (panelOpen || panelCollapsing) return
         val bubble = bubbleView ?: return
         bubbleParams?.let { current ->
@@ -493,7 +497,7 @@ class ClipboardOverlayService : Service() {
         bubble.animate().cancel()
 
         if (panelView != null) {
-            showRetainedPanel()
+            showRetainedPanel(captureOnOpen)
             return
         }
         val palette = themeProvider.palette()
@@ -539,6 +543,12 @@ class ClipboardOverlayService : Service() {
                 if(!overlayPreferences.borderEnabled()) null else if (palette.isDark) Color.argb(borderAlpha,255,255,255) else Color.argb(borderAlpha,25,40,63),
             )
             elevation = dp(palette.elevationDp).toFloat()
+            windowFocusChanged={focused->
+                if(focused&&captureFocusPending)handler.post {
+                    if(captureFocusPending&&panelOpen&&!panelCollapsing)captureCurrentClipboard(false)
+                    releaseClipboardFocus()
+                }
+            }
             setPadding(dp(8), dp(8), dp(8), dp(8))
             alpha = 1f
         }
@@ -644,11 +654,11 @@ class ClipboardOverlayService : Service() {
         windowManager.addView(scrim, scrimParams)
         windowManager.addView(panel, params)
 
-        showRetainedPanel()
+        showRetainedPanel(captureOnOpen)
     }
 
     /** Keep all three WindowManager surfaces attached; open/close never reallocates them. */
-    private fun showRetainedPanel() {
+    private fun showRetainedPanel(captureOnOpen:Boolean=true) {
         val panel = panelView ?: return
         val params = panelParams ?: return
         panelOpen = true
@@ -708,8 +718,37 @@ class ClipboardOverlayService : Service() {
                 }
             }
         }
-        handler.removeCallbacks(clipboardPollRunnable)
-        handler.postDelayed(clipboardPollRunnable, 120L)
+        if(captureOnOpen)beginClipboardFocus()
+    }
+
+    /** Only an explicit open takes a short focus lease; idle/background never steals focus. */
+    private fun beginClipboardFocus() {
+        val panel=panelView?:return
+        val params=panelParams?:return
+        captureFocusPending=true
+        panel.isFocusableInTouchMode=true
+        params.flags=(params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()) or
+            WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
+        windowManager.updateViewLayout(panel,params)
+        panel.requestFocus()
+        handler.removeCallbacks(releaseCaptureFocus)
+        handler.postDelayed(releaseCaptureFocus,800L)
+        if(panel.hasWindowFocus())handler.post {
+            if(captureFocusPending&&panelOpen&&!panelCollapsing)captureCurrentClipboard(false)
+            releaseClipboardFocus()
+        }
+    }
+
+    private fun releaseClipboardFocus() {
+        captureFocusPending=false
+        handler.removeCallbacks(releaseCaptureFocus)
+        val panel=panelView?:return
+        val params=panelParams?:return
+        params.flags=(params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) and
+            WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM.inv()
+        runCatching{windowManager.updateViewLayout(panel,params)}
+        panel.clearFocus()
+        panel.isFocusableInTouchMode=false
     }
 
     private fun installPanelDrag(
@@ -898,6 +937,7 @@ class ClipboardOverlayService : Service() {
         wrapper.onSingleTap = {
             val pasted=PasteAccessibilityService.paste(entry.text)
             if(!pasted) clipboard.writeText(entry.text)
+            else com.floatclip.app.sync.SyncRuntime.userCopied(this,entry.text)
             Toast.makeText(this, if(pasted) "已粘贴" else "已复制", Toast.LENGTH_SHORT).show()
             if (!panelPinnedMode) collapsePanel()
         }
@@ -1062,6 +1102,7 @@ class ClipboardOverlayService : Service() {
 
     private fun pasteEntry(entry: ClipEntry) {
         val pasted = AccessibilityPasteBridge.pasteText(entry.text)
+        if(pasted)com.floatclip.app.sync.SyncRuntime.userCopied(this,entry.text)
         if (!pasted) {
             clipboard.writeText(entry.text)
             Toast.makeText(this, "已复制；启用一键粘贴后可直接粘贴", Toast.LENGTH_SHORT).show()
@@ -1128,6 +1169,7 @@ class ClipboardOverlayService : Service() {
     private fun collapsePanel() {
         if (!panelOpen || panelCollapsing) return
         val panel = panelView ?: return
+        releaseClipboardFocus()
         panelCollapsing = true
         panelOpen = false
         panel.interactionBlocked = true

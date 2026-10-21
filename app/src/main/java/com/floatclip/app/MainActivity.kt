@@ -78,7 +78,10 @@ open class MainActivity : Activity() {
     private var undoEntry: ClipEntry? = null
     private var undoBar: LinearLayout? = null
     private val clipboardChanged = ClipboardManager.OnPrimaryClipChangedListener { captureCurrentClipboard() }
-    private val sharedHistoryChanged=object: BroadcastReceiver(){override fun onReceive(context: Context?,intent: Intent?){if(currentPage==PAGE_CLIPBOARD&&historyList?.isAttachedToWindow==true)refreshHistory()}}
+    private val sharedHistoryChanged=object: BroadcastReceiver(){override fun onReceive(context: Context?,intent: Intent?){
+        if(currentPage==PAGE_CLIPBOARD&&historyList?.isAttachedToWindow==true)refreshHistory()
+        else if(currentPage==PAGE_SETTINGS&&settingsSection=="剪贴板共享"&&::content.isInitialized)render()
+    }}
 
     private val overlayServiceIntent by lazy(LazyThreadSafetyMode.NONE) {
         Intent(this, ClipboardOverlayService::class.java)
@@ -86,7 +89,7 @@ open class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val historyFilter=IntentFilter(ClipboardSyncService.HISTORY_CHANGED)
+        val historyFilter=IntentFilter(ClipboardSyncService.HISTORY_CHANGED).apply{addAction(SyncRuntime.STATE_CHANGED)}
         if(android.os.Build.VERSION.SDK_INT>=33)registerReceiver(sharedHistoryChanged,historyFilter,"$packageName.permission.INTERNAL",null,Context.RECEIVER_NOT_EXPORTED)
         else registerReceiver(sharedHistoryChanged,historyFilter,"$packageName.permission.INTERNAL",null)
         if(SyncPreferences(this).enabled())SyncRuntime.refresh(this)
@@ -100,6 +103,7 @@ open class MainActivity : Activity() {
         searchQuery = savedInstanceState?.getString("searchQuery").orEmpty()
         sourceFilter = savedInstanceState?.getString("sourceFilter").orEmpty()
         settingsSection = savedInstanceState?.getString("settingsSection").orEmpty()
+        if(intent?.getStringExtra("floatclip_page")=="clipboard_sync"){currentPage=PAGE_SETTINGS;settingsSection="剪贴板共享"}
         categoryManagement = savedInstanceState?.getBoolean("categoryManagement") ?: false
         render()
         getSystemService(ClipboardManager::class.java).addPrimaryClipChangedListener(clipboardChanged)
@@ -121,6 +125,14 @@ open class MainActivity : Activity() {
             currentPage == PAGE_CLIPBOARD && categoryManagement -> { categoryManagement = false; render() }
             currentPage != PAGE_CLIPBOARD -> { currentPage=PAGE_CLIPBOARD; settingsSection=""; render() }
             else -> super.onBackPressed()
+        }
+    }
+
+    override fun onNewIntent(intent:Intent) {
+        super.onNewIntent(intent);setIntent(intent)
+        if(intent.getStringExtra("floatclip_page")=="clipboard_sync") {
+            currentPage=PAGE_SETTINGS;settingsSection="剪贴板共享"
+            if(::content.isInitialized)render()
         }
     }
 
@@ -562,6 +574,7 @@ open class MainActivity : Activity() {
             toggle("共享剪贴板",prefs.enabled()){prefs.save(enabled=!prefs.enabled())}
             toggle("自动连接已授权设备",prefs.reconnect()){prefs.save(reconnect=!prefs.reconnect())}
             toggle("清理最近任务后保持共享服务",prefs.keepAlive()){prefs.saveKeepAlive(!prefs.keepAlive())}
+            toggle("ADB 后台采集增强",prefs.backgroundCapture()){prefs.saveBackgroundCapture(!prefs.backgroundCapture())}
             toggle("发送新复制的文字",prefs.sending()){prefs.save(sending=!prefs.sending())}
             toggle("接收文字到历史",prefs.receiving()){prefs.save(receiving=!prefs.receiving())}
             toggle("接收后写入系统剪贴板",prefs.applying()){prefs.save(applying=!prefs.applying())}
@@ -570,7 +583,7 @@ open class MainActivity : Activity() {
             spacer(12);addCard(card().apply {addView(settingRow(peer.device.name,"",if(peer.enabled)"共享中" else "已暂停"){SyncRuntime.current()?.peerEnabled(peer.key,!peer.enabled);window.decorView.postDelayed({render()},120)})})
         }
         spacer(12)
-        addCard(card().apply {addView(textView(SyncRuntime.current()?.status?:"共享关闭时保留配对授权",14f,false,colors.secondaryText));addView(textView("Android 11 后台读取受系统限制；连接常驻不代表具备后台读取权限。",13f,false,colors.secondaryText))})
+        addCard(card().apply {addView(textView(SyncRuntime.current()?.status?:"共享关闭时保留配对授权",14f,false,colors.secondaryText));addView(textView(if(SyncRuntime.current()?.backgroundCaptureConnected==true)"ADB 后台采集已连接；离开 App 后的新复制也可同步。" else if(prefs.backgroundCapture())"后台采集增强等待 ADB 激活；手机重启后需要重新激活。" else "普通模式在打开 App 或悬浮剪贴板时读取；可选择 ADB 增强后台采集。",13f,false,colors.secondaryText))})
     }
 
     private fun renderAppearanceSettings() {
@@ -1094,7 +1107,7 @@ open class MainActivity : Activity() {
             dp(78),
         )
         wrapper.onSingleTap = {
-            ClipboardWrites.write(this,getSystemService(ClipboardManager::class.java),entry.text)
+            ClipboardWrites.copyByUser(this,getSystemService(ClipboardManager::class.java),entry.text)
             Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
         }
         wrapper.onLongPress = {
@@ -1111,7 +1124,7 @@ open class MainActivity : Activity() {
                         negative="关闭",
                         positive="复制",
                     ) {
-                        ClipboardWrites.write(this,getSystemService(ClipboardManager::class.java),entry.text)
+                        ClipboardWrites.copyByUser(this,getSystemService(ClipboardManager::class.java),entry.text)
                         true
                     }
                     1 -> showCategoryPicker(entry)

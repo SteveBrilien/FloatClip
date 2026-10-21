@@ -94,6 +94,16 @@ static class Program
         var barrier=new Pair();barrier.Enable();barrier.A.Copied("old receive consent",p.Now);var oldGrant=barrier.Clip();barrier.Wire.Clear();barrier.B.RenewReceiveGrant();barrier.Pump();barrier.B.Accept(AKey,oldGrant,p.Now);Yes(barrier.HistoryB.Count==0);barrier.A.Copied("new receive consent",p.Now);barrier.Pump();Yes(barrier.AppliedB.SequenceEqual(new[]{"new receive consent"}));
         var independent=new Pair();independent.Enable();independent.A.Copied("outgoing must survive receive-only renewal",p.Now);independent.A.RenewReceiveGrant();independent.Pump();Yes(independent.HistoryB.Count==1);
         var keyMigration=new Pair();keyMigration.A.Configure(true,true,true,true);keyMigration.A.Connected(BKey);keyMigration.A.MigratePeerKey(BKey,AKey);Yes(keyMigration.A.Snapshot().Peers.ContainsKey(AKey)&&!keyMigration.A.Snapshot().Peers.ContainsKey(BKey));keyMigration.A.Disconnected(AKey);
+        var recovery=new Pair();recovery.Enable();recovery.Disconnect();
+        recovery.A.Copied("retry without opening UI",p.Now);
+        Yes(recovery.A.PendingPeers(p.Now).SequenceEqual(new[]{BKey}));
+        recovery.RestartA();Yes(recovery.A.PendingPeers(p.Now).Contains(BKey));
+        recovery.Connect();Yes(recovery.A.PendingPeers(p.Now).Length==0);
+        recovery.Disconnect();recovery.A.Copied("expires offline",p.Now);
+        Yes(recovery.A.PendingPeers(p.Now+SyncProtocol.RetryTtl+1).Length==0);
+        recovery.RestartA();recovery.Connect();Yes(recovery.HistoryB.Count==1);
+        recovery.Disconnect();recovery.A.Copied("revoked",p.Now);recovery.A.Configure(true,false,true,true);
+        Yes(recovery.A.PendingPeers(p.Now).Length==0);
         SocketChecks.Run();
         Console.WriteLine("PASS clipboard sync C#: "+checks+" checks; Java-compatible payloads, replay, pause, restart, conflict, durable ACK and policy");
     }

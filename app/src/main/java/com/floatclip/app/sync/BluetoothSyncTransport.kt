@@ -8,6 +8,7 @@ import com.floatclip.share.ShareSession
 import com.floatclip.share.TransportCrypto
 import java.io.Closeable
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -36,7 +37,7 @@ class BluetoothSyncTransport(
     private val workers=Executors.newCachedThreadPool()
     private val timer=Executors.newSingleThreadScheduledExecutor()
     private val connecting=AtomicBoolean()
-    private val started=AtomicBoolean()
+    private val sockets=ConcurrentHashMap.newKeySet<BluetoothSocket>()
     @Volatile private var closed=false
 
     private val host=BluetoothSyncHost(cache,object:BluetoothSyncHost.Events{
@@ -55,56 +56,65 @@ class BluetoothSyncTransport(
 
     fun start(){
         if(adapter==null){status("此设备没有可用蓝牙适配器");return}
-        if(!started.compareAndSet(false,true))return
-        if(adapter.isEnabled)host.start()
+        if(!closed&&adapter.isEnabled)host.start()
     }
 
-    /** Called only after a new shareable local clipboard entry was captured. */
-    fun nudge(){
+    /** New copies and the durable outbox can request a bounded recovery burst. */
+    fun nudge(targets: Set<String>?=null){
         if(closed||adapter?.isEnabled!=true||!connecting.compareAndSet(false,true))return
-        workers.execute{
+        runCatching { workers.execute{
             try{
-                val peers=credentials.keys().mapNotNull{key->
+                val peers=credentials.keys().filter{targets==null||it in targets}.mapNotNull{key->
                     credentials.get(key)?.takeIf{authorized(key)&&canAttach(key)&&it.bluetoothAddress!=null}
                 }
                 for(peer in peers){
-                    if(closed||!canAttach(peer.key))break
-                    if(runCatching{connect(peer)}.isSuccess)break
+                    if(closed)break
+                    if(!canAttach(peer.key))continue
+                    runCatching{connect(peer)}
                 }
             }finally{connecting.set(false)}
-        }
+        }}.onFailure{connecting.set(false)}
     }
 
     private fun connect(peer:TrustedPeerStore.Peer){
         val address=peer.bluetoothAddress?:return
         val socket=adapter!!.getRemoteDevice(address)
             .createRfcommSocketToServiceRecord(BluetoothSyncHost.SERVICE_UUID)
+        sockets.add(socket)
         var handedOff=false
+        val deadline=timer.schedule({runCatching{socket.close()}},15,TimeUnit.SECONDS)
         try{
+            check(!closed)
             adapter.cancelDiscovery()
             socket.connect()
             val secure=TransportCrypto.connect(socket.inputStream,socket.outputStream,peer.token)
-            check(secure.relationHex==peer.key&&authorized(peer.key)&&canAttach(peer.key)){"Trusted relation changed"}
+            check(!closed&&secure.relationHex==peer.key&&authorized(peer.key)&&canAttach(peer.key)){"Trusted relation changed"}
             credentials.rememberBluetooth(peer.key,socket.remoteDevice.address)
-            attach(peer.key,socket,secure)
-            handedOff=true
-        }finally{if(!handedOff)runCatching{socket.close()}}
+            handedOff=attach(peer.key,socket,secure)
+        }finally{
+            deadline.cancel(false)
+            if(!handedOff){sockets.remove(socket);runCatching{socket.close()}}
+        }
     }
 
-    private fun attach(key:String,socket:BluetoothSocket,secure:TransportCrypto.SecureStreams){
-        if(closed||!authorized(key)||!canAttach(key)){socket.close();return}
+    private fun attach(key:String,socket:BluetoothSocket,secure:TransportCrypto.SecureStreams):Boolean{
+        if(closed||!authorized(key)||!canAttach(key))return false
         val delegate=messages(key)
-        val session=ShareSession(secure.input,secure.output,Closeable{socket.close()},cache,delegate,true)
-        if(closed||!authorized(key)||!canAttach(key)){session.close();return}
+        val session=ShareSession(secure.input,secure.output,Closeable{sockets.remove(socket);socket.close()},cache,delegate,true)
+        if(closed||!authorized(key)||!canAttach(key)){session.close();return false}
         delegate.attached(session)
         session.start()
-        timer.schedule({session.close()},SHORT_SESSION_SECONDS,TimeUnit.SECONDS)
+        runCatching{timer.schedule({session.close()},SHORT_SESSION_SECONDS,TimeUnit.SECONDS)}
+            .onFailure{session.close()}
+        return true
     }
 
     override fun close(){
         if(closed)return
         closed=true
         host.close()
+        for(socket in sockets)runCatching{socket.close()}
+        sockets.clear()
         workers.shutdownNow()
         timer.shutdownNow()
     }

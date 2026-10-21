@@ -7,6 +7,11 @@ import android.widget.FrameLayout
 import kotlin.math.abs
 
 class BorderDragFrameLayout(context: Context) : FrameLayout(context) {
+    var windowFocusChanged: ((Boolean)->Unit)? = null
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        windowFocusChanged?.invoke(hasWindowFocus)
+    }
     var interactionBlocked = false
     var dragEnabled = true
     override fun dispatchTouchEvent(event: MotionEvent): Boolean =

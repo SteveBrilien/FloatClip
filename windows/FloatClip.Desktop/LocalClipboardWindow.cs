@@ -19,79 +19,72 @@ namespace FloatClip.Desktop;
 /** Local clipboard first. Neither the vault nor the window depends on a web login. */
 public sealed class LocalClipboardWindow:Window
 {
-    readonly ClipboardVault vault;
-    NativeClipboardSync? sync;
-    string? syncError;
+    readonly ClipboardHost host;
+    readonly bool floating;
+    ClipboardVault vault=>host.Vault;
+    NativeClipboardSync? sync=>host.Sync;
+    string? syncError=>host.SyncError;
+    readonly TextBlock syncStatus=new();
+    bool capture{get=>host.Capture;set=>host.Capture=value;}
     readonly string prefsRoot=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"FloatClip","Host");
     readonly StackPanel list=new(),header=new();readonly WrapPanel sources=new();readonly TextBox search=new();readonly TextBlock searchHint=new();
     readonly DockPanel root=new();readonly Border undo=new();
     SolidColorBrush surface=Brushes.White,text=Brushes.Black,muted=Brushes.Gray,line=Brushes.Gray,tint=Brushes.LightBlue,accent=Brushes.Blue;
-    string mode="system",source="";uint lastSequence,initialSequence;bool dark,sourceColors=true,translucent,capture=true,rendering,exiting,hotkey;
-    JsonObject? deleted;HwndSource? hwnd;System.Windows.Forms.NotifyIcon? tray;Action? closeSwipe;
-    const int ClipboardMessage=0x031D,HotkeyMessage=0x0312,HotkeyId=703;
-    [DllImport("user32.dll")]static extern bool AddClipboardFormatListener(IntPtr hwnd);
-    [DllImport("user32.dll")]static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
-    [DllImport("user32.dll")]static extern bool RegisterHotKey(IntPtr hwnd,int id,uint modifiers,uint key);
-    [DllImport("user32.dll")]static extern bool UnregisterHotKey(IntPtr hwnd,int id);
-    [DllImport("user32.dll")]static extern uint GetClipboardSequenceNumber();
+    string mode="system",source="";bool dark,sourceColors=true,translucent,rendering;
+    JsonObject? deleted;Action? closeSwipe;Window? settingsWindow;
     static SolidColorBrush B(string c)=>new((Color)ColorConverter.ConvertFromString(c));
-    public LocalClipboardWindow(ClipboardVault vault)
+    public LocalClipboardWindow(ClipboardHost host,bool floating)
     {
-        this.vault=vault;
-        try{sync=new NativeClipboardSync(vault,IncomingClipboard);sync.HistoryChanged+=()=>Dispatcher.BeginInvoke(new Action(()=>Guard(()=>Refresh())));}
-        catch{syncError="共享状态暂时无法读取，请保留数据并检查存储。";}
-        Title="FloatClip";Width=680;Height=760;MinWidth=470;MinHeight=450;
+        this.host=host;this.floating=floating;
+        Title=floating?"FloatClip · 悬浮剪贴板":"FloatClip · 管理剪贴板";
+        Width=floating?420:680;Height=floating?560:760;MinWidth=floating?340:470;MinHeight=360;
+        ShowInTaskbar=!floating;
+        if(floating){WindowStyle=WindowStyle.None;ResizeMode=ResizeMode.CanResize;ShowActivated=true;}
+        UseLayoutRounding=true;SnapsToDevicePixels=true;
         WindowStartupLocation=WindowStartupLocation.CenterScreen;FontFamily=new FontFamily("Segoe UI, Microsoft YaHei UI");FontSize=15;
         Directory.CreateDirectory(prefsRoot);
         try{mode=File.ReadAllText(Path.Combine(prefsRoot,"theme.txt")).Trim();}catch{}
         try{var p=JsonNode.Parse(File.ReadAllText(Path.Combine(prefsRoot,"clipboard-ui.json")))!;sourceColors=p["sourceColors"]?.GetValue<bool>()??true;translucent=p["translucent"]?.GetValue<bool>()??false;capture=p["capture"]?.GetValue<bool>()??true;}catch{}
-        try{Icon=new BitmapImage(new Uri("pack://application:,,,/Assets/FloatClip.ico"));}catch{}
-        root.Margin=new(20,8,20,18);Content=root;DockPanel.SetDock(header,Dock.Top);root.Children.Add(header);
+        try{var decoder=BitmapDecoder.Create(new Uri("pack://application:,,,/Assets/FloatClip.ico"),BitmapCreateOptions.PreservePixelFormat,BitmapCacheOption.OnLoad);Icon=decoder.Frames.OrderByDescending(frame=>frame.PixelWidth).First();}catch{}
+        root.Margin=floating?new(14,10,14,12):new(20,8,20,18);
+        if(floating) {
+            var border=new Border{Child=root};
+            border.SetBinding(Border.BackgroundProperty,new System.Windows.Data.Binding("Background"){Source=this});
+            Content=border;
+            System.Windows.Shell.WindowChrome.SetWindowChrome(this,new System.Windows.Shell.WindowChrome{
+                CaptionHeight=0,ResizeBorderThickness=new(6),GlassFrameThickness=new(0),CornerRadius=new(0)});
+            SourceInitialized+=(_,_)=>WindowAppearance.Apply(this);
+        } else Content=root;DockPanel.SetDock(header,Dock.Top);root.Children.Add(header);
+        syncStatus.FontSize=12;syncStatus.Margin=new(0,8,0,0);syncStatus.TextTrimming=TextTrimming.CharacterEllipsis;
+        DockPanel.SetDock(syncStatus,Dock.Bottom);root.Children.Add(syncStatus);
         DockPanel.SetDock(undo,Dock.Bottom);root.Children.Add(undo);
         root.Children.Add(new ScrollViewer{Content=list,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,PanningMode=PanningMode.VerticalOnly});
         search.TextChanged+=(_,_)=>{searchHint.Visibility=search.Text.Length==0?Visibility.Visible:Visibility.Hidden;if(!rendering)Guard(()=>Refresh(false));};
         Activated+=(_,_)=>Guard(()=>Refresh());
-        SourceInitialized+=(_,_)=>{
-            initialSequence=GetClipboardSequenceNumber();
-            hwnd=HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);hwnd?.AddHook(Hook);
-            if(hwnd!=null){AddClipboardFormatListener(hwnd.Handle);hotkey=RegisterHotKey(hwnd.Handle,HotkeyId,0x400C,0x56);}
-            try{
-                using var stream=Application.GetResourceStream(new Uri("pack://application:,,,/Assets/FloatClip.ico"))!.Stream;
-                tray=new System.Windows.Forms.NotifyIcon{Text="FloatClip",Icon=new System.Drawing.Icon(stream),Visible=true};
-                var menu=new System.Windows.Forms.ContextMenuStrip();menu.Items.Add("打开剪贴板",null,(_,_)=>Open());menu.Items.Add("暂停 / 恢复收录",null,(_,_)=>{capture=!capture;SavePreferences();});menu.Items.Add("退出",null,(_,_)=>{exiting=true;Close();});tray.ContextMenuStrip=menu;tray.DoubleClick+=(_,_)=>Open();
-            }catch{tray?.Dispose();tray=null;}
-            ReadClipboard();sync?.Start();
-        };
-        Closing+=(_,e)=>{if(!exiting&&tray!=null){e.Cancel=true;Hide();}};
-        Closed+=(_,_)=>{if(hwnd!=null){RemoveClipboardFormatListener(hwnd.Handle);UnregisterHotKey(hwnd.Handle,HotkeyId);hwnd.RemoveHook(Hook);}tray?.Dispose();sync?.Dispose();};
+        host.Changed+=HostChanged;
+        Closing+=(_,e)=>{if(!host.IsExiting){e.Cancel=true;host.RememberPlacement();Hide();}};
+        Closed+=(_,_)=>host.Changed-=HostChanged;
+        if(floating) {
+            Deactivated+=(_,_)=>Dispatcher.BeginInvoke(new Action(()=>{
+                if(!host.Pinned&&!IsActive&&!OwnedWindows.Cast<Window>().Any(w=>w.IsVisible))Hide();
+            }),DispatcherPriority.Background);
+            PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Escape){Hide();e.Handled=true;}};
+        }
         PreviewMouseDown+=(_,e)=>{if(e.OriginalSource is DependencyObject target&&closeSwipe!=null&&!InsideClip(target))closeSwipe();};
         ApplyPalette();BuildHeader();Guard(()=>Refresh());
     }
     static bool InsideClip(DependencyObject target){for(var p=target;p!=null;p=p is Visual?VisualTreeHelper.GetParent(p):LogicalTreeHelper.GetParent(p))if(p is FrameworkElement f&&f.Tag as string=="clip")return true;return false;}
-    void Open(){Show();WindowState=WindowState.Normal;Activate();}
-    IntPtr Hook(IntPtr window,int message,IntPtr w,IntPtr l,ref bool handled){if(message==ClipboardMessage)ReadClipboard();if(message==HotkeyMessage&&w.ToInt32()==HotkeyId){Open();handled=true;}return IntPtr.Zero;}
-    void ReadClipboard(int retry=0)
-    {
-        if(!capture&&sync?.Snapshot().Enabled!=true)return;
-        try{uint sequence=GetClipboardSequenceNumber();if(sequence!=0&&sequence==lastSequence)return;if(ClipboardWrites.IsOwnWrite()){lastSequence=sequence;return;}if(!Clipboard.ContainsText()||Clipboard.ContainsData("ExcludeClipboardContentFromMonitorProcessing")){sync?.Copied("",true);lastSequence=sequence;return;}string value=Clipboard.GetText();if(string.IsNullOrWhiteSpace(value)){sync?.Copied("",true);lastSequence=sequence;return;}if(capture)vault.AddText(value);lastSequence=sequence;if(sequence!=initialSequence)sync?.Copied(value);Refresh();}
-        catch(System.Runtime.InteropServices.COMException){if(retry<3){var timer=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(60)};timer.Tick+=(_,_)=>{timer.Stop();ReadClipboard(retry+1);};timer.Start();}}
-        catch{ /* Keep the existing vault intact; report a persistent storage problem on the next open. */ }
-    }
-    void IncomingClipboard(SyncEntry entry,long grant)
-    {
-        Dispatcher.BeginInvoke(new Action(()=>{
-            if(sync?.MayApply(entry,grant)!=true)return;
-            uint current=GetClipboardSequenceNumber();
-            if(current!=0&&current!=lastSequence){ReadClipboard();return;}
-            if(sync.MayApply(entry,grant))try{ClipboardWrites.Write(entry.Text);lastSequence=GetClipboardSequenceNumber();}catch{/* History is durable; the OS may temporarily own the clipboard. */}
-        }));
-    }
+    void HostChanged(){if(IsVisible)Guard(()=>Refresh());}
+    public void FocusSearch(){search.Focus();}
     void Sharing(){if(sync==null){MessageBox.Show(this,syncError??"共享尚未准备好","FloatClip");return;}new ClipboardSharingWindow(sync,Background,surface,text,muted,tint,accent){Owner=this}.Show();}
-    void Copy(string value)=>ClipboardWrites.Write(value);
+    void Copy(string value){host.CopyByUser(value);if(floating&&!host.Pinned)Hide();}
     void ApplyPalette()
     {
         dark=mode=="dark"||mode=="system"&&(Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize","AppsUseLightTheme",1) as int?)==0;
-        Background=B(dark?"#0C1422":"#F4F7FC");surface=B(dark?"#162235":"#FFFFFF");text=B(dark?"#EDF3FC":"#19283F");muted=B(dark?"#A9B8CD":"#596C85");line=B(dark?"#2D3C52":"#DFE7F2");tint=B(dark?"#243B5A":"#EBF2FF");accent=B(dark?"#8DBBFF":"#245DCE");Foreground=text;
+        Background=B(dark?"#1A1B26":"#F4F7FC");surface=B(dark?"#24283B":"#FFFFFF");text=B(dark?"#C0CAF5":"#19283F");muted=B(dark?"#9AA5CE":"#596C85");line=B(dark?"#414868":"#DFE7F2");tint=B(dark?"#283457":"#EBF2FF");accent=B(dark?"#7AA2F7":"#245DCE");Foreground=text;syncStatus.Foreground=muted;
+        var resources=Application.Current.Resources;
+        resources["FloatClip.Surface"]=surface;resources["FloatClip.Text"]=text;
+        resources["FloatClip.Line"]=line;resources["FloatClip.Tint"]=tint;resources["FloatClip.Accent"]=accent;
         search.Background=Brushes.Transparent;search.Foreground=text;search.BorderThickness=new(0);search.Padding=new(0);search.FontSize=16;search.MinHeight=48;search.VerticalContentAlignment=VerticalAlignment.Center;
     }
     FrameworkElement Glyph(string code,int size=24)=>new TextBlock{Text=code,FontFamily=new FontFamily("Segoe MDL2 Assets"),FontSize=size,VerticalAlignment=VerticalAlignment.Center,HorizontalAlignment=HorizontalAlignment.Center,Foreground=muted};
@@ -104,10 +97,17 @@ public sealed class LocalClipboardWindow:Window
     void BuildHeader()
     {
         header.Children.Clear();var top=new DockPanel{LastChildFill=true,Margin=new(0,0,0,12)};
-        var settings=IconButton("\uE713","设置",Settings);DockPanel.SetDock(settings,Dock.Right);top.Children.Add(settings);
+        if(floating) {
+            var dismiss=IconButton("\uE711","收起剪贴板",Hide);DockPanel.SetDock(dismiss,Dock.Right);top.Children.Add(dismiss);
+            var pin=IconButton(host.Pinned?"\uE77A":"\uE718",host.Pinned?"取消固定面板":"固定面板",()=>{host.SetPinned(!host.Pinned);BuildHeader();});
+            DockPanel.SetDock(pin,Dock.Right);top.Children.Add(pin);
+        }
+        var settings=IconButton("\uE713","设置",OpenSettings);DockPanel.SetDock(settings,Dock.Right);top.Children.Add(settings);
         var devices=IconButton("\uE770","我的设备",Sharing);DockPanel.SetDock(devices,Dock.Right);top.Children.Add(devices);
         var brand=new StackPanel{Orientation=Orientation.Horizontal};try{brand.Children.Add(new Image{Source=Icon,Width=28,Height=28,Margin=new(0,0,10,0)});}catch{}
-        brand.Children.Add(new TextBlock{Text="剪贴板",FontSize=22,FontWeight=FontWeights.Medium,VerticalAlignment=VerticalAlignment.Center});top.Children.Add(brand);header.Children.Add(top);
+        brand.Children.Add(new TextBlock{Text="剪贴板",FontSize=floating?19:22,FontWeight=FontWeights.Medium,VerticalAlignment=VerticalAlignment.Center});
+        if(floating){brand.Cursor=Cursors.SizeAll;brand.MouseLeftButtonDown+=(_,e)=>{if(e.ClickCount==1){DragMove();host.RememberPlacement();e.Handled=true;}};}
+        top.Children.Add(brand);header.Children.Add(top);
         var field=new DockPanel{LastChildFill=true};var clear=IconButton("\uE711","清空搜索",()=>{search.Clear();search.Focus();});DockPanel.SetDock(clear,Dock.Right);field.Children.Add(clear);
         var glass=new Border{Width=48,Child=Glyph("\uE721")};DockPanel.SetDock(glass,Dock.Left);field.Children.Add(glass);
         if(search.Parent is Panel old)old.Children.Remove(search);
@@ -119,6 +119,7 @@ public sealed class LocalClipboardWindow:Window
     void Guard(Action action){try{action();}catch(Exception e){MessageBox.Show(this,e is IOException?e.Message:"本机操作未完成，请保留数据并重试。","FloatClip",MessageBoxButton.OK,MessageBoxImage.Information);}}
     void Refresh(bool reloadDevices=true)
     {
+        syncStatus.Text=host.Status+(host.HotkeyError.Length>0?" · "+host.HotkeyError:"");
         var entries=vault.Load()["entries"]!.AsArray();string own=vault.Device()["id"]!.GetValue<string>();rendering=true;
         try{
             closeSwipe=null;
@@ -177,18 +178,44 @@ public sealed class LocalClipboardWindow:Window
         if(node is TextBlock t)t.Foreground=text;
         for(int i=0;i<VisualTreeHelper.GetChildrenCount(node);i++)ThemeTree(VisualTreeHelper.GetChild(node,i));
     }
-    void Settings()
+    public void OpenSettings()
     {
-        var window=new Window{Owner=this,Title="设置",Width=430,Height=510,MinWidth=350,MinHeight=400,Background=Background,Foreground=text,FontFamily=FontFamily,FontSize=15,WindowStartupLocation=WindowStartupLocation.CenterOwner};var panel=new StackPanel{Margin=new(24)};
+        if(settingsWindow?.IsVisible==true){settingsWindow.Activate();return;}
+        var window=new Window{Owner=this,Title="设置",Width=460,Height=660,MinWidth=350,MinHeight=400,Background=Background,Foreground=text,FontFamily=FontFamily,FontSize=15,WindowStartupLocation=WindowStartupLocation.CenterOwner};settingsWindow=window;window.Closed+=(_,_)=>settingsWindow=null;var panel=new StackPanel{Margin=new(24)};
         var title=new DockPanel();var back=IconButton("\uE76B","返回",()=>window.Close());DockPanel.SetDock(back,Dock.Left);title.Children.Add(back);title.Children.Add(new TextBlock{Text="设置",FontSize=21,VerticalAlignment=VerticalAlignment.Center});panel.Children.Add(title);
         var modes=new ComboBox{ItemsSource=new[]{"跟随系统","浅色","深色"},SelectedIndex=mode=="light"?1:mode=="dark"?2:0,Margin=new(0,14,0,10)};StyleInput(modes);modes.SelectionChanged+=(_,_)=>{mode=modes.SelectedIndex==1?"light":modes.SelectedIndex==2?"dark":"system";SavePreferences();ApplyPalette();BuildHeader();Refresh();window.Background=Background;window.Foreground=text;ThemeTree(window);};panel.Children.Add(modes);
         void Option(string label,bool selected,Action<bool> change){var check=new CheckBox{Content=label,IsChecked=selected,Foreground=text,FontSize=15,MinHeight=48,VerticalContentAlignment=VerticalAlignment.Center};check.Click+=(_,_)=>Guard(()=>{change(check.IsChecked==true);SavePreferences();Refresh();});panel.Children.Add(check);}
         Option("收录新复制的文字",capture,v=>capture=v);Option("设备特征色",sourceColors,v=>sourceColors=v);Option("半透明色块",translucent,v=>translucent=v);
+        Option("登录 Windows 时启动 FloatClip",WindowsStartup.Enabled,WindowsStartup.SetEnabled);
+        panel.Children.Add(new TextBlock{Text="调出悬浮剪贴板的快捷键",Foreground=muted,Margin=new(0,12,0,4)});
+        bool recording=false;uint pendingModifiers=0,pendingKey=0;
+        var shortcut=new TextBox{Text=host.HotkeyLabel,IsReadOnly=true,Focusable=false,ToolTip="点击更改后按下组合键，再保存"};StyleInput(shortcut);panel.Children.Add(shortcut);
+        var shortcutStatus=new TextBlock{Foreground=muted,TextWrapping=TextWrapping.Wrap,FontSize=12,Margin=new(0,4,0,12),Text=host.HotkeyError};panel.Children.Add(shortcutStatus);
+        var shortcutActions=new WrapPanel{Margin=new(0,0,0,12)};
+        var saveShortcut=Button("保存",()=>{host.SetHotkey(pendingModifiers,pendingKey);shortcut.Text=host.HotkeyLabel;shortcutStatus.Text="已注册并保存";recording=false;shortcut.Focusable=false;});
+        saveShortcut.IsEnabled=false;
+        shortcutActions.Children.Add(Button("更改",()=>{recording=true;pendingKey=0;saveShortcut.IsEnabled=false;shortcut.Focusable=true;shortcut.Text="请按下组合键";shortcutStatus.Text="推荐 Ctrl + Alt + 字母；Esc 取消";shortcut.Focus();}));
+        shortcutActions.Children.Add(saveShortcut);
+        shortcutActions.Children.Add(Button("恢复默认",()=>{host.SetHotkey(3,0x56);recording=false;shortcut.Focusable=false;shortcut.Text=host.HotkeyLabel;shortcutStatus.Text="已注册并保存";saveShortcut.IsEnabled=false;}));
+        panel.Children.Add(shortcutActions);
+        shortcut.PreviewKeyDown+=(_,e)=>{
+            if(!recording)return;
+            e.Handled=true;var key=e.Key==Key.System?e.SystemKey:e.Key;
+            if(key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin)return;
+            if(key==Key.Escape){recording=false;shortcut.Focusable=false;shortcut.Text=host.HotkeyLabel;shortcutStatus.Text=host.HotkeyError;saveShortcut.IsEnabled=false;return;}
+            var mods=Keyboard.Modifiers;uint value=0;
+            if(mods.HasFlag(ModifierKeys.Alt))value|=1;if(mods.HasFlag(ModifierKeys.Control))value|=2;
+            if(mods.HasFlag(ModifierKeys.Shift))value|=4;if(mods.HasFlag(ModifierKeys.Windows)||Keyboard.IsKeyDown(Key.LWin)||Keyboard.IsKeyDown(Key.RWin))value|=8;
+            pendingModifiers=value;pendingKey=(uint)KeyInterop.VirtualKeyFromKey(key);
+            saveShortcut.IsEnabled=DesktopShellPreferences.ValidHotkey(value,pendingKey);
+            shortcut.Text=((value&2)!=0?"Ctrl + ":"")+((value&1)!=0?"Alt + ":"")+((value&4)!=0?"Shift + ":"")+((value&8)!=0?"Win + ":"")+key;
+            shortcutStatus.Text=saveShortcut.IsEnabled?"点击保存后生效":"请使用包含 Ctrl 或 Alt 的组合键";
+        };
         panel.Children.Add(Button("剪贴板共享",Sharing));
         panel.Children.Add(Button("跨网设备（iPad / Web）",()=>new UnifiedWindow{Owner=this}.Show()));
         var actions=new WrapPanel{Margin=new(0,14,0,12)};actions.Children.Add(Button("合并导入",Import));actions.Children.Add(Button("导出备份",Export));panel.Children.Add(actions);
-        var update=Button("检查更新",()=>{});update.Click+=async(_,_)=>{update.IsEnabled=false;try{var r=await ShareUpdates.Check();if(r.Build>ShareUpdates.Build&&MessageBox.Show(window,"发现 "+r.Version+"，打开下载地址？","FloatClip",MessageBoxButton.OKCancel)==MessageBoxResult.OK)System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(r.Url){UseShellExecute=true});else update.Content="当前版本 0.7.1";}catch{update.Content="检查失败，点击重试";}finally{update.IsEnabled=true;}};panel.Children.Add(update);
-        panel.Children.Add(new TextBlock{Text=hotkey?"快捷键 Win + Shift + V":"可从系统托盘打开剪贴板",Foreground=muted,FontSize=14,Margin=new(0,16,0,0)});window.Content=new ScrollViewer{Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};window.ShowDialog();
+        var update=Button("检查更新",()=>{});update.Click+=async(_,_)=>{update.IsEnabled=false;try{var r=await ShareUpdates.Check();if(r.Build>ShareUpdates.Build&&MessageBox.Show(window,"发现 "+r.Version+"，打开下载地址？","FloatClip",MessageBoxButton.OKCancel)==MessageBoxResult.OK)System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(r.Url){UseShellExecute=true});else update.Content="当前版本 "+ShareUpdates.Version;}catch{update.Content="检查失败，点击重试";}finally{update.IsEnabled=true;}};panel.Children.Add(update);
+        panel.Children.Add(new TextBlock{Text="FloatClip "+ShareUpdates.Version+" · build "+ShareUpdates.Build,Foreground=muted,FontSize=14,Margin=new(0,16,0,0)});window.Content=new ScrollViewer{Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};window.ShowDialog();
     }
     void Export(){var dialog=new SaveFileDialog{FileName="FloatClip-clipboard-"+DateTime.Now.ToString("yyyy-MM-dd")+".json",Filter="剪贴板备份 (*.json)|*.json",OverwritePrompt=true};if(dialog.ShowDialog(this)!=true)return;var snapshot=vault.Load();File.WriteAllText(dialog.FileName,new JsonObject{["format"]="FloatClip.clipboard",["schema"]=1,["entries"]=snapshot["entries"]!.DeepClone()}.ToJsonString(new(){WriteIndented=true}));}
     void Import(){var dialog=new OpenFileDialog{Filter="剪贴板备份 (*.json)|*.json",CheckFileExists=true};if(dialog.ShowDialog(this)!=true)return;if(new FileInfo(dialog.FileName).Length>ClipboardVault.MaximumBytes)throw new IOException("备份最大 16 MiB");var doc=JsonNode.Parse(File.ReadAllText(dialog.FileName))!;if(doc["format"]?.GetValue<string>()!="FloatClip.clipboard"||doc["schema"]?.GetValue<int>()!=1)throw new IOException("请导入新版 FloatClip 剪贴板备份");var incoming=doc["entries"]!.AsArray();ClipboardVault.Validate(incoming);if(MessageBox.Show(this,"将备份记录合并到本机剪贴板，保留设备来源和分类。继续？","FloatClip",MessageBoxButton.OKCancel)!=MessageBoxResult.OK)return;

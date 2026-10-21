@@ -41,7 +41,7 @@ class NodeActivity : Activity() {
             allowFileAccess = false; allowContentAccess = true
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             setSupportMultipleWindows(false); javaScriptCanOpenWindowsAutomatically = false
-            userAgentString = userAgentString + " FloatClipNative/1 Android/0.7.1"
+            userAgentString = userAgentString + " FloatClipNative/1 Android/0.7.2"
         }
         CookieManager.getInstance().setAcceptThirdPartyCookies(view, false)
         view.webViewClient = object : WebViewClient() {

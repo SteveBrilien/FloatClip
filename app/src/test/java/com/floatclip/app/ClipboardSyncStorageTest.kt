@@ -45,6 +45,18 @@ class ClipboardSyncStorageTest {
         restarted.save(enabled=false);assertTrue(context.getSharedPreferences("share-pairs",Context.MODE_PRIVATE).getBoolean("peer-fixture",false))
         assertFalse(SyncPreferences(context).enabled())
     }
+    @Test fun backgroundCaptureIsOptInAndRotatesQueuedSendConsent() {
+        val context=context();val prefs=SyncPreferences(context)
+        assertFalse(prefs.backgroundCapture());prefs.save(enabled=true)
+        val before=prefs.policy()
+        prefs.saveBackgroundCapture(true)
+        assertTrue(SyncPreferences(context).backgroundCapture())
+        assertNotEquals(before.sendGeneration,prefs.policy().sendGeneration)
+        assertEquals(before.receiveGeneration,prefs.policy().receiveGeneration)
+        val active=prefs.policy();prefs.saveBackgroundCapture(false);prefs.saveBackgroundCapture(true)
+        assertFalse(SyncPolicy.mayShare(prefs.policy(),active.sendGeneration))
+    }
+
     @Test fun verifiedTransportCredentialSurvivesRestartAndBindsDeviceIdentity(){
         val context=context();val token=ByteArray(32){(it+1).toByte()};val key=TrustedPeerStore.hash(token)
         val store=TrustedPeerStore(context,codec);store.putVerified(key,token)

@@ -415,3 +415,8 @@ Windows 在本轮 Android 控制语义修复前后的源码未发生新的功能
 2. 做“断网 → DHCP 变化 → 重连”“Service 重启 → 重连”“关闭配对窗口但授权设备继续连接”的故障注入。
 3. 根据 vivo OriginOS 的实际剪贴板权限表现，决定 Android → Windows 的捕获入口：系统 ClipboardManager、Accessibility 机会性捕获，或明确降级交互。
 4. 真机同步核心通过后，再开始统一 Android / Windows UI Shell，避免 UI 重构掩盖连接问题。
+
+
+## 2026-10-21 续接索引
+
+最新进度见 [FLOATCLIP_CONTINUATION_2026-10-21.md](FLOATCLIP_CONTINUATION_2026-10-21.md)。继承外观工作已单独固定，新增保护容量、滑动/主题生命周期和蓝牙会话竞态修复；最终 Android assemble + 36 tests + lint 通过。真机 ADB 和 Windows 均离线，实时互传与 UI 实测仍未验收；不据旧记录直接发布。

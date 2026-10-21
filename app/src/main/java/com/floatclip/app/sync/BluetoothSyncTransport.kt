@@ -44,7 +44,9 @@ class BluetoothSyncTransport(
             credentials.get(relation)?.token?.takeIf{authorized(relation)&&canAttach(relation)}
         override fun messages(relation:String)=this@BluetoothSyncTransport.messages(relation)
         override fun connected(relation:String,bluetoothAddress:String,session:ShareSession){
-            if(!authorized(relation)||!canAttach(relation)){session.close();return}
+            // attached() has already queued service admission. The actor may have
+            // accepted this very session, so canAttach() can now be false for itself.
+            if(closed||!authorized(relation)){session.close();return}
             runCatching{credentials.rememberBluetooth(relation,bluetoothAddress)}
                 .onFailure{session.close()}
         }

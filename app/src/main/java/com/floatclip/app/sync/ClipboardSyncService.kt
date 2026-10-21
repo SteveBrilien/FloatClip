@@ -170,7 +170,7 @@ class ClipboardSyncService: Service() {
             actor.schedule({if(!closing&&pairingUntil==until){bluetoothPairing?.close();bluetoothPairing=null;if(links.isEmpty())setStatus("等待已授权设备自动连接")}},90,TimeUnit.SECONDS)
         }
         actor.execute {if(::engine.isInitialized&&!closing){runCatching{configureEngine();refreshHosts();refreshBluetooth();refreshBluetoothPairing()}.onFailure{setStatus("共享配置未保存，已暂停");pauseImmediately()}}}
-        return START_STICKY
+        return if (prefs.keepAlive()) START_STICKY else START_NOT_STICKY
     }
     private fun configureEngine(){paused=!SyncPolicy.apply(prefs,engine).enabled}
     fun copied(text: String,event: String,excluded: Boolean=false,shareGeneration: String?=null) {
@@ -240,12 +240,15 @@ class ClipboardSyncService: Service() {
     }
 
     private fun peerMessages(peer: String,replaceExisting: Boolean=true): ShareSession.Events {
-        val token=UUID.randomUUID();connectionTokens[peer]=token
+        val token=UUID.randomUUID()
         return object:ShareSession.Events {
             override fun attached(session: ShareSession){actor.execute {
-                if(closing||paused||!prefs.enabled()||connectionTokens[peer]!=token||!authorized(peer)){session.close();return@execute}
+                if(closing||paused||!prefs.enabled()||!authorized(peer)||session.isClosed||(!replaceExisting&&!prefs.reconnect())){session.close();return@execute}
                 val previous=links[peer]
                 if(previous!=null&&!replaceExisting){session.close();return@execute}
+                // Publish ownership only after admission. A rejected Bluetooth candidate
+                // must never invalidate callbacks belonging to the existing LAN session.
+                connectionTokens[peer]=token
                 if(previous!=null){links.remove(peer,previous);previous.close()}
                 links[peer]=Link(peer,session)
                 runCatching{configureEngine();engine.connected(peer);setStatus("${links.size} 台设备已连接 · 加密共享")}.onFailure{links.remove(peer)?.close();setStatus("设备授权状态未保存")}

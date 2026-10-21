@@ -17,6 +17,7 @@ import android.view.ViewConfiguration
 import android.os.PowerManager
 import com.floatclip.app.overlay.ui.EntrySwipeActions
 import com.floatclip.app.overlay.ui.EntryGestureRow
+import com.floatclip.app.overlay.ui.EntryLockAction
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -37,8 +38,11 @@ import com.floatclip.app.integration.IntegrationRegistry
 import com.floatclip.app.model.ClipEntry
 import com.floatclip.app.overlay.ClipboardOverlayService
 import com.floatclip.app.prefs.CategoryStore
+import com.floatclip.app.prefs.CategoryIcons
 import com.floatclip.app.prefs.OverlayPreferences
 import com.floatclip.app.prefs.OverlayThemeMode
+import com.floatclip.app.prefs.UpdatePreferences
+import com.floatclip.app.prefs.UpdateChannel
 import com.floatclip.app.security.VaultSettings
 import com.floatclip.app.clipboard.ClipboardQuery
 import com.floatclip.app.clipboard.ClipboardSources
@@ -53,6 +57,8 @@ import com.floatclip.app.sync.SyncPreferences
 import com.floatclip.app.sync.SyncRuntime
 import com.floatclip.app.sync.ClipboardSyncService
 import com.floatclip.app.ui.FluentSwitch
+import com.floatclip.app.ui.FloatDialog
+import com.floatclip.probe.FloatClipAccent
 
 open class MainActivity : Activity() {
     private lateinit var categoryStore: CategoryStore
@@ -257,10 +263,13 @@ open class MainActivity : Activity() {
     }
 
     private fun showUsageHelp() {
-        android.app.AlertDialog.Builder(this)
-            .setTitle("使用帮助")
-            .setMessage("单击复制，双击置顶，长按更多。\n拖动标题移动面板，点击外侧收回。\n右上角图钉用于保持面板展开。")
-            .setPositiveButton("知道了", null).show()
+        FloatDialog.show(
+            this,
+            "使用帮助",
+            "单击复制，长按更多；左滑置顶/删除，右滑保护。\n拖动标题移动面板，点击外侧收回。\n右上角图钉用于保持面板展开。",
+            negative=null,
+            positive="知道了",
+        )
     }
 
     private fun renderCategoryManager() {
@@ -298,6 +307,22 @@ open class MainActivity : Activity() {
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(dp(12), 0, dp(7), 0)
                     background = roundedBackground(colors.fieldBackground, 13f, true)
+                    val iconButton=ImageView(this@MainActivity).apply {
+                        setImageResource(CategoryIcons.resource(categoryStore.iconKey(category)))
+                        imageTintList=ColorStateList.valueOf(colors.accent)
+                        setPadding(dp(11),dp(11),dp(11),dp(11))
+                        contentDescription="更换 $category 图标"
+                        setOnClickListener {
+                            val labels=CategoryIcons.choices.map { it.label }
+                            val selected=CategoryIcons.choices.indexOfFirst { it.key==categoryStore.iconKey(category) }
+                            FloatDialog.choices(this@MainActivity,"选择“$category”的图标",labels,selected) { index ->
+                                categoryStore.saveIcon(category,CategoryIcons.choices[index].key)
+                                notifyOverlayAppearanceChanged()
+                                render()
+                            }
+                        }
+                    }
+                    addView(iconButton,LinearLayout.LayoutParams(dp(46),dp(48)))
                     addView(textView(category, 15f, false), LinearLayout.LayoutParams(0, dp(48), 1f))
                 }
                 val handle = ImageView(this).apply {
@@ -310,16 +335,19 @@ open class MainActivity : Activity() {
                 val wrapper = EntryGestureRow(this)
                 wrapper.bind(row)
                 wrapper.onLongPress = {
-                    android.app.AlertDialog.Builder(this)
-                        .setTitle("删除分类“$category”？")
-                        .setMessage("词条会保留并移到未分类。")
-                        .setNegativeButton("取消", null)
-                        .setPositiveButton("删除") { _, _ ->
-                            clipStore.moveCategoryToDefault(category)
-                            categoryStore.delete(category)
-                            notifyOverlayAppearanceChanged()
-                            render()
-                        }.show()
+                    FloatDialog.show(
+                        this,
+                        "删除分类“$category”？",
+                        "词条会保留并移到未分类。",
+                        negative="取消",
+                        positive="删除",
+                    ) {
+                        clipStore.moveCategoryToDefault(category)
+                        categoryStore.delete(category)
+                        notifyOverlayAppearanceChanged()
+                        render()
+                        true
+                    }
                 }
                 wrapper.touchPassthrough = handle
                 dragList.addView(wrapper, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(6) })
@@ -417,11 +445,16 @@ open class MainActivity : Activity() {
             addView(settingRow("无障碍", "可选，用于直接粘贴", if (PasteAccessibilityService.isConnected()) "已连接" else "设置", ::openAccessibilitySettings))
             addView(divider())
             addView(settingRow("电池优化", "", if (battery) "已放宽" else "设置") {
-                android.app.AlertDialog.Builder(this@MainActivity)
-                    .setTitle("电池优化")
-                    .setMessage("在系统列表找到 FloatClip，选择不优化，可减少后台被暂停。")
-                    .setNegativeButton("取消", null)
-                    .setPositiveButton("去设置") { _, _ -> openSystemSettings(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }.show()
+                FloatDialog.show(
+                    this@MainActivity,
+                    "电池优化",
+                    "在系统列表找到 FloatClip，选择不优化，可减少后台被暂停。",
+                    negative="取消",
+                    positive="去设置",
+                ) {
+                    openSystemSettings(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                    true
+                }
             })
             addView(divider())
             addView(settingRow("后台与自启动", "系统中手动设置", "›", ::openAppDetailsSettings))
@@ -446,12 +479,22 @@ open class MainActivity : Activity() {
                     renderPermissionGuide()
                     addCard(card().apply {
                         val keepAlive = overlayPreferences.keepAliveEnabled()
-                        addView(settingRow("自动恢复悬浮球", "", if (keepAlive) "已开启" else "已关闭") {
+                        addView(settingRow("清理最近任务后恢复悬浮窗", "强行停止应用后 Android 不允许自动复活", if (keepAlive) "已开启" else "已关闭") {
                             overlayPreferences.saveKeepAliveEnabled(!keepAlive)
                             render()
                         })
                         addView(divider())
-                        addView(settingRow("通知", "", "›", ::openNotificationSettings))
+                        addView(settingRow(
+                            "详细常驻通知",
+                            "关闭后仍保留 Android 11 要求的静默前台通知",
+                            if(overlayPreferences.detailedNotification()) "已开启" else "已关闭",
+                        ) {
+                            overlayPreferences.saveDetailedNotification(!overlayPreferences.detailedNotification())
+                            notifyOverlayAppearanceChanged()
+                            render()
+                        })
+                        addView(divider())
+                        addView(settingRow("系统通知设置", "", "›", ::openNotificationSettings))
                     })
                 }
             }
@@ -480,13 +523,31 @@ open class MainActivity : Activity() {
             addView(divider())
             addView(settingRow("分类","","›", R.drawable.ic_category) { currentPage=PAGE_CLIPBOARD;categoryManagement=true;render() })
             addView(divider())
+            val updatePrefs=UpdatePreferences(this@MainActivity)
+            addView(settingRow("更新通道",updatePrefs.channel().label,"›",R.drawable.ic_update) {
+                val values=UpdateChannel.values().toList()
+                FloatDialog.choices(
+                    this@MainActivity,
+                    "更新通道",
+                    values.map { it.label },
+                    values.indexOf(updatePrefs.channel()),
+                ) { index ->
+                    updatePrefs.saveChannel(values[index])
+                    render()
+                }
+            })
+            addView(divider())
             addView(settingRow("检查更新","","›", R.drawable.ic_update) { checkClientUpdate() })
             addView(divider())
             addView(settingRow("关于", "", "›", R.drawable.ic_info) {
-                android.app.AlertDialog.Builder(this@MainActivity).setTitle("FloatClip ${versionName()}")
-                    .setMessage("Android 悬浮剪贴板")
-                    .setPositiveButton("关闭", null)
-                    .setNeutralButton("使用帮助") { _, _ -> showUsageHelp() }.show()
+                FloatDialog.show(
+                    this@MainActivity,
+                    "FloatClip ${versionName()}",
+                    "Android 悬浮剪贴板",
+                    negative="使用帮助",
+                    positive="关闭",
+                    onNegative={ showUsageHelp() },
+                )
             })
         })
     }
@@ -500,6 +561,7 @@ open class MainActivity : Activity() {
             }
             toggle("共享剪贴板",prefs.enabled()){prefs.save(enabled=!prefs.enabled())}
             toggle("自动连接已授权设备",prefs.reconnect()){prefs.save(reconnect=!prefs.reconnect())}
+            toggle("清理最近任务后保持共享服务",prefs.keepAlive()){prefs.saveKeepAlive(!prefs.keepAlive())}
             toggle("发送新复制的文字",prefs.sending()){prefs.save(sending=!prefs.sending())}
             toggle("接收文字到历史",prefs.receiving()){prefs.save(receiving=!prefs.receiving())}
             toggle("接收后写入系统剪贴板",prefs.applying()){prefs.save(applying=!prefs.applying())}
@@ -512,6 +574,30 @@ open class MainActivity : Activity() {
     }
 
     private fun renderAppearanceSettings() {
+        sectionTitle("主题")
+        addCard(card().apply {
+            addView(accentSelector())
+            addView(divider())
+            addView(settingRow(
+                "边缘细线",
+                "卡片与面板使用低对比度 1dp 边线",
+                if(overlayPreferences.borderEnabled()) "已开启" else "已关闭",
+            ) {
+                overlayPreferences.saveBorderEnabled(!overlayPreferences.borderEnabled())
+                notifyOverlayAppearanceChanged()
+                render()
+            })
+            if(overlayPreferences.borderEnabled()) {
+                addView(divider())
+                addView(sliderSetting(
+                    "边线强度",5,60,overlayPreferences.borderAlphaPercent(),"%"
+                ) {
+                    overlayPreferences.saveBorderAlphaPercent(it)
+                    notifyOverlayAppearanceChanged()
+                })
+            }
+        })
+
         sectionTitle("悬浮球")
         addCard(
             card().apply {
@@ -522,7 +608,7 @@ open class MainActivity : Activity() {
                         64,
                         overlayPreferences.bubbleSizeDp(),
                         "dp",
-                    ) { overlayPreferences.saveBubbleSizeDp(it) },
+                    ) { overlayPreferences.saveBubbleSizeDp(it); notifyOverlayAppearanceChanged() },
                 )
                 addView(divider())
                 addView(
@@ -532,7 +618,7 @@ open class MainActivity : Activity() {
                         100,
                         overlayPreferences.bubbleAlphaPercent(),
                         "%",
-                    ) { overlayPreferences.saveBubbleAlphaPercent(it) },
+                    ) { overlayPreferences.saveBubbleAlphaPercent(it); notifyOverlayAppearanceChanged() },
                 )
                 addView(divider())
                 addView(
@@ -542,7 +628,7 @@ open class MainActivity : Activity() {
                         120,
                         overlayPreferences.bubbleMotionSensitivityPercent(),
                         "%",
-                    ) { overlayPreferences.saveBubbleMotionSensitivityPercent(it) },
+                    ) { overlayPreferences.saveBubbleMotionSensitivityPercent(it); notifyOverlayAppearanceChanged() },
                 )
                 addView(divider())
                 addView(
@@ -552,7 +638,7 @@ open class MainActivity : Activity() {
                         55,
                         overlayPreferences.edgeHidePercent(),
                         "%",
-                    ) { overlayPreferences.saveEdgeHidePercent(it) },
+                    ) { overlayPreferences.saveEdgeHidePercent(it); notifyOverlayAppearanceChanged() },
                 )
             },
         )
@@ -567,8 +653,31 @@ open class MainActivity : Activity() {
                         100,
                         overlayPreferences.panelAlphaPercent(),
                         "%",
-                    ) { overlayPreferences.savePanelAlphaPercent(it) },
+                    ) { overlayPreferences.savePanelAlphaPercent(it); notifyOverlayAppearanceChanged() },
                 )
+                addView(divider())
+                addView(
+                    sliderSetting(
+                        "区块透明度",
+                        45,
+                        100,
+                        overlayPreferences.cardAlphaPercent(),
+                        "%",
+                    ) { overlayPreferences.saveCardAlphaPercent(it); notifyOverlayAppearanceChanged() },
+                )
+                addView(divider())
+                addView(
+                    sliderSetting(
+                        "磨砂雾化",
+                        0,
+                        100,
+                        overlayPreferences.frostStrengthPercent(),
+                        "%",
+                    ) { overlayPreferences.saveFrostStrengthPercent(it); notifyOverlayAppearanceChanged() },
+                )
+                addView(textView("Android 11 普通悬浮层使用半透明雾化；系统级实时背景模糊需要特权窗口能力。",12f,false,colors.secondaryText).apply {
+                    setPadding(0,dp(2),0,dp(8))
+                })
                 addView(divider())
                 addView(
                     sliderSetting(
@@ -577,7 +686,7 @@ open class MainActivity : Activity() {
                         420,
                         overlayPreferences.panelWidthDp(),
                         "dp",
-                    ) { overlayPreferences.savePanelWidthDp(it) },
+                    ) { overlayPreferences.savePanelWidthDp(it); notifyOverlayAppearanceChanged() },
                 )
                 addView(divider())
                 addView(
@@ -587,7 +696,7 @@ open class MainActivity : Activity() {
                         620,
                         overlayPreferences.panelHeightDp(),
                         "dp",
-                    ) { overlayPreferences.savePanelHeightDp(it) },
+                    ) { overlayPreferences.savePanelHeightDp(it); notifyOverlayAppearanceChanged() },
                 )
                 addView(divider())
                 addView(
@@ -612,6 +721,29 @@ open class MainActivity : Activity() {
                 )
             },
         )
+
+        sectionTitle("动画与交互")
+        addCard(card().apply {
+            addView(sliderSetting(
+                "卡片按压缩放",94,100,overlayPreferences.cardPressScalePercent(),"%"
+            ) { overlayPreferences.saveCardPressScalePercent(it) })
+            addView(divider())
+            addView(sliderSetting(
+                "悬浮球按压缩放",90,100,overlayPreferences.bubblePressScalePercent(),"%"
+            ) { overlayPreferences.saveBubblePressScalePercent(it); notifyOverlayAppearanceChanged() })
+            addView(divider())
+            addView(sliderSetting(
+                "面板拖动缩放",97,100,overlayPreferences.panelPressScalePercent(),"%"
+            ) { overlayPreferences.savePanelPressScalePercent(it); notifyOverlayAppearanceChanged() })
+            addView(divider())
+            addView(sliderSetting(
+                "打开/收回动画",120,480,overlayPreferences.transitionDurationMs(),"ms"
+            ) { overlayPreferences.saveTransitionDurationMs(it); notifyOverlayAppearanceChanged() })
+            addView(divider())
+            addView(sliderSetting(
+                "开关动画",80,300,overlayPreferences.switchAnimationMs(),"ms"
+            ) { overlayPreferences.saveSwitchAnimationMs(it) })
+        })
 
     }
 
@@ -659,7 +791,7 @@ open class MainActivity : Activity() {
         listOf(
             OverlayThemeMode.SYSTEM to "跟随系统",
             OverlayThemeMode.LIGHT to "浅色",
-            OverlayThemeMode.DARK to "深色",
+            OverlayThemeMode.DARK to "东京夜色",
         ).forEachIndexed { index, (mode, label) ->
             root.addView(
                 themeChoice(label, selected == mode) {
@@ -682,6 +814,37 @@ open class MainActivity : Activity() {
         setTextColor(if (selected) colors.accent else colors.primaryText)
         background = roundedBackground(if (selected) colors.actionBackground else colors.fieldBackground, 12f, true)
         setOnClickListener { action() }
+    }
+
+    private fun accentSelector(): View = LinearLayout(this).apply {
+        orientation=LinearLayout.VERTICAL
+        setPadding(0,dp(5),0,dp(7))
+        addView(textView("主题颜色",14.5f,false),LinearLayout.LayoutParams(-1,dp(30)))
+        addView(HorizontalScrollView(this@MainActivity).apply {
+            isHorizontalScrollBarEnabled=false
+            overScrollMode=View.OVER_SCROLL_NEVER
+            addView(LinearLayout(this@MainActivity).apply {
+                orientation=LinearLayout.HORIZONTAL
+                FloatClipAccent.choices.forEachIndexed { index,choice ->
+                    val selected=FloatClipAccent.normalize(overlayPreferences.accentTheme())==choice.id
+                    addView(TextView(this@MainActivity).apply {
+                        text=choice.label
+                        textSize=13f
+                        gravity=Gravity.CENTER
+                        val color=if(colors.dark) choice.dark else choice.light
+                        setTextColor(if(selected) color else colors.secondaryText)
+                        background=roundedBackground(
+                            if(selected) colors.actionBackground else colors.fieldBackground,12f,true
+                        )
+                        setOnClickListener {
+                            overlayPreferences.saveAccentTheme(choice.id)
+                            notifyOverlayAppearanceChanged()
+                            render()
+                        }
+                    },LinearLayout.LayoutParams(dp(62),dp(42)).apply { if(index>0)marginStart=dp(7) })
+                }
+            })
+        },LinearLayout.LayoutParams(-1,dp(42)))
     }
 
     private fun segmentedSetting(
@@ -792,19 +955,10 @@ open class MainActivity : Activity() {
     private fun showCategoryPicker(entry: ClipEntry) {
         val categories = categoryStore.categories().distinct()
         val selected = categories.indexOf(entry.category).coerceAtLeast(0)
-        val dialog = android.app.AlertDialog.Builder(this)
-            .setTitle("选择分类")
-            .setSingleChoiceItems(categories.toTypedArray(), selected, null)
-            .setNegativeButton("取消", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.listView.setOnItemClickListener { _, _, position, _ ->
-                clipStore.updateCategory(entry.id, categories[position])
-                dialog.dismiss()
-                render()
-            }
+        FloatDialog.choices(this,"选择分类",categories,selected) { position ->
+            clipStore.updateCategory(entry.id,categories[position])
+            render()
         }
-        dialog.show()
     }
 
     private fun chooseBackupDirectory() {
@@ -835,45 +989,38 @@ open class MainActivity : Activity() {
         val second = securePinField("再次输入 PIN")
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(4), dp(22), 0)
             addView(first, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
             addView(second, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) })
-            addView(textView("PIN 不会明文写入磁盘。忘记 PIN 后，便携备份无法恢复。", 11.5f, false, colors.secondaryText).apply { setPadding(0, dp(10), 0, 0) })
+            addView(textView("PIN 不会明文写入磁盘。忘记 PIN 后，便携备份无法恢复。", 12f, false, colors.secondaryText).apply { setPadding(0, dp(10), 0, 0) })
         }
-        val dialog = android.app.AlertDialog.Builder(this)
-            .setTitle("设置加密 PIN")
-            .setView(box)
-            .setNegativeButton("取消", null)
-            .setPositiveButton("保存", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
-                val a = first.text?.toString().orEmpty()
-                val b = second.text?.toString().orEmpty()
-                if (!a.matches(Regex("\\d{6}")) || a != b) {
-                    Toast.makeText(this, "请输入两次相同的 6 位数字 PIN", Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
-                }
+        FloatDialog.show(
+            this,
+            "设置加密 PIN",
+            custom=box,
+            negative="取消",
+            positive="保存",
+        ) { handle ->
+            val a = first.text?.toString().orEmpty()
+            val b = second.text?.toString().orEmpty()
+            if (!a.matches(Regex("\\d{6}")) || a != b) {
+                Toast.makeText(this, "请输入两次相同的 6 位数字 PIN", Toast.LENGTH_SHORT).show()
+                false
+            } else {
                 val wasWriteArmed = vaultSettings.backupWriteArmed()
                 vaultSettings.savePin(a)
                 val tree = vaultSettings.backupTreeUri()
                 if (tree != null) {
                     Thread {
                         when {
-                            // Normal PIN rotation: the already trusted portable vault is immediately
-                            // re-encrypted so the new PIN is valid even if the app is uninstalled next.
                             wasWriteArmed -> vaultBackupManager.backup(tree, a, clipStore.exportJson())
-                            // Reinstall/reselect safety: never overwrite a pre-existing untrusted vault.
-                            !vaultBackupManager.hasBackup(tree) ->
-                                vaultBackupManager.initializeBackup(tree, a, clipStore.exportJson())
+                            !vaultBackupManager.hasBackup(tree) -> vaultBackupManager.initializeBackup(tree, a, clipStore.exportJson())
                         }
                     }.start()
                 }
-                dialog.dismiss()
                 render()
+                true
             }
         }
-        dialog.show()
     }
 
     private fun showRestorePinDialog() {
@@ -883,43 +1030,39 @@ open class MainActivity : Activity() {
             return
         }
         val pin = securePinField("输入备份的 6 位 PIN")
-        val dialog = android.app.AlertDialog.Builder(this)
-            .setTitle("恢复加密备份")
-            .setMessage("恢复会合并为当前本地 vault 的新状态。")
-            .setView(pin)
-            .setNegativeButton("取消", null)
-            .setPositiveButton("恢复", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
-                val value = pin.text?.toString().orEmpty()
-                if (!value.matches(Regex("\\d{6}"))) {
-                    Toast.makeText(this, "请输入 6 位数字 PIN", Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
-                }
-                val button = dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)
-                button.isEnabled = false
+        FloatDialog.show(
+            this,
+            "恢复加密备份",
+            "恢复会合并为当前本地 vault 的新状态。",
+            custom=pin,
+            negative="取消",
+            positive="恢复",
+        ) { handle ->
+            val value = pin.text?.toString().orEmpty()
+            if (!value.matches(Regex("\\d{6}"))) {
+                Toast.makeText(this, "请输入 6 位数字 PIN", Toast.LENGTH_SHORT).show()
+                false
+            } else {
+                handle.primary?.isEnabled=false
                 Thread {
                     val raw = vaultBackupManager.restore(tree, value)
                     runOnUiThread {
                         val ok = raw != null && clipStore.importJson(raw)
                         if (ok) {
                             vaultSettings.savePin(value)
-                            // A successful authenticated restore is the explicit point at which this
-                            // surviving backup becomes safe for subsequent automatic updates.
                             vaultSettings.setBackupWriteArmed(true)
                             Toast.makeText(this, "剪贴板备份已恢复，自动加密备份已重新启用", Toast.LENGTH_SHORT).show()
-                            dialog.dismiss()
+                            handle.dialog.dismiss()
                             render()
                         } else {
-                            button.isEnabled = true
+                            handle.primary?.isEnabled=true
                             Toast.makeText(this, "恢复失败：PIN 不正确或备份已损坏", Toast.LENGTH_LONG).show()
                         }
                     }
                 }.start()
+                false
             }
         }
-        dialog.show()
     }
 
     private fun openNotificationSettings() {
@@ -937,26 +1080,46 @@ open class MainActivity : Activity() {
     private fun addHistoryCard(entry: ClipEntry) {
         val item=ClipboardCard(this,entry,colors.dark,colors.primaryText,colors.cardBackground)
         val wrapper = EntryGestureRow(this)
-        wrapper.contentDescription=entry.text+"，来源："+entry.sourceDeviceName+(if(entry.pinned) "，已置顶" else "")
-        wrapper.bind(item, EntrySwipeActions(this, entry.pinned, colors.dark,
-            onPin = { clipStore.togglePinned(entry.id); refreshHistory(); notifyOverlayAppearanceChanged() },
-            onDelete = { deleteEntry(entry) },
-        ), dp(148))
+        wrapper.contentDescription=entry.text+"，来源："+entry.sourceDeviceName+(if(entry.pinned) "，已置顶" else "")+(if(entry.locked) "，已保护" else "")
+        wrapper.bind(
+            item,
+            EntrySwipeActions(this, entry.pinned, colors.dark,
+                onPin = { clipStore.togglePinned(entry.id); refreshHistory(); notifyOverlayAppearanceChanged() },
+                onDelete = { deleteEntry(entry) },
+            ),
+            dp(148),
+            EntryLockAction(this,entry.locked,colors.dark,overlayPreferences.accentTheme()) {
+                clipStore.toggleLocked(entry.id); refreshHistory(); notifyOverlayAppearanceChanged()
+            },
+            dp(78),
+        )
         wrapper.onSingleTap = {
             ClipboardWrites.write(this,getSystemService(ClipboardManager::class.java),entry.text)
             Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
         }
         wrapper.onLongPress = {
-            android.app.AlertDialog.Builder(this)
-                .setTitle(entry.sourceDeviceName)
-                .setItems(arrayOf("查看全文", "更改分类", if (entry.pinned) "取消置顶" else "置顶", "删除")) { _, which ->
-                    when (which) {
-                        0 -> android.app.AlertDialog.Builder(this).setMessage(entry.text).setPositiveButton("关闭",null).setNeutralButton("复制") { _,_ -> ClipboardWrites.write(this,getSystemService(ClipboardManager::class.java),entry.text) }.show()
-                        1 -> showCategoryPicker(entry)
-                        2 -> { clipStore.togglePinned(entry.id); refreshHistory(); notifyOverlayAppearanceChanged() }
-                        else -> deleteEntry(entry)
+            FloatDialog.actions(
+                this,
+                entry.sourceDeviceName,
+                listOf("查看全文", "更改分类", if(entry.locked) "取消保护" else "保护", if (entry.pinned) "取消置顶" else "置顶", "删除"),
+            ) { which ->
+                when (which) {
+                    0 -> FloatDialog.show(
+                        this,
+                        entry.sourceDeviceName,
+                        entry.text,
+                        negative="关闭",
+                        positive="复制",
+                    ) {
+                        ClipboardWrites.write(this,getSystemService(ClipboardManager::class.java),entry.text)
+                        true
                     }
-                }.show()
+                    1 -> showCategoryPicker(entry)
+                    2 -> { clipStore.toggleLocked(entry.id); refreshHistory(); notifyOverlayAppearanceChanged() }
+                    3 -> { clipStore.togglePinned(entry.id); refreshHistory(); notifyOverlayAppearanceChanged() }
+                    else -> deleteEntry(entry)
+                }
+            }
         }
         historyList?.addView(wrapper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
     }
@@ -976,23 +1139,36 @@ open class MainActivity : Activity() {
     }
     private fun checkClientUpdate() {
         Toast.makeText(this,"正在检查更新…",Toast.LENGTH_SHORT).show()
+        val selectedChannel=UpdatePreferences(this).channel()
+        val wireChannel=when(selectedChannel) {
+            UpdateChannel.PREVIEW -> com.floatclip.probe.ShareUpdates.Channel.PREVIEW
+            UpdateChannel.DEV -> com.floatclip.probe.ShareUpdates.Channel.DEV
+        }
         Thread {
-            val result=runCatching { com.floatclip.probe.ShareUpdates.check() }
+            val result=runCatching { com.floatclip.probe.ShareUpdates.check(wireChannel) }
             runOnUiThread {
                 if(isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess { release ->
                     val build=packageManager.getPackageInfo(packageName,0).longVersionCode
                     val newer=release.build>build
-                    val dialog=android.app.AlertDialog.Builder(this).setTitle(if(newer) "发现 ${release.version}" else "当前版本 ${versionName()}")
-                        .setMessage(if(newer) release.notes else "已是此通道最新版本").setNegativeButton("关闭",null)
-                    if(newer) dialog.setPositiveButton("下载") { _,_ -> startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(release.url))) }
-                    dialog.show()
-                }.onFailure { Toast.makeText(this,"检查失败，请稍后重试",Toast.LENGTH_LONG).show() }
+                    FloatDialog.show(
+                        this,
+                        if(newer) "发现 ${release.version}" else "当前版本 ${versionName()}",
+                        if(newer) release.notes else "已是"+selectedChannel.label+"通道最新版本（build $build）",
+                        negative="关闭",
+                        positive=if(newer) "下载" else null,
+                        onPositive=if(newer) { { _ ->
+                            startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(release.url)))
+                            true
+                        } } else null,
+                    )
+                }.onFailure {
+                    FloatDialog.show(this,"检查更新失败",it.message ?: "更新服务暂不可用",negative=null,positive="关闭")
+                }
             }
         }.start()
     }
 
-    @android.annotation.SuppressLint("ClickableViewAccessibility")
     private fun installCategoryDrag(
         handle: View, row: EntryGestureRow, list: LinearLayout,
         items: MutableList<String>, category: String,
@@ -1126,11 +1302,7 @@ open class MainActivity : Activity() {
         } else {
             "当前以独立悬浮层运行。ROM Lock 状态：${lockState ?: "UNINITIALIZED"}。"
         }
-        android.app.AlertDialog.Builder(this)
-            .setTitle("OriginOS 兼容")
-            .setMessage(text)
-            .setPositiveButton("知道了", null)
-            .show()
+        FloatDialog.show(this,"OriginOS 兼容",text,negative=null,positive="知道了")
     }
 
     private fun statusRow(label: String, value: String): View {
@@ -1267,7 +1439,10 @@ open class MainActivity : Activity() {
     private fun roundedBackground(color: Int, radiusDp: Float, border: Boolean = false): GradientDrawable = GradientDrawable().apply {
         setColor(color)
         cornerRadius = dp(radiusDp).toFloat()
-        if (border) setStroke(dp(1), this@MainActivity.colors.borderColor)
+        if (border && overlayPreferences.borderEnabled()) {
+            val alpha=(255f*overlayPreferences.borderAlphaPercent()/100f).toInt().coerceIn(0,255)
+            setStroke(dp(1), Color.argb(alpha,Color.red(this@MainActivity.colors.borderColor),Color.green(this@MainActivity.colors.borderColor),Color.blue(this@MainActivity.colors.borderColor)))
+        }
     }
 
     private fun spacer(heightDp: Int) {
@@ -1279,13 +1454,16 @@ open class MainActivity : Activity() {
     }
 
     private fun openOverlayPermission() {
-        android.app.AlertDialog.Builder(this)
-            .setTitle("允许显示悬浮窗")
-            .setMessage("请在接下来的系统页面找到 FloatClip，开启“显示在其他应用上层”。返回后会重新检查授权状态。")
-            .setNegativeButton("暂不", null)
-            .setPositiveButton("去授权") { _, _ ->
-                openSystemSettings(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
-            }.show()
+        FloatDialog.show(
+            this,
+            "允许显示悬浮窗",
+            "请在接下来的系统页面找到 FloatClip，开启“显示在其他应用上层”。返回后会重新检查授权状态。",
+            negative="暂不",
+            positive="去授权",
+        ) {
+            openSystemSettings(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            true
+        }
     }
 
     private fun openAccessibilitySettings() {
@@ -1330,17 +1508,17 @@ open class MainActivity : Activity() {
         // Keep the app shell on the same token family as DeviceActivity / ShareDesign.
         return if (dark) {
             AppColors(
-                pageBackground = Color.rgb(12, 20, 34),       // #0C1422
-                cardBackground = Color.rgb(22, 34, 53),       // #162235
-                primaryText = Color.rgb(237, 243, 252),       // #EDF3FC
-                secondaryText = Color.rgb(169, 184, 205),     // #A9B8CD
-                dividerColor = Color.rgb(45, 60, 82),         // #2D3C52
-                accent = Color.rgb(141, 187, 255),            // #8DBBFF
-                accentTextOnFill = Color.rgb(12, 20, 34),
-                actionBackground = Color.rgb(36, 59, 90),     // #243B5A
-                fieldBackground = Color.rgb(27, 42, 64),
-                borderColor = Color.rgb(45, 60, 82),
-                navigationBackground = Color.rgb(12, 20, 34),
+                pageBackground = Color.rgb(26, 27, 38),       // Tokyo Night #1A1B26
+                cardBackground = Color.rgb(36, 40, 59),       // Tokyo Night #24283B
+                primaryText = Color.rgb(192, 202, 245),     // Tokyo Night #C0CAF5
+                secondaryText = Color.rgb(154, 165, 206),     // Tokyo Night #9AA5CE
+                dividerColor = Color.rgb(65, 72, 104),       // Tokyo Night #414868
+                accent = FloatClipAccent.color(overlayPreferences.accentTheme(), true),
+                accentTextOnFill = Color.rgb(26, 27, 38),
+                actionBackground = Color.rgb(41, 46, 66),       // Tokyo Night #292E42
+                fieldBackground = Color.rgb(31, 35, 53),
+                borderColor = Color.rgb(65, 72, 104),
+                navigationBackground = Color.rgb(26, 27, 38),
                 selectedNavigationBackground = Color.rgb(36, 59, 90),
                 dark = true,
             )
@@ -1351,7 +1529,7 @@ open class MainActivity : Activity() {
                 primaryText = Color.rgb(25, 40, 63),          // #19283F
                 secondaryText = Color.rgb(89, 108, 133),      // #596C85
                 dividerColor = Color.rgb(223, 231, 242),      // #DFE7F2
-                accent = Color.rgb(36, 93, 206),              // #245DCE
+                accent = FloatClipAccent.color(overlayPreferences.accentTheme(), false),
                 accentTextOnFill = Color.WHITE,
                 actionBackground = Color.rgb(235, 242, 255),  // #EBF2FF
                 fieldBackground = Color.rgb(240, 243, 248),

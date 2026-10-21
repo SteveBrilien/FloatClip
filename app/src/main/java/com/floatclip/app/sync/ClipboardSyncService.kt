@@ -22,6 +22,7 @@ import com.floatclip.app.UnifiedActivity
 import com.floatclip.app.clipboard.ClipStore
 import com.floatclip.app.clipboard.ClipboardWrites
 import com.floatclip.app.clipboard.DeviceIdentity
+import com.floatclip.app.prefs.OverlayPreferences
 import com.floatclip.probe.BluetoothPairHost
 import com.floatclip.probe.LanSyncHost
 import com.floatclip.share.ClipboardSync
@@ -298,10 +299,25 @@ class ClipboardSyncService: Service() {
         val flags=PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         val open=PendingIntent.getActivity(this,7080,Intent(this,UnifiedActivity::class.java),flags)
         val pause=PendingIntent.getService(this,7081,Intent(this,ClipboardSyncService::class.java).setAction(PAUSE),flags)
-        return Notification.Builder(this,CHANNEL).setSmallIcon(R.drawable.ic_floatclip_app).setContentTitle("FloatClip 设备共享")
-            .setContentText(status).setContentIntent(open).setOngoing(true).addAction(Notification.Action.Builder(null,"暂停共享",pause).build()).build()
+        val detailed=OverlayPreferences(this).detailedNotification()
+        return Notification.Builder(this,CHANNEL)
+            .setSmallIcon(R.drawable.ic_floatclip_app)
+            .setContentTitle(if(detailed) "FloatClip 设备共享" else "FloatClip")
+            .setContentText(if(detailed) status else "")
+            .setContentIntent(open)
+            .setShowWhen(false)
+            .setOnlyAlertOnce(true)
+            .setOngoing(true)
+            .apply {
+                if(detailed) addAction(Notification.Action.Builder(null,"暂停共享",pause).build())
+            }
+            .build()
     }
     override fun onBind(intent: Intent?): IBinder?=null
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if(SyncKeepAliveScheduler.shouldRun(this))SyncKeepAliveScheduler.schedule(this)
+        super.onTaskRemoved(rootIntent)
+    }
     override fun onDestroy(){
         closing=true;paused=true;pairRequest?.accept(false);pairRequest=null
         trust.unregisterOnSharedPreferenceChangeListener(trustListener)
@@ -310,6 +326,7 @@ class ClipboardSyncService: Service() {
         bluetoothPairing?.close();bluetoothPairing=null
         bluetooth?.close();bluetooth=null
         for(host in hosts.values.toList())host.close();for(link in links.values)link.close();links.clear();actor.shutdownNow();SyncRuntime.detach(this)
+        if(SyncKeepAliveScheduler.shouldRun(this))SyncKeepAliveScheduler.schedule(this)
         super.onDestroy()
     }
     companion object {

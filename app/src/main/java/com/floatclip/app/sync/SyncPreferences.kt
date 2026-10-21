@@ -11,6 +11,7 @@ class SyncPreferences(context: Context) {
         val appliedSend: String,val appliedReceive: String,val appliedApply: String)
     fun enabled()=prefs.getBoolean("enabled",false)
     fun reconnect()=prefs.getBoolean("reconnect",true)
+    fun keepAlive()=prefs.getBoolean("keep_alive",true)
     fun sending()=prefs.getBoolean("send",true)
     fun receiving()=prefs.getBoolean("receive",true)
     fun applying()=prefs.getBoolean("apply",true)
@@ -19,6 +20,10 @@ class SyncPreferences(context: Context) {
             prefs.getString("send_generation","initial")!!,prefs.getString("receive_generation","initial")!!,prefs.getString("apply_generation","initial")!!,
             prefs.getString("applied_send","")!!,prefs.getString("applied_receive","")!!,prefs.getString("applied_apply","")!!)
     }
+    fun saveKeepAlive(value:Boolean)=synchronized(prefs) {
+        check(prefs.edit().putBoolean("keep_alive",value).commit()){ "无法保存后台保活开关" }
+    }
+
     fun applied(value: Policy)=synchronized(prefs) {
         check(prefs.edit().putString("applied_send",value.sendGeneration).putString("applied_receive",value.receiveGeneration).putString("applied_apply",value.applyGeneration).commit()){ "共享权限批次未保存" }
     }

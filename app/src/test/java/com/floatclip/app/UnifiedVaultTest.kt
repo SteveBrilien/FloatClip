@@ -78,6 +78,21 @@ class UnifiedVaultTest {
         assertTrue(UnifiedActivity.isTrusted("https://clip.wmy-cloud.cn/"));assertTrue(UnifiedActivity.isTrusted("https://clip.wmy-cloud.cn:443/path"))
         listOf("http://clip.wmy-cloud.cn","https://clip.wmy-cloud.cn:444/","https://clip.wmy-cloud.cn.evil.example/","https://clip.wmy-cloud.cn@evil.example/","file:///clip.wmy-cloud.cn").forEach { assertFalse(it,UnifiedActivity.isTrusted(it)) }
     }
+    @Test fun protectedEntriesSurviveBulkClearAndRoundTrip() {
+        val store=ClipStore(context(),codec)
+        val keep=store.addText("keep")!!
+        store.toggleLocked(keep.id)
+        store.addText("remove")
+        store.clearAll()
+        val retained=store.entries().single()
+        assertEquals("keep",retained.text)
+        assertTrue(retained.locked)
+        val exported=store.exportJson()
+        val restored=ClipStore(context(),codec)
+        assertTrue(restored.importJson(exported))
+        assertTrue(restored.entries().single().locked)
+    }
+
     @Test fun deleteUndoRetainsOriginPinAndNewlyCopiedText() {
         val store=ClipStore(context(),codec);val first=store.addText("first")!!
         store.togglePinned(first.id);val saved=store.entries().single()

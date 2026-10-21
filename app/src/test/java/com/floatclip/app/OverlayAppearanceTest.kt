@@ -32,6 +32,13 @@ class OverlayAppearanceTest {
         assertEquals(90,prefs.panelAlphaPercent())
         assertEquals(2,prefs.entryLineCount())
         assertTrue(prefs.translucentCards())
+        assertEquals(86,prefs.cardAlphaPercent())
+        assertEquals(28,prefs.frostStrengthPercent())
+        assertTrue(prefs.borderEnabled())
+        assertEquals(98,prefs.cardPressScalePercent())
+        assertEquals(96,prefs.bubblePressScalePercent())
+        assertEquals(240,prefs.transitionDurationMs())
+        assertEquals("blue",prefs.accentTheme())
     }
 
     @Test fun cardHeightSelectorControlsVisibleLineCount() {

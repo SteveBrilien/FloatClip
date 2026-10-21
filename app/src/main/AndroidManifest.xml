@@ -44,8 +44,13 @@
 
         <service
             android:name=".overlay.ClipboardOverlayService"
-            android:exported="false" />
-        <service android:name=".sync.ClipboardSyncService" android:exported="false" />
+            android:exported="false"
+            android:stopWithTask="false" />
+        <service
+            android:name=".sync.ClipboardSyncService"
+            android:exported="false"
+            android:stopWithTask="false" />
+        <receiver android:name=".sync.SyncRestartReceiver" android:exported="false" />
         <receiver android:name=".sync.SyncBootReceiver" android:exported="true">
             <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter>
         </receiver>

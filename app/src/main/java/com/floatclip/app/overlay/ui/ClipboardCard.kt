@@ -39,15 +39,19 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
         minimumHeight = dp(minHeight)
         background = GradientDrawable().apply {
             val tinted = if(prefs.translucentCards()) mix(surface,accent,if(dark) .10f else .055f) else surface
-            val cardColor = if(compact && prefs.translucentCards()) {
-                Color.argb(if(dark) 214 else 220, Color.red(tinted), Color.green(tinted), Color.blue(tinted))
+            val cardColor = if(prefs.translucentCards()) {
+                val alpha=(255f*prefs.cardAlphaPercent()/100f).toInt().coerceIn(0,255)
+                Color.argb(alpha, Color.red(tinted), Color.green(tinted), Color.blue(tinted))
             } else tinted
             setColor(cardColor)
-            setStroke(dp(1), if(dark) Color.argb(60,255,255,255) else Color.argb(24,25,40,63))
+            if(prefs.borderEnabled()) {
+                val alpha=(255f*prefs.borderAlphaPercent()/100f).toInt().coerceIn(0,255)
+                setStroke(dp(1), if(dark) Color.argb(alpha,255,255,255) else Color.argb(alpha,25,40,63))
+            }
             cornerRadius = dp(16).toFloat()
         }
         val hasSource = entry.sourceDeviceId != "local"
-        val markerWidth = if(hasSource || entry.pinned) 38 else 16
+        val markerWidth = if(hasSource || entry.pinned || entry.locked) 38 else 16
         addView(TextView(context).apply {
             text = entry.text; textSize = if(compact) 15f else 16f
             setTextColor(foreground); includeFontPadding = false; setLineSpacing(dp(2).toFloat(),1f)
@@ -64,6 +68,7 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, LinearLayout.LayoutParams(dp(14),dp(14)).apply { bottomMargin = dp(6) })
         }
+        if(entry.locked) mark(R.drawable.ic_lock,"已保护")
         if(entry.pinned) mark(R.drawable.ic_pin,"已置顶")
         if(hasSource) mark(when(entry.sourcePlatform) {
             "windows" -> R.drawable.ic_device_computer

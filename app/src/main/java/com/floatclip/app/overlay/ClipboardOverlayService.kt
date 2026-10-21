@@ -43,12 +43,15 @@ import com.floatclip.app.clipboard.ClipboardRepository
 import com.floatclip.app.integration.AccessibilityPasteBridge
 import com.floatclip.app.integration.IntegrationRegistry
 import com.floatclip.app.model.ClipEntry
+import com.floatclip.probe.FloatClipAccent
 import com.floatclip.app.prefs.CategoryStore
+import com.floatclip.app.prefs.CategoryIcons
 import com.floatclip.app.prefs.OverlayPreferences
 import com.floatclip.app.overlay.ui.BorderDragFrameLayout
 import com.floatclip.app.overlay.ui.BubbleMotionController
 import com.floatclip.app.overlay.ui.EntrySwipeActions
 import com.floatclip.app.overlay.ui.EntryGestureRow
+import com.floatclip.app.overlay.ui.EntryLockAction
 import com.floatclip.app.theme.AdaptiveOverlayThemeProvider
 import com.floatclip.app.theme.OverlayPalette
 import com.floatclip.app.theme.OverlayThemeProvider
@@ -337,7 +340,7 @@ class ClipboardOverlayService : Service() {
                 .alpha(1f)
                 .scaleX(1f)
                 .scaleY(1f)
-                .setDuration(BUBBLE_APPEAR_MS)
+                .setDuration(overlayPreferences.transitionDurationMs().toLong())
                 .setInterpolator(PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
                 .withEndAction { scheduleEdgeHide() }
                 .start()
@@ -369,9 +372,9 @@ class ClipboardOverlayService : Service() {
                     velocityTracker?.recycle()
                     velocityTracker = VelocityTracker.obtain().also { addRawMovement(it, event) }
                     view.animate()
-                        .scaleX(0.965f)
-                        .scaleY(0.965f)
-                        .setDuration(85L)
+                        .scaleX(overlayPreferences.bubblePressScalePercent()/100f)
+                        .scaleY(overlayPreferences.bubblePressScalePercent()/100f)
+                        .setDuration((overlayPreferences.transitionDurationMs()*0.35f).toLong().coerceIn(55,160))
                         .setInterpolator(PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
                         .start()
                     true
@@ -402,7 +405,7 @@ class ClipboardOverlayService : Service() {
                     view.animate()
                         .scaleX(1f)
                         .scaleY(1f)
-                        .setDuration(120L)
+                        .setDuration((overlayPreferences.transitionDurationMs()*0.55f).toLong().coerceIn(80,240))
                         .setInterpolator(PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
                         .start()
                     if (moved && event.actionMasked == MotionEvent.ACTION_UP) {
@@ -521,12 +524,16 @@ class ClipboardOverlayService : Service() {
         panelParams = params
 
         val panelAlpha = percentAlpha(overlayPreferences.panelAlphaPercent())
+        val frost=overlayPreferences.frostStrengthPercent()/100f
+        val frostedPanel=if(palette.isDark) blendColor(palette.panelBackground,Color.WHITE,0.07f*frost)
+            else blendColor(palette.panelBackground,Color.WHITE,0.22f*frost)
+        val borderAlpha=percentAlpha(overlayPreferences.borderAlphaPercent())
         val panel = BorderDragFrameLayout(this).apply {
             isClickable = true
             background = roundedBackground(
-                withAlpha(palette.panelBackground, panelAlpha),
+                withAlpha(frostedPanel, panelAlpha),
                 palette.panelCornerRadiusDp,
-                if (palette.isDark) Color.argb(92, 255, 255, 255) else Color.argb(46, 0, 0, 0),
+                if(!overlayPreferences.borderEnabled()) null else if (palette.isDark) Color.argb(borderAlpha,255,255,255) else Color.argb(borderAlpha,25,40,63),
             )
             elevation = dp(palette.elevationDp).toFloat()
             setPadding(dp(8), dp(8), dp(8), dp(8))
@@ -645,9 +652,11 @@ class ClipboardOverlayService : Service() {
         panel.interactionBlocked = false
         panel.isEnabled = true
         panel.animate().cancel()
-        panel.alpha = 1f
-        panel.scaleX = 1f
-        panel.scaleY = 1f
+        val animations=ValueAnimator.areAnimatorsEnabled()
+        val duration=overlayPreferences.transitionDurationMs().toLong()
+        panel.alpha = if(animations) 0f else 1f
+        panel.scaleX = if(animations) 0.92f else 1f
+        panel.scaleY = if(animations) 0.92f else 1f
         panel.translationX = 0f
         renderSourceBar()
         renderCategoryBar()
@@ -655,6 +664,13 @@ class ClipboardOverlayService : Service() {
         params.alpha = 1f
         params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
         windowManager.updateViewLayout(panel, params)
+        if(animations) {
+            panel.animate()
+                .alpha(1f).scaleX(1f).scaleY(1f)
+                .setDuration(duration)
+                .setInterpolator(PathInterpolator(0.2f,0.8f,0.2f,1f))
+                .start()
+        }
         panelScrimView?.let { scrim ->
             panelScrimParams?.let {
                 it.alpha = 1f
@@ -665,13 +681,28 @@ class ClipboardOverlayService : Service() {
         }
         bubbleView?.let { bubble ->
             bubble.animate().cancel()
-            bubble.alpha = 1f
-            bubble.scaleX = 1f
-            bubble.scaleY = 1f
             bubbleParams?.let {
-                it.alpha = 0f
+                it.alpha = 1f
                 it.flags = it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                 windowManager.updateViewLayout(bubble, it)
+            }
+            if(animations) {
+                bubble.alpha=1f; bubble.scaleX=1f; bubble.scaleY=1f
+                bubble.animate().alpha(0f).scaleX(0.76f).scaleY(0.76f)
+                    .setDuration(duration)
+                    .setInterpolator(PathInterpolator(0.2f,0.8f,0.2f,1f))
+                    .withEndAction {
+                        bubbleParams?.let {
+                            it.alpha=0f
+                            windowManager.updateViewLayout(bubble,it)
+                        }
+                    }.start()
+            } else {
+                bubble.alpha=1f; bubble.scaleX=1f; bubble.scaleY=1f
+                bubbleParams?.let {
+                    it.alpha=0f
+                    windowManager.updateViewLayout(bubble,it)
+                }
             }
         }
         handler.removeCallbacks(clipboardPollRunnable)
@@ -701,7 +732,9 @@ class ClipboardOverlayService : Service() {
                 startY = windowParams.y
                 moved = false
                 panel.animate().cancel()
-                panel.animate().scaleX(0.995f).scaleY(0.995f).setDuration(70L).start()
+                val pressScale=overlayPreferences.panelPressScalePercent()/100f
+                panel.animate().scaleX(pressScale).scaleY(pressScale)
+                    .setDuration((overlayPreferences.transitionDurationMs()*0.3f).toLong().coerceIn(50,150)).start()
             }
 
             override fun onDragMove(rawX: Float, rawY: Float) {
@@ -718,7 +751,7 @@ class ClipboardOverlayService : Service() {
                 panel.animate()
                     .scaleX(1f)
                     .scaleY(1f)
-                    .setDuration(135L)
+                    .setDuration((overlayPreferences.transitionDurationMs()*0.6f).toLong().coerceIn(90,260))
                     .setInterpolator(PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
                     .start()
                 if (moved && !cancelled) overlayPreferences.savePanelPosition(windowParams.x, windowParams.y)
@@ -845,12 +878,20 @@ class ClipboardOverlayService : Service() {
         val palette = themeProvider.palette()
         val wrapper = EntryGestureRow(this)
         val front=com.floatclip.app.overlay.ui.ClipboardCard(this,entry,palette.isDark,palette.primaryText,palette.rowBackground,true)
-        wrapper.contentDescription=entry.text+"，来源："+entry.sourceDeviceName+(if(entry.pinned) "，已置顶" else "")
+        wrapper.contentDescription=entry.text+"，来源："+entry.sourceDeviceName+(if(entry.pinned) "，已置顶" else "")+(if(entry.locked) "，已保护" else "")
 
-        wrapper.bind(front, EntrySwipeActions(this, entry.pinned, palette.isDark,
-            onPin = { store.togglePinned(entry.id); renderEntries() },
-            onDelete = { deleteClip(entry) },
-        ), dp(148))
+        wrapper.bind(
+            front,
+            EntrySwipeActions(this, entry.pinned, palette.isDark,
+                onPin = { store.togglePinned(entry.id); renderEntries() },
+                onDelete = { deleteClip(entry) },
+            ),
+            dp(148),
+            EntryLockAction(this,entry.locked,palette.isDark,overlayPreferences.accentTheme()) {
+                store.toggleLocked(entry.id); renderEntries()
+            },
+            dp(78),
+        )
         wrapper.onSingleTap = {
             val pasted=PasteAccessibilityService.paste(entry.text)
             if(!pasted) clipboard.writeText(entry.text)
@@ -895,6 +936,7 @@ class ClipboardOverlayService : Service() {
                 label.contains("置顶") -> R.drawable.ic_pin
                 label == "删除" || label == "确认删除" -> R.drawable.ic_delete
                 label.contains("返回") || label == "取消" -> R.drawable.ic_chevron_left
+                choosingCategory && label in categoryStore.categories() -> CategoryIcons.resource(categoryStore.iconKey(label))
                 else -> R.drawable.ic_folder
             }
             sheet.addView(LinearLayout(this).apply {
@@ -935,7 +977,7 @@ class ClipboardOverlayService : Service() {
                 renderEntries()
             }
         } else if (choosingCategory) {
-            row("‹ 返回") { showEntryMenu(entry, anchor = anchor) }
+            row("返回") { showEntryMenu(entry, anchor = anchor) }
             categoryStore.categories().distinct().forEach { category ->
                 row(if (category == entry.category) "✓  $category" else category,
                     if (category == entry.category) accentColor(palette) else palette.primaryText) {
@@ -960,7 +1002,7 @@ class ClipboardOverlayService : Service() {
                 dismissEntryActionLayer(animated = false)
                 renderEntries()
             }
-            row("更改分类  ›") { showEntryMenu(entry, choosingCategory = true, anchor = anchor) }
+            row("更改分类") { showEntryMenu(entry, choosingCategory = true, anchor = anchor) }
             row("删除", Color.rgb(218, 78, 78)) {
                 showEntryMenu(entry, confirmingDelete = true, anchor = anchor)
             }
@@ -1091,12 +1133,8 @@ class ClipboardOverlayService : Service() {
             for (i in 0 until list.childCount) (list.getChildAt(i) as? EntryGestureRow)?.cancelPendingGestures()
         }
         dismissEntryActionLayer(animated = false)
-        // No root transform, delayed callback, removeView or destination-window allocation.
-        panelParams?.let {
-            it.alpha = 0f
-            it.flags = it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-            windowManager.updateViewLayout(panel, it)
-        }
+        val animations=ValueAnimator.areAnimatorsEnabled()
+        val duration=overlayPreferences.transitionDurationMs().toLong()
         panelScrimView?.let { scrim ->
             panelScrimParams?.let {
                 it.alpha = 0f
@@ -1106,16 +1144,36 @@ class ClipboardOverlayService : Service() {
         }
         bubbleView?.let { bubble ->
             bubble.animate().cancel()
-            bubble.alpha = 1f
-            bubble.scaleX = 1f
-            bubble.scaleY = 1f
             bubbleParams?.let {
                 it.alpha = 1f
                 it.flags = it.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
                 windowManager.updateViewLayout(bubble, it)
             }
+            if(animations) {
+                bubble.alpha=0f; bubble.scaleX=0.76f; bubble.scaleY=0.76f
+                bubble.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                    .setDuration(duration)
+                    .setInterpolator(PathInterpolator(0.2f,0.8f,0.2f,1f))
+                    .start()
+            } else {
+                bubble.alpha=1f; bubble.scaleX=1f; bubble.scaleY=1f
+            }
         }
-        panelCollapsing = false
+        fun finishCollapse() {
+            panelParams?.let {
+                it.alpha = 0f
+                it.flags = it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                windowManager.updateViewLayout(panel, it)
+            }
+            panel.alpha=1f;panel.scaleX=1f;panel.scaleY=1f
+            panelCollapsing=false
+        }
+        if(animations) {
+            panel.animate().alpha(0f).scaleX(0.92f).scaleY(0.92f)
+                .setDuration(duration)
+                .setInterpolator(PathInterpolator(0.2f,0.8f,0.2f,1f))
+                .withEndAction { finishCollapse() }.start()
+        } else finishCollapse()
         // Keep the exact pre-open dock coordinate. Edge-hide runs only after a real ball drag.
     }
 
@@ -1136,7 +1194,7 @@ class ClipboardOverlayService : Service() {
         return Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_copy_paste)
             .setContentTitle("FloatClip")
-            .setContentText("")
+            .setContentText(if(overlayPreferences.detailedNotification()) "悬浮剪贴板正在后台运行" else "")
             .setCategory(Notification.CATEGORY_SERVICE)
             .setShowWhen(false)
             .setOnlyAlertOnce(true)
@@ -1148,7 +1206,7 @@ class ClipboardOverlayService : Service() {
     private fun percentAlpha(percent: Int): Int = (255f * percent.coerceIn(0, 100) / 100f).toInt().coerceIn(0, 255)
 
     private fun accentColor(palette: OverlayPalette): Int =
-        if (palette.isDark) Color.rgb(141, 187, 255) else Color.rgb(36, 93, 206)
+        FloatClipAccent.color(overlayPreferences.accentTheme(), palette.isDark)
 
     private fun withAlpha(color: Int, alpha: Int): Int = Color.argb(
         alpha.coerceIn(0, 255),

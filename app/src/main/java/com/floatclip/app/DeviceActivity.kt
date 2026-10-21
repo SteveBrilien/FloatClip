@@ -8,13 +8,14 @@ import com.floatclip.app.sync.SyncRuntime
 import com.floatclip.app.sync.SyncPreferences
 import com.floatclip.app.sync.ClipboardSyncService
 import com.floatclip.app.sync.TrustedPeerStore
+import com.floatclip.app.ui.FloatDialog
 import com.floatclip.share.ShareWire
 import java.io.File
 import java.util.function.Consumer
 
 /** The device route writes into the same native vault as the clipboard and floating panel. */
 class DeviceActivity : ShareActivity(),SyncRuntime.Observer {
-    private var syncDialog: android.app.AlertDialog?=null
+    private var syncDialog: android.app.Dialog?=null
     // This activity always belongs to the managed clipboard-sync architecture.
     // The master switch controls the service; it must never make this screen fall back
     // to the legacy foreground-only ShareActivity connection lifecycle.
@@ -51,10 +52,16 @@ class DeviceActivity : ShareActivity(),SyncRuntime.Observer {
     override fun changed(service: ClipboardSyncService){managedState(service.firstSession(),service.status,service.pairingOpen())}
     override fun verify(code: String,answer: Consumer<Boolean>) {
         syncDialog?.dismiss()
-        syncDialog=android.app.AlertDialog.Builder(this).setTitle("允许此设备共享剪贴板？")
-            .setMessage("核对两端识别码：\n\n$code\n\n确认后记住授权，后续可自动重连。共享与接收写入可在设置中关闭。")
-            .setNegativeButton("拒绝"){_,_->answer.accept(false)}.setPositiveButton("相同，允许"){_,_->answer.accept(true)}
-            .setOnCancelListener{answer.accept(false)}.show()
+        syncDialog=FloatDialog.show(
+            this,
+            "允许此设备共享剪贴板？",
+            "核对两端识别码：\n\n$code\n\n确认后记住授权，后续可自动重连。共享与接收写入可在设置中关闭。",
+            negative="拒绝",
+            positive="相同，允许",
+            onPositive={ answer.accept(true); true },
+            onNegative={ answer.accept(false) },
+            onCancel={ answer.accept(false) },
+        ).dialog
     }
     override fun offer(peer: String,offer: ShareWire.Offer){managedOffer(offer,SyncRuntime.current()?.session(peer))}
     override fun progress(name: String,done: Long,total: Long,outgoing: Boolean){managedProgress(name,done,total,outgoing)}
@@ -74,11 +81,14 @@ class DeviceActivity : ShareActivity(),SyncRuntime.Observer {
                 if((0 until entries.length()).none { entries.getJSONObject(it).getString("id")==id.toString() }) {
                     val now=System.currentTimeMillis()
                     if(entries.length()>=500) {
-                        val removable=(0 until entries.length()).filter { !entries.getJSONObject(it).getBoolean("pinned") }.minByOrNull { entries.getJSONObject(it).getLong("createdAt") }
-                        check(removable!=null) { "置顶记录已满" };entries.remove(removable)
+                        val removable=(0 until entries.length()).filter {
+                            val row=entries.getJSONObject(it)
+                            !row.getBoolean("pinned") && !row.optBoolean("locked",false)
+                        }.minByOrNull { entries.getJSONObject(it).getLong("createdAt") }
+                        check(removable!=null) { "置顶或保护记录已满" };entries.remove(removable)
                     }
                     entries.put(JSONObject().put("id",id.toString()).put("text",value).put("pinned",false).put("category","未分类")
-                        .put("createdAt",now).put("updatedAt",now).put("source",JSONObject().put("id","lan-"+peer).put("name","电脑 "+peer.takeLast(4)).put("platform","windows")))
+                        .put("locked",false).put("createdAt",now).put("updatedAt",now).put("source",JSONObject().put("id","lan-"+peer).put("name","电脑 "+peer.takeLast(4)).put("platform","windows")))
                     store.commitUnified(snapshot.getString("revision"),entries)
                 }
             }

@@ -35,6 +35,7 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
     }
 
     fun togglePinned(id: Long) = synchronized(LOCK) { persist(entries().map { if (it.id == id) it.copy(pinned = !it.pinned) else it }) }
+    fun toggleLocked(id: Long) = synchronized(LOCK) { persist(entries().map { if (it.id == id) it.copy(locked = !it.locked) else it }) }
 
     fun updateCategory(id: Long, category: String) = synchronized(LOCK) {
         val clean = category.trim().ifEmpty { CategoryStore.DEFAULT_CATEGORY }
@@ -56,12 +57,16 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
         val old=duplicate?.let{array.getJSONObject(it)}
         if(duplicate!=null)array.remove(duplicate)
         if(array.length()>=MAX_ITEMS) {
-            val removable=(0 until array.length()).filter{!array.getJSONObject(it).getBoolean("pinned")}.minByOrNull{array.getJSONObject(it).getLong("updatedAt")}
-                ?:error("置顶记录已满")
+            val removable=(0 until array.length()).filter{
+                val row=array.getJSONObject(it)
+                !row.getBoolean("pinned") && !row.optBoolean("locked",false)
+            }.minByOrNull{array.getJSONObject(it).getLong("updatedAt")}
+                ?:error("置顶或保护记录已满")
             array.remove(removable)
         }
         val now=System.currentTimeMillis()
         array.put(JSONObject().put("id",key).put("text",entry.text).put("pinned",old?.optBoolean("pinned")?:false)
+            .put("locked",old?.optBoolean("locked")?:false)
             .put("category",old?.optString("category")?:CategoryStore.DEFAULT_CATEGORY).put("createdAt",old?.optLong("createdAt")?:now).put("updatedAt",now)
             .put("source",JSONObject().put("id",entry.source.id.toString()).put("name",entry.source.name).put("platform",entry.source.platform)))
         commitUnified(snapshot.getString("revision"),array)
@@ -70,14 +75,15 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
         val current = entries().toMutableList()
         if(current.any { it.key == entry.key || it.id == entry.id }) return@synchronized
         if(current.size >= MAX_ITEMS) {
-            val oldest = current.filterNot { it.pinned }.minByOrNull { it.createdAt }
-                ?: error("置顶记录已满，请先整理后恢复")
+            val oldest = current.filterNot { it.pinned || it.locked }.minByOrNull { it.createdAt }
+                ?: error("置顶或保护记录已满，请先整理后恢复")
             current.remove(oldest)
         }
         persist(listOf(entry) + current)
     }
-    fun clearUnpinned() = synchronized(LOCK) { persist(entries().filter { it.pinned }) }
-    fun clearAll() = synchronized(LOCK) { persist(emptyList()) }
+    fun clearUnpinned() = synchronized(LOCK) { persist(entries().filter { it.pinned || it.locked }) }
+    /** "清空全部"也尊重保护锁；显式删除单条仍然允许。 */
+    fun clearAll() = synchronized(LOCK) { persist(entries().filter { it.locked }) }
     fun exportJson(): String = buildJson(entries())
 
     fun importJson(raw: String): Boolean = synchronized(LOCK) {
@@ -115,6 +121,7 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
                     id = o.getLong("id"),
                     text = o.getString("text"),
                     pinned = o.optBoolean("pinned", false),
+                    locked = o.optBoolean("locked", false),
                     category = o.optString("category", CategoryStore.DEFAULT_CATEGORY),
                     createdAt = o.optLong("createdAt", 0L),
                     key = o.optString("key", o.getLong("id").toString()),
@@ -134,6 +141,7 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
                 .put("id", item.id)
                 .put("text", item.text)
                 .put("pinned", item.pinned)
+                .put("locked", item.locked)
                 .put("category", item.category)
                 .put("createdAt", item.createdAt)
                 .put("key", item.key).put("updatedAt", item.updatedAt)
@@ -160,7 +168,7 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
             val source = if (item.sourceDeviceId == "local") device else JSONObject()
                 .put("id", item.sourceDeviceId).put("name", item.sourceDeviceName).put("platform", item.sourcePlatform)
             array.put(JSONObject().put("id", item.key).put("text", item.text).put("pinned", item.pinned)
-                .put("category", item.category).put("createdAt", item.createdAt).put("updatedAt", item.updatedAt)
+                .put("locked", item.locked).put("category", item.category).put("createdAt", item.createdAt).put("updatedAt", item.updatedAt)
                 .put("source", source))
         }
         JSONObject().put("revision", revision).put("entries", array)
@@ -187,8 +195,19 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
             require(key.matches(Regex("[-a-zA-Z0-9_:]{1,128}")) && keys.add(key)) { "记录编号无效" }
             require(text.isNotBlank() && text.length <= 1000000 && category.length <= 80 && created >= 0 && updated >= 0) { "记录格式无效" }
             require(sourceId.matches(Regex("[-a-zA-Z0-9_:]{1,100}")) && name.isNotBlank() && name.length <= 80 && platform in listOf("android", "windows", "ipad", "web")) { "设备来源无效" }
-            ClipEntry(current[key]?.id ?: nextId++, text, o.getBoolean("pinned"), category.ifBlank { CategoryStore.DEFAULT_CATEGORY },
-                created, key, updated, if (sourceId == ownId) "local" else sourceId, name, platform)
+            ClipEntry(
+                current[key]?.id ?: nextId++,
+                text,
+                o.getBoolean("pinned"),
+                o.optBoolean("locked", current[key]?.locked ?: false),
+                category.ifBlank { CategoryStore.DEFAULT_CATEGORY },
+                created,
+                key,
+                updated,
+                if (sourceId == ownId) "local" else sourceId,
+                name,
+                platform,
+            )
         }
         persist(next)
         unifiedSnapshot()

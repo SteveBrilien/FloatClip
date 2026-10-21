@@ -1,7 +1,7 @@
 package com.floatclip.probe
 
 import android.app.Activity
-import android.app.AlertDialog
+import android.app.Dialog
 import android.content.*
 import android.content.res.Configuration
 import android.graphics.Color
@@ -50,7 +50,7 @@ open class ShareActivity : Activity() {
     private lateinit var transport: LanShare
     private var pair: LanPair? = null
     private var discovering = false
-    private var pairDialog: AlertDialog? = null
+    private var pairDialog: Dialog? = null
     private val trust by lazy { getSharedPreferences("share-pairs", MODE_PRIVATE) }
     private var updateBusy = false
     private var updateMessage = "当前版本 ${ShareUpdates.VERSION} · 共享预览通道"
@@ -119,7 +119,22 @@ open class ShareActivity : Activity() {
             "dark" -> true; "light" -> false
             else -> resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         }
-        p = ShareDesign.palette(dark)
+        val base = ShareDesign.palette(dark)
+        val accentId=getSharedPreferences("floatclip_overlay",MODE_PRIVATE).getString("accent_theme","blue")
+        val accent=FloatClipAccent.color(accentId,dark)
+        p = base.copy(
+            blue=accent,
+            primary=accent,
+            tint=if(dark) Color.rgb(
+                (Color.red(base.tint)*3+Color.red(accent))/4,
+                (Color.green(base.tint)*3+Color.green(accent))/4,
+                (Color.blue(base.tint)*3+Color.blue(accent))/4,
+            ) else Color.rgb(
+                (Color.red(base.tint)*4+Color.red(accent))/5,
+                (Color.green(base.tint)*4+Color.green(accent))/5,
+                (Color.blue(base.tint)*4+Color.blue(accent))/5,
+            ),
+        )
         val themeId=if(dark) R.style.Theme_FloatClip_Dark else R.style.Theme_FloatClip_Light
         setTheme(themeId)
         uiContext = ContextThemeWrapper(this,themeId)
@@ -710,7 +725,58 @@ open class ShareActivity : Activity() {
         }
     }
     private fun icon(glyph:ShareGlyph,color:Int)=ImageView(uiContext).apply { setImageDrawable(ShareIcon(glyph,color)); importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO }
-    private fun dialog()=AlertDialog.Builder(uiContext)
+    private inner class ShareDialogBuilder(private val context:Context) {
+        private var titleValue=""
+        private var messageValue=""
+        private var negativeLabel:String?=null
+        private var positiveLabel:String?=null
+        private var negativeAction:((DialogInterface,Int)->Unit)?=null
+        private var positiveAction:((DialogInterface,Int)->Unit)?=null
+        private var cancelAction:((DialogInterface)->Unit)?=null
+        fun setTitle(value:String)=apply{titleValue=value}
+        fun setMessage(value:String)=apply{messageValue=value}
+        fun setNegativeButton(label:String,action:((DialogInterface,Int)->Unit)?=null)=apply{negativeLabel=label;negativeAction=action}
+        fun setPositiveButton(label:String,action:((DialogInterface,Int)->Unit)?=null)=apply{positiveLabel=label;positiveAction=action}
+        fun setOnCancelListener(action:(DialogInterface)->Unit)=apply{cancelAction=action}
+        fun show():Dialog {
+            val dialog=Dialog(context)
+            dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+            val shell=column().apply {
+                setPadding(dp(22),dp(20),dp(22),dp(18))
+                background=shape(p.card,20,true)
+                addView(text(titleValue,20,p.text,true))
+                if(messageValue.isNotEmpty())addView(text(messageValue,13,p.muted).apply{setPadding(0,dp(12),0,0)})
+            }
+            val actions=LinearLayout(context).apply{gravity=Gravity.END;setPadding(0,dp(16),0,0)}
+            fun addAction(label:String,primary:Boolean,listener:((DialogInterface,Int)->Unit)?) {
+                actions.addView(TextView(context).apply {
+                    text=label;textSize=14f;gravity=Gravity.CENTER;minimumHeight=dp(44)
+                    typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+                    setTextColor(if(primary)p.blue else p.text)
+                    setPadding(dp(16),0,dp(16),0)
+                    background=shape(if(primary)p.tint else Color.TRANSPARENT,12)
+                    setOnClickListener { listener?.invoke(dialog,if(primary) DialogInterface.BUTTON_POSITIVE else DialogInterface.BUTTON_NEGATIVE);dialog.dismiss() }
+                },LinearLayout.LayoutParams(-2,dp(44)).apply{if(actions.childCount>0)marginStart=dp(8)})
+            }
+            negativeLabel?.let{addAction(it,false,negativeAction)}
+            positiveLabel?.let{addAction(it,true,positiveAction)}
+            if(actions.childCount>0)shell.addView(actions)
+            dialog.setContentView(shell)
+            dialog.setOnCancelListener{cancelAction?.invoke(it)}
+            dialog.setOnShowListener {
+                dialog.window?.apply {
+                    setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+                    addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                    attributes=attributes.apply{dimAmount=.55f}
+                    setLayout((resources.displayMetrics.widthPixels-dp(40)).coerceAtMost(dp(420)),WindowManager.LayoutParams.WRAP_CONTENT)
+                }
+            }
+            dialog.show()
+            dialog.window?.setLayout((resources.displayMetrics.widthPixels-dp(40)).coerceAtMost(dp(420)),WindowManager.LayoutParams.WRAP_CONTENT)
+            return dialog
+        }
+    }
+    private fun dialog()=ShareDialogBuilder(uiContext)
     private fun ripple(color:Int,radius:Int)=android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(c("#252563EB")),shape(color,radius),shape(Color.WHITE,radius))
     private fun column()=LinearLayout(uiContext).apply { orientation=LinearLayout.VERTICAL }
     private fun text(value:String,sp:Int,color:Int,bold:Boolean=false)=TextView(uiContext).apply {

@@ -93,11 +93,11 @@ class AdaptiveOverlayThemeProvider(
 
     private fun fallbackPalette(dark: Boolean): OverlayPalette = if (dark) {
         OverlayPalette(
-            bubbleBackground = Color.rgb(22, 34, 53),
-            panelBackground = Color.rgb(12, 20, 34),
-            rowBackground = Color.rgb(22, 34, 53),
-            primaryText = Color.rgb(237, 243, 252),
-            secondaryText = Color.rgb(169, 184, 205),
+            bubbleBackground = Color.rgb(36, 40, 59),
+            panelBackground = Color.rgb(26, 27, 38),
+            rowBackground = Color.rgb(36, 40, 59),
+            primaryText = Color.rgb(192, 202, 245),
+            secondaryText = Color.rgb(154, 165, 206),
             isDark = true,
         )
     } else {

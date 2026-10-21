@@ -7,8 +7,11 @@ import com.floatclip.app.security.VaultCipher
 import com.floatclip.app.sync.SyncPreferences
 import com.floatclip.app.sync.SyncPolicy
 import com.floatclip.app.sync.TrustedPeerStore
+import com.floatclip.app.prefs.UpdatePreferences
+import com.floatclip.app.prefs.UpdateChannel
 import com.floatclip.share.ShareWire
 import com.floatclip.share.ClipboardSync
+import com.floatclip.probe.FloatClipAccent
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -106,5 +109,31 @@ class ClipboardSyncStorageTest {
         val tabs=ClipboardSources.tabs(emptyList(),listOf(peer))
         assertEquals(listOf("全部","本机","ADMINISTRATOR"),tabs.map{it.name})
         assertEquals(id.toString(),tabs.last().id)
+    }
+
+    @Test fun syncKeepAliveIsIndependentFromAutomaticReconnect() {
+        val context=context()
+        val prefs=SyncPreferences(context)
+        assertTrue(prefs.keepAlive())
+        prefs.save(enabled=true,reconnect=false)
+        assertTrue(prefs.enabled())
+        assertFalse(prefs.reconnect())
+        assertTrue(prefs.keepAlive())
+        prefs.saveKeepAlive(false)
+        assertFalse(SyncPreferences(context).keepAlive())
+        assertTrue(SyncPreferences(context).enabled())
+    }
+
+    @Test fun tokyoNightDefaultBlueIsStable() {
+        assertEquals(android.graphics.Color.rgb(122,162,247),FloatClipAccent.color("blue",true))
+    }
+
+    @Test fun updateChannelDefaultsToPreviewAndPersistsDevChoice() {
+        val context=context()
+        context.getSharedPreferences("floatclip_update",Context.MODE_PRIVATE).edit().clear().commit()
+        val prefs=UpdatePreferences(context)
+        assertEquals(UpdateChannel.PREVIEW,prefs.channel())
+        prefs.saveChannel(UpdateChannel.DEV)
+        assertEquals(UpdateChannel.DEV,UpdatePreferences(context).channel())
     }
 }

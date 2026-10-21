@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.view.HapticFeedbackConstants
 import android.view.View
+import com.floatclip.app.prefs.OverlayPreferences
 import android.view.accessibility.AccessibilityNodeInfo
 import kotlin.math.roundToInt
 
@@ -59,7 +60,7 @@ class FluentSwitch(context: Context) : View(context) {
         val end = if (value) 1f else 0f
         checked = value
         animator = ValueAnimator.ofFloat(start, end).apply {
-            duration = 140L
+            duration = OverlayPreferences(context).switchAnimationMs().toLong()
             addUpdateListener {
                 position = it.animatedValue as Float
                 invalidate()

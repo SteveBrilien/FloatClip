@@ -6,12 +6,17 @@ import javax.net.ssl.HttpsURLConnection
 
 /** Explicit user initiated checks. Downloads open in the system browser. */
 internal object ShareUpdates {
-    const val BUILD = 14
+    const val BUILD = 15
     const val VERSION = "0.7.1"
     const val FEED = "https://raw.githubusercontent.com/SteveBrilien/FloatClip/main/updates/share-preview.json"
+    const val DEV_FEED = "https://raw.githubusercontent.com/SteveBrilien/FloatClip/main/updates/share-dev.json"
+    enum class Channel(val feed:String,val wire:String,val label:String) {
+        PREVIEW(FEED,"share-preview","预览"),
+        DEV(DEV_FEED,"share-dev","开发测试"),
+    }
     data class Release(val build: Int, val version: String, val notes: String, val url: String)
-    fun check(): Release {
-        val connection = URL(FEED).openConnection() as HttpsURLConnection
+    fun check(channel:Channel=Channel.PREVIEW): Release {
+        val connection = URL(channel.feed).openConnection() as HttpsURLConnection
         connection.connectTimeout = 10000; connection.readTimeout = 10000
         connection.useCaches = false; connection.setRequestProperty("User-Agent", "FloatClip-Share/$VERSION")
         try {
@@ -24,7 +29,7 @@ internal object ShareUpdates {
             }
             check(bytes.size <= 65536) { "更新信息过大" }
             val json = JSONObject(String(bytes, Charsets.UTF_8))
-            check(json.getInt("schema") == 1 && json.getString("channel") == "share-preview")
+            check(json.getInt("schema") == 1 && json.getString("channel") == channel.wire)
             val platform = json.getJSONObject("android")
             val url = platform.getString("url"); val target = URL(url)
             check(target.protocol == "https" && target.userInfo == null && target.port == -1 && target.host in listOf("mcp.wmy-cloud.cn", "github.com"))

@@ -41,6 +41,35 @@ class OverlayAppearanceTest {
         assertEquals("blue",prefs.accentTheme())
     }
 
+    @Test fun appearanceResetRestoresVisualFlagsAndKeepsServiceConsent() {
+        val prefs = reset()
+        prefs.saveSourceColors(false)
+        prefs.saveTranslucentCards(false)
+        prefs.saveDetailedNotification(true)
+        prefs.saveKeepAliveEnabled(false)
+        prefs.saveOverlayEnabled(true)
+        prefs.saveTransitionDurationMs(480)
+        prefs.resetAppearance()
+        assertTrue(prefs.sourceColors())
+        assertTrue(prefs.translucentCards())
+        assertEquals(240, prefs.transitionDurationMs())
+        assertTrue(prefs.detailedNotification())
+        org.junit.Assert.assertFalse(prefs.keepAliveEnabled())
+        assertTrue(prefs.overlayEnabled())
+    }
+
+    @Test fun forcedDarkOverlayUsesTokyoNightTextAndSurfaceTogether() {
+        val prefs = reset()
+        prefs.saveThemeMode(com.floatclip.app.prefs.OverlayThemeMode.DARK)
+        val context = RuntimeEnvironment.getApplication()
+        val bridge = com.floatclip.app.integration.NoOpOriginOsSystemBridge
+        val palette = com.floatclip.app.theme.AdaptiveOverlayThemeProvider(context, bridge).palette()
+        assertEquals(android.graphics.Color.rgb(26,27,38), palette.panelBackground)
+        assertEquals(android.graphics.Color.rgb(36,40,59), palette.rowBackground)
+        assertEquals(android.graphics.Color.rgb(192,202,245), palette.primaryText)
+        assertEquals(android.graphics.Color.rgb(154,165,206), palette.secondaryText)
+    }
+
     @Test fun cardHeightSelectorControlsVisibleLineCount() {
         val context=RuntimeEnvironment.getApplication()
         val prefs=reset()

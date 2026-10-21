@@ -212,6 +212,7 @@ class ClipboardOverlayService : Service() {
         panelTransitionAnimator?.cancel()
         panelTransitionAnimator = null
         bubbleView?.animate()?.cancel()
+        panelView?.animate()?.cancel()
         panelSurfaceView?.animate()?.cancel()
         bubbleView?.let { runCatching { windowManager.removeView(it) } }
         panelView?.let { runCatching { windowManager.removeView(it) } }
@@ -259,6 +260,7 @@ class ClipboardOverlayService : Service() {
         panelTransitionAnimator?.cancel()
         panelTransitionAnimator = null
         bubbleView?.animate()?.cancel()
+        panelView?.animate()?.cancel()
         panelSurfaceView?.animate()?.cancel()
         bubbleView?.let { runCatching { windowManager.removeView(it) } }
         panelView?.let { runCatching { windowManager.removeView(it) } }
@@ -274,6 +276,7 @@ class ClipboardOverlayService : Service() {
         listContainer = null
         panelCollapsing = false
         showBubble()
+        if (foregroundStarted) getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, createNotification())
         if (reopenPanel) handler.postDelayed({ expandPanel() }, 20L)
     }
 
@@ -372,8 +375,8 @@ class ClipboardOverlayService : Service() {
                     velocityTracker?.recycle()
                     velocityTracker = VelocityTracker.obtain().also { addRawMovement(it, event) }
                     view.animate()
-                        .scaleX(overlayPreferences.bubblePressScalePercent()/100f)
-                        .scaleY(overlayPreferences.bubblePressScalePercent()/100f)
+                        .scaleX(if (ValueAnimator.areAnimatorsEnabled()) overlayPreferences.bubblePressScalePercent()/100f else 1f)
+                        .scaleY(if (ValueAnimator.areAnimatorsEnabled()) overlayPreferences.bubblePressScalePercent()/100f else 1f)
                         .setDuration((overlayPreferences.transitionDurationMs()*0.35f).toLong().coerceIn(55,160))
                         .setInterpolator(PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
                         .start()
@@ -732,7 +735,7 @@ class ClipboardOverlayService : Service() {
                 startY = windowParams.y
                 moved = false
                 panel.animate().cancel()
-                val pressScale=overlayPreferences.panelPressScalePercent()/100f
+                val pressScale=if (ValueAnimator.areAnimatorsEnabled()) overlayPreferences.panelPressScalePercent()/100f else 1f
                 panel.animate().scaleX(pressScale).scaleY(pressScale)
                     .setDuration((overlayPreferences.transitionDurationMs()*0.3f).toLong().coerceIn(50,150)).start()
             }
@@ -934,6 +937,7 @@ class ClipboardOverlayService : Service() {
             val icon = when {
                 label == "复制" || label == "粘贴" -> R.drawable.ic_copy_paste
                 label.contains("置顶") -> R.drawable.ic_pin
+                label.contains("保护") -> R.drawable.ic_lock
                 label == "删除" || label == "确认删除" -> R.drawable.ic_delete
                 label.contains("返回") || label == "取消" -> R.drawable.ic_chevron_left
                 choosingCategory && label in categoryStore.categories() -> CategoryIcons.resource(categoryStore.iconKey(label))
@@ -999,6 +1003,11 @@ class ClipboardOverlayService : Service() {
             }
             row(if (entry.pinned) "取消置顶" else "置顶") {
                 store.togglePinned(entry.id)
+                dismissEntryActionLayer(animated = false)
+                renderEntries()
+            }
+            row(if (entry.locked) "取消保护" else "保护") {
+                store.toggleLocked(entry.id)
                 dismissEntryActionLayer(animated = false)
                 renderEntries()
             }

@@ -60,7 +60,7 @@ class FluentSwitch(context: Context) : View(context) {
         val end = if (value) 1f else 0f
         checked = value
         animator = ValueAnimator.ofFloat(start, end).apply {
-            duration = OverlayPreferences(context).switchAnimationMs().toLong()
+            duration = if (ValueAnimator.areAnimatorsEnabled()) OverlayPreferences(context).switchAnimationMs().toLong() else 0L
             addUpdateListener {
                 position = it.animatedValue as Float
                 invalidate()
@@ -98,6 +98,12 @@ class FluentSwitch(context: Context) : View(context) {
         paint.strokeWidth = dp(1).toFloat()
         paint.color = withAlpha(Color.WHITE, if (checked) 150 else 110)
         canvas.drawCircle(cx, height / 2f, thumbRadius - dp(0.5f), paint)
+    }
+
+    override fun onDetachedFromWindow() {
+        animator?.cancel()
+        position = if (checked) 1f else 0f
+        super.onDetachedFromWindow()
     }
 
     override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {

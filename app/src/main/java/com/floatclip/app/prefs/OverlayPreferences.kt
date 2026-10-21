@@ -134,10 +134,11 @@ class OverlayPreferences(context: Context) {
             .remove(KEY_PANEL_PRESS_SCALE_PERCENT)
             .remove(KEY_TRANSITION_DURATION_MS)
             .remove(KEY_SWITCH_ANIMATION_MS)
-            .remove(KEY_DETAILED_NOTIFICATION)
             .remove(KEY_PANEL_X)
             .remove(KEY_PANEL_Y)
             .remove(KEY_THEME_MODE)
+            .remove("source_colors")
+            .remove("translucent_cards")
             .apply()
     }
 

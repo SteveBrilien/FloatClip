@@ -171,7 +171,12 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
                 } else if (!horizontal && abs(dy) > config.scaledTouchSlop && abs(dy) > abs(dx)) {
                     vertical = true; press(false); cancelDetector(event)
                 }
-                if (horizontal) translate((startTranslation + dx).coerceIn(-trailingWidth.toFloat(), leadingWidth.toFloat()))
+                if (horizontal) {
+                    // A reverse swipe closes the open side before a new gesture opens the other.
+                    val min = if (startTranslation > 1f) 0f else -trailingWidth.toFloat()
+                    val max = if (startTranslation < -1f) 0f else leadingWidth.toFloat()
+                    translate((startTranslation + dx).coerceIn(min, max))
+                }
             }
         }
         tracker?.addMovement(event)
@@ -183,8 +188,8 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
                 val vx = tracker?.xVelocity ?: 0f
                 val tx=front?.translationX ?: 0f
                 val side = if(event.actionMasked==MotionEvent.ACTION_CANCEL) 0 else when {
-                    vx < -config.scaledMinimumFlingVelocity && trailingWidth>0 -> -1
-                    vx > config.scaledMinimumFlingVelocity && leadingWidth>0 -> 1
+                    vx < -config.scaledMinimumFlingVelocity -> if (tx < -1f && trailingWidth > 0) -1 else 0
+                    vx > config.scaledMinimumFlingVelocity -> if (tx > 1f && leadingWidth > 0) 1 else 0
                     tx < -trailingWidth*0.45f && trailingWidth>0 -> -1
                     tx > leadingWidth*0.45f && leadingWidth>0 -> 1
                     else -> 0

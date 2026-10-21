@@ -69,13 +69,13 @@ class AdaptiveOverlayThemeProvider(
         } else {
             blend(panelBackground, Color.BLACK, 0.025f)
         }
-        val primaryText = if (darkSurface) Color.rgb(237, 243, 252) else Color.rgb(25, 40, 63)
-        val secondaryText = if (darkSurface) Color.rgb(169, 184, 205) else Color.rgb(89, 108, 133)
+        val primaryText = fallback.primaryText
+        val secondaryText = fallback.secondaryText
 
         return OverlayPalette(
             bubbleBackground = bubbleBackground,
             panelBackground = panelBackground,
-            rowBackground = rowBackground,
+            rowBackground = if (mode == OverlayThemeMode.SYSTEM && system != null) rowBackground else fallback.rowBackground,
             primaryText = primaryText,
             secondaryText = secondaryText,
             isDark = darkSurface,

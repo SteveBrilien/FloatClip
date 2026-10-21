@@ -93,6 +93,46 @@ class UnifiedVaultTest {
         assertTrue(restored.entries().single().locked)
     }
 
+    @Test fun localCapacityEvictsOnlyUnprotectedHistory() {
+        val store = ClipStore(context(), codec)
+        val seed = JSONArray()
+        for (id in 1L..500L) seed.put(JSONObject()
+            .put("id", id).put("text", "item-$id").put("createdAt", id).put("updatedAt", id)
+            .put("locked", id == 1L).put("pinned", id == 2L))
+        assertTrue(store.importJson(seed.toString()))
+        assertNotNull(store.addText("new copy"))
+        val items = store.entries()
+        assertEquals(500, items.size)
+        assertTrue(items.any { it.text == "item-1" && it.locked })
+        assertTrue(items.any { it.text == "item-2" && it.pinned })
+        assertFalse(items.any { it.text == "item-3" })
+    }
+
+    @Test fun fullProtectedVaultRejectsNewTextWithoutLosingData() {
+        val store = ClipStore(context(), codec)
+        val seed = JSONArray()
+        for (id in 1L..500L) seed.put(JSONObject()
+            .put("id", id).put("text", "protected-$id").put("createdAt", id).put("locked", true))
+        assertTrue(store.importJson(seed.toString()))
+        val before = store.exportJson()
+        assertNull(store.addText("overflow"))
+        assertEquals(before, store.exportJson())
+        assertNotNull(store.addText("protected-1"))
+        assertEquals(500, store.entries().size)
+        assertTrue(store.entries().all { it.locked })
+    }
+
+    @Test fun clearUnpinnedRetainsProtectedAndPinnedEntriesIndependently() {
+        val store = ClipStore(context(), codec)
+        store.toggleLocked(store.addText("locked")!!.id)
+        store.togglePinned(store.addText("pinned")!!.id)
+        store.addText("ordinary")
+        store.clearUnpinned()
+        assertEquals(setOf("locked", "pinned"), store.entries().map { it.text }.toSet())
+        store.clearAll()
+        assertEquals("locked", store.entries().single().text)
+    }
+
     @Test fun deleteUndoRetainsOriginPinAndNewlyCopiedText() {
         val store=ClipStore(context(),codec);val first=store.addText("first")!!
         store.togglePinned(first.id);val saved=store.entries().single()

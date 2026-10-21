@@ -29,8 +29,13 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
         val inferredCategory = ClipClassifier.classify(trimmed, categoryStore.categories()) ?: CategoryStore.DEFAULT_CATEGORY
         val entry = duplicate?.copy(createdAt = System.currentTimeMillis(), updatedAt = System.currentTimeMillis())
             ?: ClipEntry(id = maxOf(System.currentTimeMillis(), (current.maxOfOrNull { it.id } ?: 0L) + 1), text = trimmed, category = inferredCategory)
+        if (current.size >= MAX_ITEMS) {
+            val oldest = current.filterNot { it.pinned || it.locked }.minByOrNull { it.updatedAt }
+            if (oldest == null) return@synchronized null
+            current.remove(oldest)
+        }
         current.add(0, entry)
-        persist(current.take(MAX_ITEMS))
+        persist(current)
         entry
     }
 

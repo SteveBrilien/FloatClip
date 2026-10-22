@@ -833,9 +833,10 @@ class ClipboardOverlayService : Service() {
     }
     private fun clearHistory() {
         runCatching { store.clearAll() }.onSuccess { removed ->
+            lastDeletedEntries=emptyList();store.retainUndoImages(undoOwner,emptyList());dismissEntryActionLayer(animated=false);renderEntries()
             if(removed.isEmpty()) Toast.makeText(this,"没有可清除的普通记录；固定和置顶记录已保留",Toast.LENGTH_SHORT).show()
             else {
-                lastDeletedEntries=removed;dismissEntryActionLayer(animated=false)
+                dismissEntryActionLayer(animated=false)
                 renderSourceBar();renderCategoryBar();renderEntries();notifyHistoryChanged()
                 Toast.makeText(this,"已清除 ${removed.size} 条普通记录，固定和置顶记录已保留",Toast.LENGTH_SHORT).show()
             }

@@ -1,0 +1,26 @@
+@font-face{font-family:"FloatClip Emoji";src:url("NotoColorEmoji-Regular.ttf") format("truetype");font-weight:400}
+html,body{margin:0;width:100%;height:100%;overflow:hidden}body{background:#f5f6f8}
+#floatclip-desktop-review,#floatclip-desktop-review .dr-stage{width:100%;height:100%;padding:0;display:block}
+#floatclip-desktop-review .dr-app{width:100%;height:100%;max-width:none;border:0;border-radius:0;box-shadow:none}
+#floatclip-desktop-review .cursor-interaction{cursor:pointer}
+#floatclip-desktop-review .dr-title{user-select:none}
+#floatclip-desktop-review .dr-clip-front,#floatclip-desktop-review .dr-row-setting,#floatclip-desktop-review .dr-peer,#floatclip-desktop-review button,#floatclip-desktop-review tbody tr,#floatclip-desktop-review th{transition:background-color 90ms ease,color 90ms ease}
+#floatclip-desktop-review .dr-clip-front:hover,#floatclip-desktop-review .dr-row-setting:hover,#floatclip-desktop-review .dr-peer:hover,#floatclip-desktop-review tbody tr:hover,#floatclip-desktop-review th:hover{background:light-dark(#eceef2,#303646)}
+#floatclip-desktop-review button:hover:not(:disabled){background:light-dark(#e3e6ec,#3b4354)}
+#floatclip-desktop-review button:active:not(:disabled),#floatclip-desktop-review .dr-clip-front:active{background:var(--dr-tint)}
+#floatclip-desktop-review button:disabled{opacity:.48;cursor:default}
+#floatclip-desktop-review .dr-clip-front img{display:block;width:100%;height:150px;object-fit:contain;margin:8px 0;border-radius:6px;background:var(--dr-tint)}
+#floatclip-desktop-review .dr-emoji{font-family:"FloatClip Emoji","Segoe UI Emoji",sans-serif}
+#floatclip-desktop-review button:disabled.dr-primary{background:var(--dr-line);color:var(--dr-muted);opacity:1}
+#floatclip-desktop-review .dr-primary{background:var(--dr-accent);color:light-dark(#fff,#172033)}
+#floatclip-desktop-review .dr-primary:hover:not(:disabled){background:var(--dr-accent);filter:brightness(.94)}
+#floatclip-desktop-review .dr-table-wrap{min-height:0;flex:1;overflow:auto;background:var(--dr-surface)}
+#floatclip-desktop-review .dr-table-wrap table{min-width:700px;width:100%;table-layout:fixed}
+#floatclip-desktop-review .dr-table-wrap th:first-child{width:38%}
+#floatclip-desktop-review .dr-table-wrap th:nth-child(2){width:18%}
+#floatclip-desktop-review .dr-table-wrap th:nth-child(4){width:10%}
+#floatclip-desktop-review .dr-table-wrap th:nth-child(6){width:13%}
+#floatclip-desktop-review .dr-empty{padding:28px 16px;color:var(--dr-muted);text-align:center}
+#floatclip-desktop-review .dr-task-progress{margin-top:5px}
+#floatclip-desktop-review .dr-app:focus{outline:none}
+@media(max-width:550px){#floatclip-desktop-review .dr-stage{padding:0}#floatclip-desktop-review .dr-app{height:100%}}

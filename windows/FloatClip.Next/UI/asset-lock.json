@@ -1,0 +1,9 @@
+{
+  "downloads": [{
+    "file": "NotoColorEmoji-Regular.ttf",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/notocoloremoji/NotoColorEmoji-Regular.ttf",
+    "sha256": "4d82a18d8d95f60ba883ce242bbadbf84a576e987745dd7ba38d71c67cff2d73",
+    "license": "NOTO-OFL.txt"
+  }],
+  "lucide": {"version":"1.61.0","source":"https://unpkg.com/lucide@1.61.0/dist/umd/lucide.min.js","license":"LUCIDE-LICENSE.txt"}
+}

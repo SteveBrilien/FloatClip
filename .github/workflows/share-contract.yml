@@ -63,3 +63,5 @@ jobs:
         run: dotnet run --project windows/FloatClip.LibraryChecks/FloatClip.LibraryChecks.csproj -c Release
       - name: Compile Windows host
         run: dotnet build windows/FloatClip.Desktop/FloatClip.Desktop.csproj -c Release
+      - name: Compile desktop web shell
+        run: dotnet build windows/FloatClip.Next/FloatClip.Next.csproj -c Release

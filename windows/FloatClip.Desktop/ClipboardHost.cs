@@ -25,6 +25,9 @@ public sealed class ClipboardHost:IDisposable
     readonly string preferencesPath;
     readonly System.Windows.Forms.NotifyIcon? tray;
     LocalClipboardWindow? popup;
+    Window? externalShell;
+    Action<string>? externalNavigation;
+    public void UseExternalShell(Window window,Action<string> navigate){if(popup!=null||externalShell!=null)throw new InvalidOperationException("界面已初始化");externalShell=window;externalNavigation=navigate;}
     uint initialSequence,lastSequence;
     int hotkeyId=703;
     bool registered,disposed;
@@ -79,7 +82,7 @@ public sealed class ClipboardHost:IDisposable
         if(!AddClipboardFormatListener(messages.Handle))throw new IOException("无法监听系统剪贴板");
         registered=RegisterHotKey(messages.Handle,hotkeyId,0x4000|preferences.HotkeyModifiers,preferences.HotkeyKey);
         if(!registered)HotkeyError="快捷键已被占用，可在设置中更改";
-        using var stream=Application.GetResourceStream(new Uri("pack://application:,,,/Assets/FloatClip.ico"))!.Stream;
+        using var stream=Application.GetResourceStream(new Uri("pack://application:,,,/FloatClip;component/Assets/FloatClip.ico"))!.Stream;
         tray=new System.Windows.Forms.NotifyIcon{Text="FloatClip",Icon=new System.Drawing.Icon(stream,System.Windows.Forms.SystemInformation.SmallIconSize),Visible=true};
         var menu=new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("打开悬浮剪贴板",null,(_,_)=>ShowPopup());
@@ -99,7 +102,7 @@ public sealed class ClipboardHost:IDisposable
         if(message==ClipboardMessage)ReadClipboard();
         else if(message==HotkeyMessage&&w.ToInt32()==hotkeyId)
         {
-            if(popup?.IsVisible==true&&popup.IsActive&&!Pinned)popup.Hide();else ShowPopup();
+            var surface=externalShell??popup;if(surface?.IsVisible==true&&surface.IsActive&&!Pinned)surface.Hide();else ShowPopup();
             handled=true;
         }
         return IntPtr.Zero;
@@ -176,6 +179,7 @@ public sealed class ClipboardHost:IDisposable
     public void ShowPopup(bool activate=true)
     {
         if(disposed)return;
+        if(externalShell!=null){externalShell.Topmost=Pinned;externalShell.ShowActivated=activate;externalShell.Show();if(activate){externalShell.Activate();externalNavigation?.Invoke("clipboard");}return;}
         popup??=new LocalClipboardWindow(this,true);
         popup.Topmost=Pinned;popup.ShowActivated=activate;
         popup.Show();PlacePopup();
@@ -183,10 +187,10 @@ public sealed class ClipboardHost:IDisposable
     }
     // Legacy entry points activate the same clipboard surface.
     public void ShowLibrary()=>ShowPopup();
-    public void ShowDevices(){ShowPopup();popup?.OpenDevices();}
+    public void ShowDevices(){ShowPopup();if(externalShell!=null)externalNavigation?.Invoke("devices");else popup?.OpenDevices();}
     public void ShowSettings()
     {
-        ShowPopup();popup?.OpenSettings();
+        ShowPopup();if(externalShell!=null)externalNavigation?.Invoke("settings");else popup?.OpenSettings();
     }
     void PlacePopup()
     {
@@ -205,8 +209,8 @@ public sealed class ClipboardHost:IDisposable
     }
     public void RememberPlacement()
     {
-        if(popup==null||!Pinned)return;
-        if(GetWindowRect(new WindowInteropHelper(popup).Handle,out var r))
+        var surface=externalShell??popup;if(surface==null||!Pinned)return;
+        if(GetWindowRect(new WindowInteropHelper(surface).Handle,out var r))
         {preferences.Left=r.Left;preferences.Top=r.Top;preferences.Save(preferencesPath);}
     }
     public void SetPinned(bool pinned)
@@ -214,6 +218,7 @@ public sealed class ClipboardHost:IDisposable
         bool previous=preferences.Pinned;preferences.Pinned=pinned;
         try{preferences.Save(preferencesPath);}catch{preferences.Pinned=previous;throw;}
         if(popup!=null)popup.Topmost=pinned;
+        if(externalShell!=null)externalShell.Topmost=pinned;
         RememberPlacement();NotifyChanged();
     }
     public void SetHotkey(uint modifiers,uint key)
@@ -240,6 +245,7 @@ public sealed class ClipboardHost:IDisposable
         try{RememberPlacement();}catch{}
         disposed=true;Current=null;
         popup?.Close();
+        externalShell?.Close();
         Sync?.Dispose();if(tray!=null){tray.Visible=false;tray.Dispose();}
         Updates.Dispose();
         if(systemIntegration)RemoveClipboardFormatListener(messages.Handle);

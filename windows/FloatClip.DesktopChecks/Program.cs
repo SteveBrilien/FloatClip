@@ -213,8 +213,8 @@ static class Program
                 reloadedHost.Dispose();reloaded.Close();
             }
             Call(window,"ClearUnprotectedHistory");Check(vault.Load()["entries"]!.AsArray().Count==2,"clear keeps pinned and locked only");
-            var undo=Field<Border>(window,"undo");var undoButton=((DockPanel)undo.Child).Children.OfType<Button>().Single();undoButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(vault.Load()["entries"]!.AsArray().Count==4,"bulk clear undo restores text and image");
-            var imageAfter=vault.Load()["entries"]!.AsArray().OfType<JsonObject>().Single(c=>ClipboardVault.Kind(c)=="image");Check(vault.ReadImage(imageAfter).Length>0,"undo image blob retained");
+            var undo=Field<Border>(window,"undo");Check(undo.Visibility==Visibility.Collapsed&&Field<System.Collections.Generic.List<JsonObject>?>(window,"deleted")==null,"bulk clear has no undo action or retained deleted snapshot");
+            Call(window,"ClearUnprotectedHistory");Check(undo.Visibility==Visibility.Collapsed&&vault.Load()["entries"]!.AsArray().Count==2,"repeated empty clear keeps protected records without stale undo");vault.AddImage(png,2,2);Call(window,"Refresh",true);
             Theme("light");Snapshot(window,"clipboard-restored");
             var demonstration=vault.Load()["entries"]!.DeepClone();var capacity=vault.Load();var capacityRows=new JsonArray();
             for(int index=0;index<500;index++){var clip=(JsonObject)row.DeepClone();clip["id"]=Guid.NewGuid().ToString();clip["text"]="capacity "+index;clip["pinned"]=index<499;clip["locked"]=false;capacityRows.Add(clip);}

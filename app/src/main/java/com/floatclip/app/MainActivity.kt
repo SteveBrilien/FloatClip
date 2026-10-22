@@ -1174,10 +1174,11 @@ open class MainActivity : Activity() {
     }
     private fun clearHistory() {
         runCatching { clipStore.clearAll() }.onSuccess { removed ->
+            undoEntries=emptyList();clipStore.retainUndoImages(undoOwner,emptyList());refreshHistory();showUndo()
             if (removed.isEmpty()) {
                 Toast.makeText(this,"没有可清除的普通记录；固定和置顶记录已保留",Toast.LENGTH_SHORT).show()
             } else {
-                undoEntries=removed;refreshHistory();showUndo();notifyHistoryChanged()
+                notifyHistoryChanged()
                 Toast.makeText(this,"已清除 ${removed.size} 条普通记录，固定和置顶记录已保留",Toast.LENGTH_SHORT).show()
             }
         }.onFailure { Toast.makeText(this,"清除未完成，请保留本机数据并重试",Toast.LENGTH_LONG).show() }

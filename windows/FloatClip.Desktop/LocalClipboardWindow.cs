@@ -82,10 +82,11 @@ public sealed partial class LocalClipboardWindow:Window
             }),DispatcherPriority.Background);
             KeyDown+=(_,e)=>{if(e.Key==Key.Escape&&!e.Handled){if(currentPage!=typeof(ClipboardPage))Navigate(typeof(ClipboardPage));else if(closeSwipe!=null)closeSwipe();else if(search.Text.Length>0)search.Clear();else Hide();e.Handled=true;}};
         }
-        PreviewMouseDown+=(_,e)=>{if(e.OriginalSource is DependencyObject target&&closeSwipe!=null&&!InsideClip(target))closeSwipe();};
+        PreviewMouseDown+=(_,e)=>{if(e.OriginalSource is not DependencyObject target)return;if(closeSwipe!=null&&!InsideClip(target))closeSwipe();if(search.IsKeyboardFocusWithin&&!InsideSearch(target)){Keyboard.ClearFocus();FocusManager.SetFocusedElement(this,null);}};
         ApplyPalette();BuildHeader();BuildShell();Guard(()=>Refresh());
     }
     static bool InsideClip(DependencyObject target){for(var p=target;p!=null;p=p is Visual?VisualTreeHelper.GetParent(p):LogicalTreeHelper.GetParent(p))if(p is FrameworkElement f&&f.Tag as string=="clip")return true;return false;}
+    bool InsideSearch(DependencyObject target){for(var p=target;p!=null;p=p is Visual?VisualTreeHelper.GetParent(p):LogicalTreeHelper.GetParent(p))if(ReferenceEquals(p,search))return true;return false;}
     void HostChanged(){if(IsVisible)Guard(()=>Refresh());RenderUpdates();}
     public void FocusSearch(){Navigate(typeof(ClipboardPage));search.Focus();}
     public void OpenDevices()=>Sharing();
@@ -206,6 +207,7 @@ public sealed partial class LocalClipboardWindow:Window
         var remove=Button("删除",()=>Delete(clip));System.Windows.Automation.AutomationProperties.SetName(remove,"删除记录");System.Windows.Automation.AutomationProperties.SetAutomationId(remove,"Delete-"+id);remove.Content=ActionLabel("\uE74D","删除");remove.FontSize=13;remove.Padding=new(2);remove.Foreground=B(dark?"#FFB5C2":"#B62E48");Grid.SetColumn(remove,1);remove.Margin=new(3,0,0,0);actionGrid.Children.Add(remove);row.Children.Add(actionGrid);
         foreach(var action in new[]{protect,pin,remove}){action.HorizontalAlignment=HorizontalAlignment.Stretch;action.VerticalAlignment=VerticalAlignment.Stretch;action.Margin=new(0);action.BorderThickness=new(0);action.Background=Brushes.Transparent;((Wpf.Ui.Controls.Button)action).Appearance=Wpf.Ui.Controls.ControlAppearance.Transparent;}
         var scale=new ScaleTransform(1,1);var front=new Border{MinHeight=imageClip?208:88,CornerRadius=new(8),Background=translucent?new SolidColorBrush(mix(surface.Color,color.Color,dark ? .12 : .075)):surface,RenderTransform=scale,RenderTransformOrigin=new(.5,.5)};
+        var idleBrush=front.Background;front.MouseEnter+=(_,_)=>front.SetResourceReference(Border.BackgroundProperty,"FloatClip.Tint");front.MouseLeave+=(_,_)=>front.Background=idleBrush;
         var body=new Grid();front.Child=body;
         if(imageClip)
         {
@@ -258,10 +260,7 @@ public sealed partial class LocalClipboardWindow:Window
     void Delete(JsonObject clip){deleted=new List<JsonObject>{(JsonObject)clip.DeepClone()};Edit(clip["id"]!.GetValue<string>(),null);PruneImagesPreservingUndo();}
     void ClearUnprotectedHistory()
     {
-        var before=vault.Load()["entries"]!.AsArray().OfType<JsonObject>().Where(c=>!ClipboardVault.IsPinned(c)&&!ClipboardVault.IsLocked(c)).Select(c=>(JsonObject)c.DeepClone()).ToList();
-        if(before.Count==0){syncStatus.Text="没有可清除的普通记录；固定和置顶记录已保留";return;}
-        int removed=vault.ClearUnprotected();var current=vault.Load()["entries"]!.AsArray().OfType<JsonObject>().Select(c=>c["id"]!.GetValue<string>()).ToHashSet();
-        deleted=before.Where(c=>!current.Contains(c["id"]!.GetValue<string>())).ToList();PruneImagesPreservingUndo();
+        int removed=vault.ClearUnprotected();deleted=null;PruneImagesPreservingUndo();
         Refresh();syncStatus.Text=$"已清除 {removed} 条普通记录，固定和置顶记录已保留";
     }
     void UndoBar()

@@ -4,8 +4,14 @@
   <sys:Double x:Key="FloatClip.Space.4">4</sys:Double><sys:Double x:Key="FloatClip.Space.8">8</sys:Double><sys:Double x:Key="FloatClip.Space.12">12</sys:Double><sys:Double x:Key="FloatClip.Space.16">16</sys:Double><sys:Double x:Key="FloatClip.Space.24">24</sys:Double><sys:Double x:Key="FloatClip.Space.32">32</sys:Double>
   <CornerRadius x:Key="FloatClip.Radius.Control">4</CornerRadius><CornerRadius x:Key="FloatClip.Radius.Card">8</CornerRadius><CornerRadius x:Key="FloatClip.Radius.Dialog">12</CornerRadius><CornerRadius x:Key="FloatClip.Radius.Panel">16</CornerRadius>
   <sys:Double x:Key="FloatClip.Icon.Small">16</sys:Double><sys:Double x:Key="FloatClip.Icon.Standard">20</sys:Double><sys:Double x:Key="FloatClip.Icon.Large">24</sys:Double>
+  <sys:Double x:Key="FloatClip.Icon.File">24</sys:Double><sys:Double x:Key="FloatClip.ToolTip.MaxWidth">320</sys:Double><sys:Double x:Key="FloatClip.Device.RowHeight">72</sys:Double><sys:Double x:Key="FloatClip.Device.OptionHeight">48</sys:Double>
   <sys:Double x:Key="FloatClip.Hit.Control">32</sys:Double><sys:Double x:Key="FloatClip.Hit.Title">40</sys:Double><sys:Double x:Key="FloatClip.Row.File">48</sys:Double>
+  <sys:Double x:Key="FloatClip.Space.48">48</sys:Double>
   <Thickness x:Key="FloatClip.Padding.Control">12,4</Thickness><Thickness x:Key="FloatClip.Padding.Card">16,12</Thickness><Thickness x:Key="FloatClip.Padding.Page">16,8,16,16</Thickness>
+  <Thickness x:Key="FloatClip.Padding.ToolTip">12,8</Thickness><Thickness x:Key="FloatClip.Padding.FileRow">4,8</Thickness><Thickness x:Key="FloatClip.Padding.FileHeader">8</Thickness><Thickness x:Key="FloatClip.Padding.Menu">8,4</Thickness>
+  <Thickness x:Key="FloatClip.Padding.Popup">4</Thickness>
+  <Thickness x:Key="FloatClip.Margin.Section">0,16,0,8</Thickness><Thickness x:Key="FloatClip.Margin.Top8">0,8,0,0</Thickness><Thickness x:Key="FloatClip.Margin.Top4">0,4,0,0</Thickness><Thickness x:Key="FloatClip.Margin.End8">0,0,8,0</Thickness><Thickness x:Key="FloatClip.Margin.Bottom12">0,0,0,12</Thickness>
+  <sys:Double x:Key="FloatClip.Device.MethodWidth">184</sys:Double>
   <Duration x:Key="FloatClip.Motion.Press">0:0:0.100</Duration><Duration x:Key="FloatClip.Motion.State">0:0:0.160</Duration><Duration x:Key="FloatClip.Motion.Panel">0:0:0.240</Duration>
   <sys:Double x:Key="FloatClip.Motion.PressScale">0.985</sys:Double><sys:Double x:Key="FloatClip.Motion.HoldMilliseconds">520</sys:Double>
   <CubicEase x:Key="FloatClip.Motion.EaseOut" EasingMode="EaseOut"/><CubicEase x:Key="FloatClip.Motion.EaseInOut" EasingMode="EaseInOut"/>

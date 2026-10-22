@@ -12,24 +12,47 @@ namespace FloatClip.Share;
 public sealed record UpdateRelease(int Build,string Version,string Notes,string Url,string Sha256="",long Bytes=0);
 public static class ShareUpdates
 {
-    public const int Build=22;
-    public const string Version="0.7.7",Feed="https://raw.githubusercontent.com/SteveBrilien/FloatClip/main/updates/share-preview.json";
-    public static async Task<UpdateRelease> Check(CancellationToken cancellation=default) {
-        using var http=new HttpClient{Timeout=TimeSpan.FromSeconds(15)};
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("FloatClip-Share/"+Version);
+    public const int Build=23;
+    public const string Version="0.7.8",Feed="https://clip.wmy-cloud.cn/release.json";
+    public const string FallbackFeed="https://raw.githubusercontent.com/SteveBrilien/FloatClip/main/updates/native-updates.json";
+    sealed class SourceUnavailable(string message,Exception? inner=null):IOException(message,inner);
+    public static async Task<UpdateRelease> Check(CancellationToken cancellation=default)
+    {
+        using var http=new HttpClient(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=Timeout.InfiniteTimeSpan};
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("FloatClip-Windows/"+Version);
         return await CheckWithClient(http,cancellation);
     }
-    internal static async Task<UpdateRelease> CheckWithClient(HttpClient http,CancellationToken cancellation=default) {
-        try {
-        using var response=await http.GetAsync(Feed,HttpCompletionOption.ResponseHeadersRead,cancellation);
-        if(!response.IsSuccessStatusCode)throw new IOException("GitHub 更新源返回 HTTP "+(int)response.StatusCode+"，请稍后重试");
-        if(response.RequestMessage?.RequestUri is not Uri final||final.Scheme!="https"||final.Host!="raw.githubusercontent.com")throw new IOException("更新源跳转地址不受支持");
-        using var input=await response.Content.ReadAsStreamAsync(cancellation); using var data=new MemoryStream();
-        byte[] buffer=new byte[8192]; int n;
-        while((n=await input.ReadAsync(buffer,cancellation))!=0) { if(data.Length+n>65536) throw new IOException("更新信息过大"); data.Write(buffer,0,n); }
-        return Parse(data.ToArray());
-        }catch(OperationCanceledException e)when(!cancellation.IsCancellationRequested){throw new IOException("连接 GitHub 更新源超时，请检查网络后重试",e);}
-        catch(HttpRequestException e){throw new IOException("无法连接 GitHub 更新源，请检查网络、DNS 或证书连接后重试",e);}
+    internal static async Task<UpdateRelease> CheckWithClient(HttpClient http,CancellationToken cancellation=default,Func<byte[],byte[]>? verify=null)
+    {
+        IOException? failure=null;
+        foreach(string source in new[]{Feed,FallbackFeed})
+        {
+            byte[] content;
+            try{content=await Fetch(http,source,cancellation);}
+            catch(SourceUnavailable error){failure=error;continue;}
+            // Verification failures are never hidden by switching to another source.
+            return Parse(verify==null?UpdateManifestVerifier.Verify(content):verify(content));
+        }
+        throw new IOException("所有更新源暂不可用："+failure?.Message,failure);
+    }
+    static async Task<byte[]> Fetch(HttpClient http,string source,CancellationToken cancellation)
+    {
+        string label=source==Feed?"FloatClip 公网更新源":"GitHub 备用更新源";
+        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellation);timeout.CancelAfter(TimeSpan.FromSeconds(6));
+        try
+        {
+            using var request=new HttpRequestMessage(HttpMethod.Get,source);
+            request.Headers.CacheControl=new System.Net.Http.Headers.CacheControlHeaderValue{NoCache=true};
+            using var response=await http.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,timeout.Token);
+            if(!response.IsSuccessStatusCode)throw new SourceUnavailable(label+"返回 HTTP "+(int)response.StatusCode);
+            var expected=new Uri(source);var final=response.RequestMessage?.RequestUri;
+            if(final==null||final.Scheme!="https"||final.UserInfo.Length!=0||!final.IsDefaultPort||final.Host!=expected.Host||final.AbsolutePath!=expected.AbsolutePath)throw new IOException("更新源跳转地址不受支持");
+            using var input=await response.Content.ReadAsStreamAsync(timeout.Token);using var data=new MemoryStream();var buffer=new byte[8192];int length;
+            while((length=await input.ReadAsync(buffer,timeout.Token))!=0){if(data.Length+length>131072)throw new IOException("更新信息过大");data.Write(buffer,0,length);}
+            return data.ToArray();
+        }
+        catch(OperationCanceledException error)when(!cancellation.IsCancellationRequested){throw new SourceUnavailable(label+"连接超时",error);}
+        catch(HttpRequestException error){throw new SourceUnavailable("无法连接"+label+"，请检查网络或证书连接",error);}
     }
     public static UpdateRelease Parse(byte[] data) {
         if(data.Length>65536)throw new IOException("更新信息过大");

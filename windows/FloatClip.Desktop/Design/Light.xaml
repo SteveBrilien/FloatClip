@@ -3,7 +3,7 @@
   <SolidColorBrush x:Key="FloatClip.TextPrimary" Color="#20252E"/><SolidColorBrush x:Key="FloatClip.TextSecondary" Color="#5E6A7D"/>
   <SolidColorBrush x:Key="FloatClip.Border" Color="#DCE1E8"/><SolidColorBrush x:Key="FloatClip.Accent" Color="#366AC7"/><SolidColorBrush x:Key="FloatClip.OnAccent" Color="#FFFFFF"/>
   <SolidColorBrush x:Key="FloatClip.AccentHover" Color="#2F60B6"/><SolidColorBrush x:Key="FloatClip.AccentPressed" Color="#28549F"/><SolidColorBrush x:Key="FloatClip.OnFileIcon" Color="#FFFFFF"/>
-  <SolidColorBrush x:Key="FloatClip.Hover" Color="#ECEEF2"/><SolidColorBrush x:Key="FloatClip.Pressed" Color="#DDE2EB"/><SolidColorBrush x:Key="FloatClip.Selected" Color="#EAF1FD"/>
+  <SolidColorBrush x:Key="FloatClip.Hover" Color="#E0E4EB"/><SolidColorBrush x:Key="FloatClip.Pressed" Color="#CFD6E2"/><SolidColorBrush x:Key="FloatClip.Selected" Color="#EAF1FD"/><SolidColorBrush x:Key="FloatClip.SelectedHover" Color="#D8E5FC"/>
   <SolidColorBrush x:Key="FloatClip.DisabledText" Color="#606D80"/><SolidColorBrush x:Key="FloatClip.DisabledSurface" Color="#EDF0F4"/>
   <SolidColorBrush x:Key="FloatClip.Danger" Color="#B62E48"/><SolidColorBrush x:Key="FloatClip.Success" Color="#14755F"/>
   <SolidColorBrush x:Key="FloatClip.Source.Windows" Color="#245DCE"/><SolidColorBrush x:Key="FloatClip.Source.Android" Color="#14755F"/><SolidColorBrush x:Key="FloatClip.Source.Tablet" Color="#7650A3"/>

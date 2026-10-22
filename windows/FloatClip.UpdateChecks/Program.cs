@@ -21,7 +21,7 @@ static class Program
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token)=>send(request,token);
     }
-    static async Task Main()
+    static async Task Main(string[] args)
     {
         string root=Path.Combine(Path.GetTempPath(),"FloatClip-UpdateChecks-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
         try{
@@ -29,15 +29,43 @@ static class Program
             var release=new UpdateRelease(ShareUpdates.Build+1,"0.8.0","generated notes","https://github.com/SteveBrilien/FloatClip/releases/download/test/FloatClip.zip",hash,bytes.Length);
             byte[] Feed(string platformVersion="0.8.0")=>JsonSerializer.SerializeToUtf8Bytes(new{schema=1,channel="share-preview",version="0.7.1",notes="notes",windows=new{version=platformVersion,build=ShareUpdates.Build+1,url=release.Url,sha256=hash,bytes=bytes.Length,status="available"}});
             using(var validHttp=new HttpClient(new CheckHandler((request,_)=>Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){RequestMessage=request,Content=new ByteArrayContent(Feed())})))){
-                Check((await ShareUpdates.CheckWithClient(validHttp)).Version=="0.8.0","update response parsed through actual request path");
+                Check((await ShareUpdates.CheckWithClient(validHttp,verify:data=>data)).Version=="0.8.0","update response parsed through actual request path");
             }
             using(var unavailable=new HttpClient(new CheckHandler((request,_)=>Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable){RequestMessage=request}))))await RejectMessage(()=>ShareUpdates.CheckWithClient(unavailable),"HTTP 503");
             using(var timeout=new HttpClient(new CheckHandler((_,_)=>throw new TaskCanceledException("generated timeout"))))await RejectMessage(()=>ShareUpdates.CheckWithClient(timeout),"超时");
-            using(var network=new HttpClient(new CheckHandler((_,_)=>throw new HttpRequestException("generated network failure"))))await RejectMessage(()=>ShareUpdates.CheckWithClient(network),"无法连接 GitHub 更新源");
+            using(var network=new HttpClient(new CheckHandler((_,_)=>throw new HttpRequestException("generated network failure"))))await RejectMessage(()=>ShareUpdates.CheckWithClient(network),"无法连接GitHub 备用更新源");
             using(var cancelled=new HttpClient(new CheckHandler((_,token)=>Task.FromCanceled<HttpResponseMessage>(token)))){
                 try{await ShareUpdates.CheckWithClient(cancelled,new CancellationToken(true));throw new Exception("caller cancellation swallowed");}
                 catch(OperationCanceledException){checks++;}
             }
+            int originCalls=0;
+            using(var fallback=new HttpClient(new CheckHandler((request,_)=>{originCalls++;return Task.FromResult(new HttpResponseMessage(originCalls==1?HttpStatusCode.ServiceUnavailable:HttpStatusCode.OK){RequestMessage=request,Content=new ByteArrayContent(Feed())});})))
+                Check((await ShareUpdates.CheckWithClient(fallback,verify:data=>data)).Version=="0.8.0"&&originCalls==2,"unavailable primary falls back to GitHub");
+            int signatureCalls=0;
+            using(var tampered=new HttpClient(new CheckHandler((request,_)=>{signatureCalls++;return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){RequestMessage=request,Content=new ByteArrayContent(Encoding.UTF8.GetBytes("{}"))});}))) {
+                await Reject(()=>ShareUpdates.CheckWithClient(tampered),"missing signature rejected");Check(signatureCalls==1,"signature failure does not trigger fallback");
+            }
+            byte[] liveFixture=File.ReadAllBytes("updates/native-updates.json");
+            using var fixtureEnvelope=JsonDocument.Parse(liveFixture);string fixtureToken=fixtureEnvelope.RootElement.GetProperty("nativeUpdates").GetProperty("share-preview").GetString()!;string rawPayload=fixtureToken.Split('.')[1].Replace('-','+').Replace('_','/');using var fixturePayload=JsonDocument.Parse(Convert.FromBase64String(rawPayload.PadRight((rawPayload.Length+3)/4*4,'=')));long fixtureTime=fixturePayload.RootElement.GetProperty("issuedAt").GetInt64()+1;
+            Check(ShareUpdates.Parse(UpdateManifestVerifier.Verify(liveFixture,now:fixtureTime)).Version=="0.7.1","Python RS256 publication verifies with the compiled Windows public key");
+            await Reject(()=>Task.FromResult(UpdateManifestVerifier.Verify(liveFixture,now:DateTimeOffset.UtcNow.AddYears(2).ToUnixTimeSeconds())),"expired signature metadata rejected");
+            using(var rsa=RSA.Create(2048)) {
+                string B64(byte[] data)=>Convert.ToBase64String(data).TrimEnd('=').Replace('+','-').Replace('/','_');
+                byte[] Signed(string algorithm="RS256",string channel="share-preview",long? issued=null) {
+                    var header=B64(JsonSerializer.SerializeToUtf8Bytes(new{alg=algorithm,kid=UpdateTrust.KeyId,typ="JOSE"}));long time=issued??DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                    var payload=B64(JsonSerializer.SerializeToUtf8Bytes(new{schema=1,issuedAt=time,expiresAt=time+3600,release=JsonSerializer.Deserialize<JsonElement>(Feed())}));
+                    string input=header+"."+payload;string token=input+"."+B64(rsa.SignData(Encoding.ASCII.GetBytes(input),HashAlgorithmName.SHA256,RSASignaturePadding.Pkcs1));
+                    return JsonSerializer.SerializeToUtf8Bytes(new{nativeUpdates=new System.Collections.Generic.Dictionary<string,string>{{channel,token}}});
+                }
+                string publicKey=rsa.ExportSubjectPublicKeyInfoPem();
+                Check(ShareUpdates.Parse(UpdateManifestVerifier.Verify(Signed(),publicKey:publicKey)).Version=="0.8.0","valid signed test release accepted");
+                await Reject(()=>Task.FromResult(UpdateManifestVerifier.Verify(Signed("none"),publicKey:publicKey)),"algorithm confusion rejected");
+                await Reject(()=>Task.FromResult(UpdateManifestVerifier.Verify(Signed(issued:DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds()),publicKey:publicKey)),"future issue date rejected");
+                await Reject(()=>Task.FromResult(UpdateManifestVerifier.Verify(Signed(),publicKey:UpdateTrust.PublicKey)),"wrong signer rejected");
+                await Reject(()=>Task.FromResult(UpdateManifestVerifier.Verify(Signed(channel:"share-dev"),channel:"share-dev",publicKey:publicKey)),"channel mismatch rejected");
+            }
+            if(args.Contains("--verify-file")) {int position=Array.IndexOf(args,"--verify-file");Check(ShareUpdates.Parse(UpdateManifestVerifier.Verify(File.ReadAllBytes(args[position+1]))).Build>0,"prepared public metadata verifies before upload");}
+            if(args.Contains("--live")) {var verified=await ShareUpdates.Check();Console.WriteLine("LIVE verified publication: "+verified.Version+" / "+verified.Build);}
             Check(ShareUpdates.Parse(Feed()).Version=="0.8.0","Windows version overrides another platform's train version");
             Check(ShareUpdates.Compare(release)>0&&ShareUpdates.Compare(release with {Build=ShareUpdates.Build,Version=ShareUpdates.Version})==0,"new and same builds distinguished");
             Check(ShareUpdates.Compare(release with {Build=14,Version="0.7.1"})<0,"older public feed never downgrades preview");

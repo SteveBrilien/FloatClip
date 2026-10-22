@@ -1212,11 +1212,12 @@ open class MainActivity : Activity() {
                 if(isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess { release ->
                     val build=packageManager.getPackageInfo(packageName,0).longVersionCode
-                    val newer=release.build>build
+                    val versionOrder=com.floatclip.probe.ShareUpdates.compareVersion(release.version,versionName())
+                    val newer=release.build>build && versionOrder>=0
                     FloatDialog.show(
                         this,
                         if(newer) "发现 ${release.version}" else "当前版本 ${versionName()}",
-                        if(newer) release.notes else "已是"+selectedChannel.label+"通道最新版本（build $build）",
+                        if(newer) release.notes else if(versionOrder<0 || release.build<build) "当前为试用版本；"+selectedChannel.label+"通道已发布版本为 "+release.version else "已是"+selectedChannel.label+"通道最新版本（build $build）",
                         negative="关闭",
                         positive=if(newer) "下载" else null,
                         onPositive=if(newer) { { _ ->

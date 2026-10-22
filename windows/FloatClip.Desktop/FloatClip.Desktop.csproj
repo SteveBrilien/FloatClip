@@ -5,11 +5,14 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>Assets/FloatClip.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- WPF owns process DPI through the manifest; WinForms is used only for the tray. -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>FloatClip</AssemblyName>
-    <Version>0.7.7</Version>
+    <Version>0.7.8</Version>
   </PropertyGroup>
   <ItemGroup><Resource Include="Assets/FloatClip.ico" /></ItemGroup>
   <ItemGroup><PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" /><PackageReference Include="Emoji.Wpf" Version="0.3.4" /><PackageReference Include="WPF-UI" Version="4.3.0" /><PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" /></ItemGroup>

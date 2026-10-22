@@ -17,17 +17,14 @@ using System.Windows.Media;
 using Microsoft.Win32;
 using FloatClip.Share;
 using FloatClip.Desktop.Design;
+using FloatClip.Desktop.Services;
 
 namespace FloatClip.Desktop;
 
 public sealed class FileShelfRow
 {
     public string Name{get;init;}="";
-    public ImageSource ShellIcon=>ShellFileIcons.For(Name);
-    public Brush TypeBrush=>DesignTokens.Brush("File."+(Extension switch{"PDF"=>"Pdf","DOC" or "DOCX"=>"Word","XLS" or "XLSX" or "CSV"=>"Excel","PPT" or "PPTX"=>"Presentation","PNG" or "JPG" or "JPEG" or "WEBP"=>"Image","ZIP" or "7Z" or "RAR"=>"Archive",_=>"Default"}));
-    public Brush IconBackground=>HasLocalFile?TypeBrush:Brushes.Transparent;
-    public Brush IconForeground=>HasLocalFile?DesignTokens.Brush("OnFileIcon"):TypeBrush;
-    public string IconLabel=>Type switch{"Word"=>"W","Excel"=>"X","PowerPoint"=>"P","PDF"=>"P","图片"=>"\uE91B","文件"=>"\uE8A5",_=>Extension.Length<=3?Extension:"FILE"};
+    public ImageSource ShellIcon=>ShellFileIcons.For(HasLocalFile&&Path.Length>0?Path:Name);
     public string Extension{get;init;}="";
     public string Modified{get;init;}="—";
     public string Type{get;init;}="文件";
@@ -115,7 +112,7 @@ public sealed class FileShelfView:UserControl,IDisposable
         localList.PreviewMouseRightButtonDown+=(_,e)=>{if(e.OriginalSource is DependencyObject target){var item=ItemsControl.ContainerFromElement(localList,target) as ListViewItem;if(item!=null){item.IsSelected=true;item.Focus();}}};
         var localMenu=new ContextMenu();localMenu.SetResourceReference(Control.BackgroundProperty,"FloatClip.Surface");localMenu.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");
         void MenuItem(string label,Action action){var item=new System.Windows.Controls.MenuItem{Header=label};item.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");item.Click+=(_,_)=>Run(action);localMenu.Items.Add(item);}
-        MenuItem("下载 / 另存为",()=>_=DownloadSelected());MenuItem("打开 / 预览",OpenSelectedLocal);MenuItem("保留 / 取消保留",KeepSelected);MenuItem("在资源管理器中显示",RevealSelectedLocal);MenuItem("清理下载缓存",()=>ClearFiles(false));MenuItem("从文件清单移除",RemoveLocal);localList.ContextMenu=localMenu;
+        MenuItem("下载 / 另存为",()=>_=DownloadSelected());MenuItem("预览",OpenSelectedLocal);MenuItem("保留 / 取消保留",KeepSelected);MenuItem("在资源管理器中显示",RevealSelectedLocal);MenuItem("清理下载缓存",()=>ClearFiles(false));MenuItem("从文件清单移除",RemoveLocal);localList.ContextMenu=localMenu;
         localPanel.Children.Add(localList);
         body.Children.Add(localPanel);
 
@@ -197,12 +194,11 @@ public sealed class FileShelfView:UserControl,IDisposable
  <Grid VerticalAlignment="Center">
   <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="40"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
   <CheckBox IsChecked="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListViewItem}, Mode=TwoWay}" VerticalAlignment="Center" Focusable="False" ToolTip="选择文件" Width="20" MinWidth="0" Padding="0" Margin="0"/>
-  <Grid Grid.Column="1" Width="28" Height="34" HorizontalAlignment="Left">
-   <Border Background="{Binding IconBackground}" CornerRadius="{DynamicResource FloatClip.Radius.Control}"/>
-   <Rectangle RadiusX="4" RadiusY="4" Margin="0.5" Stroke="{DynamicResource FloatClip.Accent}" StrokeThickness="1.3" StrokeDashArray="3,2">
+  <Grid Grid.Column="1" Width="32" Height="32" HorizontalAlignment="Left">
+   <Image Source="{Binding ShellIcon}" Width="{DynamicResource FloatClip.Icon.File}" Height="{DynamicResource FloatClip.Icon.File}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
+   <Rectangle RadiusX="{DynamicResource FloatClip.Space.4}" RadiusY="{DynamicResource FloatClip.Space.4}" Stroke="{DynamicResource FloatClip.TextSecondary}" StrokeThickness="1" StrokeDashArray="3,2">
     <Rectangle.Style><Style TargetType="Rectangle"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding HasLocalFile}" Value="False"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Rectangle.Style>
    </Rectangle>
-   <TextBlock Text="{Binding IconLabel}" FontSize="11" FontWeight="Medium" VerticalAlignment="Center" HorizontalAlignment="Center"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource FloatClip.OnFileIcon}"/><Style.Triggers><DataTrigger Binding="{Binding HasLocalFile}" Value="False"><Setter Property="Foreground" Value="{DynamicResource FloatClip.Accent}"/></DataTrigger><DataTrigger Binding="{Binding Type}" Value="图片"><Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/></DataTrigger><DataTrigger Binding="{Binding Type}" Value="文件"><Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
   </Grid>
   <TextBlock Grid.Column="2" Text="{Binding Name}" Foreground="{DynamicResource FloatClip.Text}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip="{Binding Subtext}"/>
  </Grid>
@@ -210,10 +206,7 @@ public sealed class FileShelfView:UserControl,IDisposable
 """;
         return (DataTemplate)XamlReader.Parse(xaml);
     }
-    static string FormatSize(long size)
-    {
-        if(size<1024)return size+" B";if(size<1024*1024)return (size/1024d).ToString("0.#")+" KiB";return (size/(1024d*1024)).ToString("0.##")+" MiB";
-    }
+    static string FormatSize(long size)=>FileSizeFormatter.Format(size);
     static (string Extension,string Type) FileType(string name)
     {
         string ext=System.IO.Path.GetExtension(name).TrimStart('.').ToUpperInvariant();
@@ -282,14 +275,14 @@ public sealed class FileShelfView:UserControl,IDisposable
     void RefreshActions()
     {
         var local=localList.SelectedItem as FileShelfRow;removeLocal.IsEnabled=local!=null;
-        downloadCommand.IsEnabled=localList.SelectedItems.Count>0;previewCommand.IsEnabled=localList.SelectedItems.Count==1;saveCommand.IsEnabled=localList.SelectedItems.Count>0;forwardCommand.IsEnabled=localList.SelectedItems.Count==1&&local?.IsAvailable==true;propertiesCommand.IsEnabled=localList.SelectedItems.Count==1;
+        downloadCommand.IsEnabled=localList.SelectedItems.Count>0;previewCommand.IsEnabled=localList.SelectedItems.Count==1&&local?.IsAvailable==true&&FilePreviewWindow.CanPreview(local.Path);saveCommand.IsEnabled=localList.SelectedItems.Count>0;forwardCommand.IsEnabled=localList.SelectedItems.Count==1&&local?.IsAvailable==true;propertiesCommand.IsEnabled=localList.SelectedItems.Count==1;
         sendFile.IsEnabled=local?.IsAvailable==true&&sync!=null&&peers.SelectedItem is FilePeer peer&&peer.Key.Length>0;
         var row=transferList.SelectedItem as FileShelfRow;var phase=row?.Phase;
         bool offered=phase==TransferPhase.Offered,active=phase is TransferPhase.Preparing or TransferPhase.Transferring;
         bool received=phase==TransferPhase.Completed&&row is{Outgoing:false,Path.Length:>0}&&File.Exists(row.Path);
         bool open=row!=null&&row.Path.Length>0&&File.Exists(row.Path);
         void Show(Button button,bool visible){button.Visibility=visible?Visibility.Visible:Visibility.Collapsed;button.IsEnabled=visible;}
-        Show(accept,offered);Show(decline,offered);Show(cancel,active);Show(saveAs,received);Show(forget,received);Show(openFile,open);
+        Show(accept,offered);Show(decline,offered);Show(cancel,active);Show(saveAs,received);Show(forget,received);Show(openFile,open&&row!=null&&FilePreviewWindow.CanPreview(row.Path));
     }
     void AddFiles()
     {
@@ -338,6 +331,7 @@ public sealed class FileShelfView:UserControl,IDisposable
     void OpenSelectedLocal()
     {
         if(localList.SelectedItem is not FileShelfRow row)return;if(!row.IsAvailable){status.Text="文件尚未下载，请先点击下载 / 另存为。";return;}
+        if(!FilePreviewWindow.CanPreview(row.Path)){status.Text="此类型暂不支持内嵌预览，可在资源管理器中打开。";return;}
         var preview=new FilePreviewWindow(row.Path){Owner=Window.GetWindow(this)};preview.Show();
     }
     async Task SaveLocalAs()
@@ -362,7 +356,7 @@ public sealed class FileShelfView:UserControl,IDisposable
         if(localList.SelectedItem is not FileShelfRow row)return;
         var window=new Window{Title="属性",Width=460,Height=360,MinWidth=340,MinHeight=280,Owner=Window.GetWindow(this),WindowStartupLocation=WindowStartupLocation.CenterOwner};window.SetResourceReference(Window.BackgroundProperty,"FloatClip.Background");window.SetResourceReference(Window.ForegroundProperty,"FloatClip.Text");
         var panel=new Grid{Margin=new Thickness(20)};panel.ColumnDefinitions.Add(new(){Width=new GridLength(86)});panel.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
-        var values=new[]{("名称",row.Name),("类型",row.Type),("大小",row.SizeBytes.ToString("N0")+" 字节"),("修改时间",row.Modified),("来源",row.Source),("本机状态",row.Status),("位置",row.Path)};
+        var values=new[]{("名称",row.Name),("类型",row.Type),("大小",FileSizeFormatter.Format(row.SizeBytes)),("修改时间",row.Modified),("来源",row.Source),("本机状态",row.Status),("位置",row.Path)};
         for(int index=0;index<values.Length;index++){panel.RowDefinitions.Add(new(){Height=GridLength.Auto});var label=new TextBlock{Text=values[index].Item1,Margin=new Thickness(0,0,10,14)};var value=new TextBlock{Text=values[index].Item2,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,14)};Grid.SetRow(label,index);Grid.SetRow(value,index);Grid.SetColumn(value,1);panel.Children.Add(label);panel.Children.Add(value);}window.Content=new ScrollViewer{Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};window.Show();
     }
     void RevealSelectedLocal()
@@ -373,7 +367,7 @@ public sealed class FileShelfView:UserControl,IDisposable
     }
     void OpenSelectedTransfer()
     {
-        if(transferList.SelectedItem is FileShelfRow row&&row.Path.Length>0&&File.Exists(row.Path))OpenPath(row.Path);
+        if(transferList.SelectedItem is FileShelfRow row&&row.Path.Length>0&&File.Exists(row.Path)&&FilePreviewWindow.CanPreview(row.Path))new FilePreviewWindow(row.Path){Owner=Window.GetWindow(this)}.Show();
     }
     void OpenPath(string path)
     {

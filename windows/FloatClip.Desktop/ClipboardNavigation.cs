@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Wpf.Ui.Controls;
+using FloatClip.Desktop.Design;
 
 namespace FloatClip.Desktop;
 
@@ -27,7 +28,7 @@ public sealed partial class LocalClipboardWindow
     void BuildShell()
     {
         shell.SetResourceReference(Panel.BackgroundProperty,"FloatClip.Background");
-        var titleBar=new DockPanel{Height=38,Margin=new(0,2,8,0),LastChildFill=true,Background=Brushes.Transparent};
+        var titleBar=new DockPanel{Height=DesignTokens.Number("Hit.Title"),Margin=new(0,2,8,0),LastChildFill=true,Background=Brushes.Transparent};
         System.Windows.Automation.AutomationProperties.SetAutomationId(titleBar,"WindowDragRegion");
         titleBar.MouseLeftButtonDown+=(_,e)=>{
             for(var p=e.OriginalSource as DependencyObject;p!=null&&p!=titleBar;p=p is Visual?VisualTreeHelper.GetParent(p):LogicalTreeHelper.GetParent(p))if(p is System.Windows.Controls.Primitives.ButtonBase)return;
@@ -72,7 +73,7 @@ public sealed partial class LocalClipboardWindow
         var grid=new Grid();grid.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});grid.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
         var labels=new StackPanel{VerticalAlignment=VerticalAlignment.Center};labels.Children.Add(new System.Windows.Controls.TextBlock{Text=title,FontSize=14,TextWrapping=TextWrapping.Wrap});if(detail.Length>0){var hint=MutedLabel(detail,new(0,4,0,0));hint.FontSize=12;labels.Children.Add(hint);}grid.Children.Add(labels);
         control.VerticalAlignment=VerticalAlignment.Center;control.Margin=new(16,0,0,0);Grid.SetColumn(control,1);grid.Children.Add(control);
-        var row=new Border{Child=grid,Padding=new(14,12,14,12),CornerRadius=new(7),BorderThickness=new(1),Margin=new(0,0,0,4)};row.SetResourceReference(Border.BackgroundProperty,"FloatClip.Surface");row.SetResourceReference(Border.BorderBrushProperty,"FloatClip.Line");return row;
+        var row=new Border{Child=grid,Padding=(Thickness)Application.Current.FindResource("FloatClip.Padding.Card"),CornerRadius=DesignTokens.Radius("Card"),BorderThickness=new(1),Margin=new(0,0,0,4)};row.SetResourceReference(Border.BackgroundProperty,"FloatClip.Surface");row.SetResourceReference(Border.BorderBrushProperty,"FloatClip.Line");DesignTokens.Hover(row);return row;
     }
     FrameworkElement ToggleSetting(string title,string detail,bool selected,Action<bool> change,string id="")
     {

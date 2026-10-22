@@ -20,6 +20,14 @@ public sealed class ClipboardHost:IDisposable
     readonly string root;
     readonly bool systemIntegration;
     public string PreferencesRoot=>root;
+    public bool IsIsolated=>!systemIntegration;
+    public int UiFailureCount{get;private set;}
+    public void ReportUiFailure(Exception error)
+    {
+        UiFailureCount++;
+        try{File.AppendAllText(Path.Combine(root,"ui-errors.log"),DateTimeOffset.UtcNow.ToString("O")+Environment.NewLine+error+Environment.NewLine);}
+        catch{} // Reporting must not hide the original failure or touch the clipboard vault.
+    }
     readonly HwndSource messages;
     readonly DesktopShellPreferences preferences;
     readonly string preferencesPath;

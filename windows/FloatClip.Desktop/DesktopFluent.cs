@@ -12,7 +12,10 @@ public static class DesktopFluent
     {
         resources.MergedDictionaries.Add(new ThemesDictionary{Theme=ApplicationTheme.Light});
         resources.MergedDictionaries.Add(new ControlsDictionary());
+        resources.MergedDictionaries.Add(new ResourceDictionary{Source=new Uri("pack://application:,,,/FloatClip;component/Design/Tokens.xaml")});
+        Design.DesignTheme.Apply("system");
         resources.MergedDictionaries.Add(new ResourceDictionary{Source=new Uri("pack://application:,,,/FloatClip;component/DesktopControls.xaml")});
+        resources.MergedDictionaries.Add(new ResourceDictionary{Source=new Uri("pack://application:,,,/FloatClip;component/Design/Components.xaml")});
     }
     public static void Apply(bool dark,Brush background,Brush surface,Brush text,Brush muted,Brush line,Brush tint,SolidColorBrush accent)
     {

@@ -23,7 +23,7 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.LEGACY)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 class ClipboardScreenTest {
-    @Test fun bulkClearButtonPreservesProtectionAndUndoKeepsNewCopies() {
+    @Test fun bulkClearButtonPreservesProtectionWithoutUndo() {
         val controller=Robolectric.buildActivity(UnifiedActivity::class.java).setup()
         val activity=controller.get()
         val codec=object:VaultCipher {
@@ -41,8 +41,8 @@ class ClipboardScreenTest {
             activity.findViewById<View>(R.id.clipboard_clear).performClick()
             assertEquals(setOf("fixed","pinned"),ClipStore(activity,codec).entries().map { it.text }.toSet())
             store.addText("new after clear")
-            activity.findViewById<View>(R.id.clipboard_undo).performClick()
-            assertEquals(setOf("fixed","pinned","ordinary one","ordinary two","new after clear"),store.entries().map { it.text }.toSet())
+            assertTrue(activity.findViewById<View>(R.id.clipboard_undo)?.isShown!=true)
+            assertEquals(setOf("fixed","pinned","new after clear"),ClipStore(activity,codec).entries().map { it.text }.toSet())
             assertTrue(store.entries().first { it.text=="fixed" }.locked)
             assertTrue(store.entries().first { it.text=="pinned" }.pinned)
         } finally { controller.pause().stop().destroy() }

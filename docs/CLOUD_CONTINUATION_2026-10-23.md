@@ -1,6 +1,6 @@
 # FloatClip 云端续接资料
 
-从 GitHub 本轮 `codex/windows-ui-sync-20261023` 分支继续。最新产品状态先读 `WINDOWS_0.7.7_REVIEW_2026-10-23.md` 和 `CANDIDATE_0.7.6_2026-10-23.md`；后者保留上一批双端候选的边界，Windows 已在本轮修订为 0.7.7 / build 22，Android 仍为 0.7.6 / build 21。
+从本轮 `codex/wpf-design-system-077` 分支继续。先读根 AGENTS.md、`design/FLOATCLIP_WINDOWS_DESIGN_SYSTEM.md`、`design/CHANGELOG.md`、`WINDOWS_WPF_DESIGN_077_2026-10-23.md`；保留 WPF + XAML。WebView2 实验另存分支，不作为当前路线。Windows 和 Android 开发候选均为 0.7.7 / build 22；手机无撤销修订见 `CANDIDATE_ANDROID_0.7.7_2026-10-23.md`。旧候选记录仅作历史证据。
 
 ## 用户已确认的方向
 

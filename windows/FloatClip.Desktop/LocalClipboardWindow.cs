@@ -16,6 +16,10 @@ using System.Windows.Threading;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using FloatClip.Share;
+using FloatClip.Desktop.Design;
+using FloatClip.Desktop.Services;
+using FloatClip.Desktop.ViewModels;
+using FloatClip.Desktop.Views;
 
 namespace FloatClip.Desktop;
 
@@ -30,29 +34,35 @@ public sealed partial class LocalClipboardWindow:Window
     readonly TextBlock syncStatus=new();
     bool capture{get=>host.Capture;set=>host.Capture=value;}
     string prefsRoot=>host.PreferencesRoot;
-    readonly StackPanel list=new(),header=new();readonly WrapPanel sources=new();readonly TextBox search=new();readonly TextBlock searchHint=new();
+    readonly StackPanel list=new(),header=new();readonly WrapPanel sources=new();readonly TextBox search;readonly TextBlock searchHint;
+    readonly ClipboardSearchView searchView;readonly ClipboardPanelViewModel viewModel;readonly DesignPreferences designPreferences;
     readonly DockPanel root=new();readonly Border undo=new();
     readonly Dictionary<string,Window> auxiliaryWindows=new();
     readonly DispatcherTimer searchTimer=new(){Interval=TimeSpan.FromMilliseconds(120)};
     SolidColorBrush surface=Brushes.White,text=Brushes.Black,muted=Brushes.Gray,line=Brushes.Gray,tint=Brushes.LightBlue,accent=Brushes.Blue;
     string mode="system",source="",kindFilter="";bool dark,sourceColors=true,translucent,rendering;
     List<JsonObject>? deleted;Action? closeSwipe;
-    static SolidColorBrush B(string c)=>new((Color)ColorConverter.ConvertFromString(c));
     public LocalClipboardWindow(ClipboardHost host,bool floating)
     {
         this.host=host;this.floating=floating;
+        designPreferences=DesignPreferences.Load(prefsRoot);
+        viewModel=new ClipboardPanelViewModel(new ClipboardLibraryService(host.Vault));
+        viewModel.OperationFailed+=error=>{host.ReportUiFailure(error);if(host.IsIsolated)System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();};
+        searchView=new ClipboardSearchView{DataContext=viewModel};search=searchView.InputControl;searchHint=searchView.Hint;
+        viewModel.HistoryChanged+=()=>{deleted=null;Refresh();};
+        Opacity=SystemParameters.HighContrast?1:designPreferences.WindowOpacity;
         Title=floating?"FloatClip · 悬浮剪贴板":"FloatClip · 管理剪贴板";
         Width=floating?520:760;Height=floating?650:760;MinWidth=420;MinHeight=420;
         ShowInTaskbar=!floating;
         if(floating){WindowStyle=WindowStyle.None;ResizeMode=ResizeMode.CanResize;ShowActivated=true;}
         UseLayoutRounding=true;SnapsToDevicePixels=true;
-        WindowStartupLocation=WindowStartupLocation.CenterScreen;FontFamily=new FontFamily("Segoe UI Variable, Segoe UI, Microsoft YaHei UI");FontSize=14;
+        WindowStartupLocation=WindowStartupLocation.CenterScreen;SetResourceReference(FontFamilyProperty,"FloatClip.FontFamily");SetResourceReference(FontSizeProperty,"FloatClip.Font.Body");
         Directory.CreateDirectory(prefsRoot);
         try{mode=File.ReadAllText(Path.Combine(prefsRoot,"theme.txt")).Trim();}catch{}
         try{var p=JsonNode.Parse(File.ReadAllText(Path.Combine(prefsRoot,"clipboard-ui.json")))!;sourceColors=p["sourceColors"]?.GetValue<bool>()??true;translucent=p["translucent"]?.GetValue<bool>()??false;capture=p["capture"]?.GetValue<bool>()??true;clipFontSize=Math.Clamp(p["clipFontSize"]?.GetValue<double>()??14,12,18);cardSpacing=Math.Clamp(p["cardSpacing"]?.GetValue<double>()??8,4,18);panelWidth=Math.Clamp(p["panelWidth"]?.GetValue<double>()??520,420,900);expandedNavigation=p["expandedNavigation"]?.GetValue<bool>()??false;}catch{}
         Width=panelWidth;
         try{var decoder=BitmapDecoder.Create(new Uri("pack://application:,,,/Assets/FloatClip.ico"),BitmapCreateOptions.PreservePixelFormat,BitmapCacheOption.OnLoad);Icon=decoder.Frames.OrderByDescending(frame=>frame.PixelWidth).First();}catch{}
-        root.Margin=floating?new(14,10,14,12):new(20,8,20,18);
+        root.Margin=(Thickness)Application.Current.FindResource("FloatClip.Padding.Page");
         if(floating) {
             var border=new Border{Child=root};
             border.SetBinding(Border.BackgroundProperty,new System.Windows.Data.Binding("Background"){Source=this});
@@ -82,10 +92,11 @@ public sealed partial class LocalClipboardWindow:Window
             }),DispatcherPriority.Background);
             KeyDown+=(_,e)=>{if(e.Key==Key.Escape&&!e.Handled){if(currentPage!=typeof(ClipboardPage))Navigate(typeof(ClipboardPage));else if(closeSwipe!=null)closeSwipe();else if(search.Text.Length>0)search.Clear();else Hide();e.Handled=true;}};
         }
-        PreviewMouseDown+=(_,e)=>{if(e.OriginalSource is DependencyObject target&&closeSwipe!=null&&!InsideClip(target))closeSwipe();};
+        PreviewMouseDown+=(_,e)=>{if(e.OriginalSource is not DependencyObject target)return;if(closeSwipe!=null&&!InsideClip(target))closeSwipe();if(search.IsKeyboardFocusWithin&&!InsideSearch(target)){Keyboard.ClearFocus();FocusManager.SetFocusedElement(this,null);}};
         ApplyPalette();BuildHeader();BuildShell();Guard(()=>Refresh());
     }
     static bool InsideClip(DependencyObject target){for(var p=target;p!=null;p=p is Visual?VisualTreeHelper.GetParent(p):LogicalTreeHelper.GetParent(p))if(p is FrameworkElement f&&f.Tag as string=="clip")return true;return false;}
+    bool InsideSearch(DependencyObject target){for(var p=target;p!=null;p=p is Visual?VisualTreeHelper.GetParent(p):LogicalTreeHelper.GetParent(p))if(ReferenceEquals(p,search))return true;return false;}
     void HostChanged(){if(IsVisible)Guard(()=>Refresh());RenderUpdates();}
     public void FocusSearch(){Navigate(typeof(ClipboardPage));search.Focus();}
     public void OpenDevices()=>Sharing();
@@ -115,48 +126,40 @@ public sealed partial class LocalClipboardWindow:Window
     void UpdateSystemTheme(){if(mode=="system"&&dark!=SystemIsDark()){ApplyPalette();BuildHeader();Refresh();}}
     void ApplyPalette()
     {
-        bool tokyo=mode=="tokyo-night";
-        dark=tokyo||mode=="dark"||mode=="system"&&SystemIsDark();
-        Background=B(tokyo?"#1A1B26":dark?"#181B20":"#F5F6F8");surface=B(tokyo?"#24283B":dark?"#24282F":"#FFFFFF");text=B(tokyo?"#E4E9FF":dark?"#EEF1F6":"#20252E");muted=B(tokyo?"#BBC4E5":dark?"#BDC6D6":"#5E6A7D");line=B(tokyo?"#414868":dark?"#3A424E":"#E4E8EE");tint=B(tokyo?"#283457":dark?"#293A52":"#EAF1FD");accent=B(tokyo?"#7AA2F7":dark?"#91BBFF":"#366AC7");Foreground=text;syncStatus.Foreground=muted;
-        var resources=Application.Current.Resources;
-        var background=B(tokyo?"#1A1B26":dark?"#181B20":"#F5F6F8");
-        DesktopFluent.Apply(dark,background,surface,text,muted,line,tint,accent);Background=background;Foreground=text;
-        resources["FloatClip.Background"]=Background;resources["FloatClip.Surface"]=surface;resources["FloatClip.Text"]=text;resources["FloatClip.Muted"]=muted;
-        resources["FloatClip.Line"]=line;resources["FloatClip.Tint"]=tint;resources["FloatClip.Accent"]=accent;
-        resources["FloatClip.OnAccent"]=dark?B("#172033"):Brushes.White;
+        dark=DesignTheme.Apply(mode);Background=DesignTokens.Brush("Background");surface=DesignTokens.Brush("Surface");text=DesignTokens.Brush("TextPrimary");muted=DesignTokens.Brush("TextSecondary");line=DesignTokens.Brush("Border");tint=DesignTokens.Brush("Selected");accent=DesignTokens.Brush("Accent");Foreground=text;syncStatus.Foreground=muted;
         WindowAppearance.Theme(this,dark);foreach(var window in auxiliaryWindows.Values)WindowAppearance.Theme(window,dark);
-        search.Style=(Style)Application.Current.FindResource("ClipboardSearchInput");search.Background=Brushes.Transparent;search.Foreground=text;search.CaretBrush=text;search.SelectionBrush=accent;search.BorderThickness=new(0);search.Padding=new(0);search.FontSize=13;search.FontFamily=new FontFamily("Segoe UI");search.MinHeight=32;search.VerticalContentAlignment=VerticalAlignment.Center;
     }
     FrameworkElement Glyph(string code,int size=18){var glyph=new TextBlock{Text=code,Tag="glyph",FontFamily=new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),FontSize=size,VerticalAlignment=VerticalAlignment.Center,HorizontalAlignment=HorizontalAlignment.Center};glyph.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Muted");return glyph;}
     Button IconButton(string code,string label,Action action)
     {
-        var button=Button("",action);((Wpf.Ui.Controls.Button)button).Appearance=Wpf.Ui.Controls.ControlAppearance.Transparent;button.Content=Glyph(code,16);button.Tag="icon";button.Width=30;button.Height=30;button.MinHeight=30;button.Padding=new(6);button.Margin=new(0);button.Background=Brushes.Transparent;button.BorderThickness=new(0);button.ToolTip=label;
+        var button=Button("",action);((Wpf.Ui.Controls.Button)button).Appearance=Wpf.Ui.Controls.ControlAppearance.Transparent;button.Content=Glyph(code,16);button.Tag="icon";button.Width=30;button.Height=30;button.MinHeight=30;button.Padding=new(6);button.Margin=new(0);DesignTokens.Button(button,"Toolbar");button.BorderThickness=new(0);button.ToolTip=label;button.Width=DesignTokens.Number("Hit.Control");button.Height=DesignTokens.Number("Hit.Control");button.MinHeight=DesignTokens.Number("Hit.Control");
         System.Windows.Automation.AutomationProperties.SetName(button,label);return button;
     }
-    Button Button(string label,Action action){var b=new Wpf.Ui.Controls.Button{Content=label,Padding=new(12,5,12,5),Margin=new(0,0,8,0),MinHeight=32,HorizontalAlignment=HorizontalAlignment.Left};b.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");b.Click+=(_,_)=>Guard(action);return b;}
+    Button Button(string label,Action action){var b=new Wpf.Ui.Controls.Button{Content=label,Margin=new(0,0,DesignTokens.Number("Space.8"),0),HorizontalAlignment=HorizontalAlignment.Left};DesignTokens.Button(b);b.Click+=(_,_)=>Guard(action);return b;}
     void BuildHeader()
     {
         header.Children.Clear();
-        var heading=new TextBlock{Text="剪贴板",FontSize=21,FontWeight=FontWeights.Medium,Margin=new(0,0,0,12)};header.Children.Add(heading);
-        var field=new DockPanel{LastChildFill=true};var clear=IconButton("\uE711","清空搜索",()=>{search.Clear();search.Focus();});DockPanel.SetDock(clear,Dock.Right);field.Children.Add(clear);
-        var glass=new Border{Width=30,Child=Glyph("\uE721",16)};DockPanel.SetDock(glass,Dock.Left);field.Children.Add(glass);
-        if(search.Parent is Panel old)old.Children.Remove(search);
-        if(searchHint.Parent is Panel previous)previous.Children.Remove(searchHint);searchHint.Text="搜索剪贴板";searchHint.Foreground=muted;searchHint.VerticalAlignment=VerticalAlignment.Center;searchHint.IsHitTestVisible=false;searchHint.FontSize=13;var input=new Grid();input.Children.Add(search);input.Children.Add(searchHint);searchHint.Visibility=search.Text.Length==0?Visibility.Visible:Visibility.Hidden;
-        field.Children.Add(input);var searchBorder=new Border{Background=surface,CornerRadius=new(6),BorderThickness=new(1),Child=field,Height=34};
-        var searchBorderStyle=new Style(typeof(Border));searchBorderStyle.Setters.Add(new Setter(Border.BorderBrushProperty,line));var focus=new Trigger{Property=IsKeyboardFocusWithinProperty,Value=true};focus.Setters.Add(new Setter(Border.BorderBrushProperty,accent));searchBorderStyle.Triggers.Add(focus);searchBorder.Style=searchBorderStyle;header.Children.Add(searchBorder);
+        var heading=new TextBlock{Text="剪贴板",FontSize=DesignTokens.Number("Font.Title"),FontWeight=FontWeights.Medium,Margin=new(0,0,0,12)};header.Children.Add(heading);
+        if(searchView.Parent is Panel oldParent)oldParent.Children.Remove(searchView);header.Children.Add(searchView);
         var filterBar=new DockPanel{LastChildFill=true,Margin=new(0,10,0,10)};
-        var clearAll=Button("全部清除",ClearUnprotectedHistory);System.Windows.Automation.AutomationProperties.SetAutomationId(clearAll,"ClearUnprotected");clearAll.MinHeight=28;clearAll.Padding=new(8,3,8,3);clearAll.FontSize=12;clearAll.Margin=new(6,0,0,0);clearAll.Background=Brushes.Transparent;clearAll.Foreground=muted;clearAll.ToolTip="清除普通记录；固定和置顶记录会保留";DockPanel.SetDock(clearAll,Dock.Right);filterBar.Children.Add(clearAll);
+        var clearAll=Button("全部清除",ClearUnprotectedHistory);System.Windows.Automation.AutomationProperties.SetAutomationId(clearAll,"ClearUnprotected");clearAll.Margin=new(DesignTokens.Number("Space.4"),0,0,0);DesignTokens.Button(clearAll,"Toolbar");clearAll.ToolTip="清除普通记录；固定和置顶记录会保留";DockPanel.SetDock(clearAll,Dock.Right);filterBar.Children.Add(clearAll);
         sources.Margin=new(0);if(sources.Parent is Panel parent)parent.Children.Remove(sources);filterBar.Children.Add(sources);header.Children.Add(filterBar);AttachUpdateBanner();
     }
     FrameworkElement BrandMark()
     {
-        var layers=new Grid{Width=22,Height=22};
-        layers.Children.Add(new Border{Width=12,Height=14,CornerRadius=new(2),Background=B("#A8C7FF"),HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Top,Margin=new(3,2,0,0)});
-        layers.Children.Add(new Border{Width=12,Height=14,CornerRadius=new(2),Background=Brushes.White,HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Top,Margin=new(8,7,0,0)});
-        return new Border{Width=32,Height=32,CornerRadius=new(8),Background=B("#2D5BE3"),Child=layers,VerticalAlignment=VerticalAlignment.Center};
+        return new Image{Source=Icon,Width=DesignTokens.Number("Space.32"),Height=DesignTokens.Number("Space.32"),VerticalAlignment=VerticalAlignment.Center};
     }
     void StyleInput(Control control){control.SetResourceReference(Control.BackgroundProperty,"FloatClip.Surface");control.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");control.SetResourceReference(Control.BorderBrushProperty,"FloatClip.Line");control.Padding=new(10,5,10,5);control.MinHeight=32;}
-    void Guard(Action action){try{action();}catch(Exception e){MessageBox.Show(this,e is IOException?e.Message:"本机操作未完成，请保留数据并重试。","FloatClip",MessageBoxButton.OK,MessageBoxImage.Information);}}
+    void Guard(Action action)
+    {
+        try{action();}
+        catch(Exception error)
+        {
+            host.ReportUiFailure(error);
+            if(host.IsIsolated)throw;
+            syncStatus.Text="界面操作未完成，详细原因已记录到本机日志。";
+        }
+    }
     void Refresh(bool reloadDevices=true)
     {
         syncStatus.Text=host.Status+(host.HotkeyError.Length>0?" · "+host.HotkeyError:"");
@@ -165,14 +168,14 @@ public sealed partial class LocalClipboardWindow:Window
             closeSwipe=null;
             if(reloadDevices){
                 sources.Children.Clear();var shown=new System.Collections.Generic.HashSet<string>();
-                void Filter(string id,string name){if(!shown.Add(id))return;var b=Button(name,()=>{source=id;kindFilter="";Refresh();});b.Background=source==id&&kindFilter.Length==0?tint:Brushes.Transparent;b.Foreground=source==id&&kindFilter.Length==0?accent:muted;b.MinHeight=34;b.FontSize=13;b.Padding=new(10,5,10,5);sources.Children.Add(b);}
+                void Filter(string id,string name){if(!shown.Add(id))return;var b=Button(name,()=>{source=id;kindFilter="";Refresh();});DesignStates.SetIsSelected(b,source==id&&kindFilter.Length==0);sources.Children.Add(b);}
                 Filter("","全部");Filter(own,"本机");
-                var images=Button("图片",()=>{source="";kindFilter="image";Refresh();});images.Background=kindFilter=="image"?tint:Brushes.Transparent;images.Foreground=kindFilter=="image"?accent:muted;images.MinHeight=34;images.FontSize=13;images.Padding=new(10,5,10,5);sources.Children.Add(images);
+                var images=Button("图片",()=>{source="";kindFilter="image";Refresh();});DesignStates.SetIsSelected(images,kindFilter=="image");sources.Children.Add(images);
                 if(sync!=null)foreach(string key in sync.Pairing.Keys()){var peer=sync.Pairing.Describe(key);if(peer?.DeviceId!=null)Filter(peer.DeviceId.Value.ToString(),peer.Name??"已授权设备");}
                 foreach(var g in entries.OfType<JsonObject>().Where(c=>c["source"]!["id"]!.GetValue<string>()!=own).GroupBy(c=>c["source"]!["id"]!.GetValue<string>()))Filter(g.Key,g.First()["source"]!["name"]!.GetValue<string>());
                 if(source.Length>0&&!shown.Contains(source))source="";
             }
-            list.Children.Clear();string query=search.Text.Trim();var visible=entries.OfType<JsonObject>().Where(c=>(kindFilter.Length==0||ClipboardVault.Kind(c)==kindFilter)&&(source==""||c["source"]!["id"]!.GetValue<string>()==source)&&new[]{c["text"]?.GetValue<string>()??"",c["category"]!.GetValue<string>(),c["source"]!["name"]!.GetValue<string>(),ClipboardVault.Kind(c)=="image"?"图片 image png":"文字 text",ClipboardVault.IsPinned(c)?"置顶 pinned":"",ClipboardVault.IsLocked(c)?"固定 protected":""}.Any(v=>v.Contains(query,StringComparison.OrdinalIgnoreCase))).OrderByDescending(c=>ClipboardVault.IsPinned(c)).ThenByDescending(c=>c["updatedAt"]!.GetValue<long>()).ToList();
+            list.Children.Clear();string query=viewModel.SearchText.Trim();var visible=entries.OfType<JsonObject>().Where(c=>(kindFilter.Length==0||ClipboardVault.Kind(c)==kindFilter)&&(source==""||c["source"]!["id"]!.GetValue<string>()==source)&&new[]{c["text"]?.GetValue<string>()??"",c["category"]!.GetValue<string>(),c["source"]!["name"]!.GetValue<string>(),ClipboardVault.Kind(c)=="image"?"图片 image png":"文字 text",ClipboardVault.IsPinned(c)?"置顶 pinned":"",ClipboardVault.IsLocked(c)?"固定 protected":""}.Any(v=>v.Contains(query,StringComparison.OrdinalIgnoreCase))).OrderByDescending(c=>ClipboardVault.IsPinned(c)).ThenByDescending(c=>c["updatedAt"]!.GetValue<long>()).ToList();
             foreach(var clip in visible)list.Children.Add(Card(clip,own));
             if(visible.Count==0)list.Children.Add(new TextBlock{Text=query.Length==0?"这里还没有记录":"没有匹配的记录",Foreground=muted,Margin=new(0,30,0,0),HorizontalAlignment=HorizontalAlignment.Center});
             UndoBar();
@@ -196,16 +199,17 @@ public sealed partial class LocalClipboardWindow:Window
     {
         string id=clip["id"]!.GetValue<string>(),value=clip["text"]?.GetValue<string>()??"",platform=clip["source"]!["platform"]!.GetValue<string>();
         bool pinned=ClipboardVault.IsPinned(clip),locked=ClipboardVault.IsLocked(clip),imageClip=ClipboardVault.Kind(clip)=="image";
-        var color=B(!sourceColors?(dark?"#8DBBFF":"#245DCE"):platform=="android"?(dark?"#83D9BE":"#14755F"):platform=="ipad"?(dark?"#C8ACEF":"#7650A3"):(dark?"#8DBBFF":"#245DCE"));
+        var color=DesignTokens.Brush(!sourceColors?"Source.Windows":platform=="android"?"Source.Android":platform=="ipad"?"Source.Tablet":"Source.Windows");
         Color mix(Color a,Color b,double f)=>Color.FromRgb((byte)(a.R*(1-f)+b.R*f),(byte)(a.G*(1-f)+b.G*f),(byte)(a.B*(1-f)+b.B*f));
         var row=new Grid{Tag="clip",Margin=new(0,0,0,cardSpacing),ClipToBounds=true};
         var protectGrid=new Grid{Width=82,HorizontalAlignment=HorizontalAlignment.Left,Visibility=Visibility.Hidden,Background=tint};
         var protect=Button(locked?"取消固定":"固定",()=>Edit(id,c=>c["locked"]=!locked));System.Windows.Automation.AutomationProperties.SetName(protect,locked?"取消固定记录":"固定记录");System.Windows.Automation.AutomationProperties.SetAutomationId(protect,"Protect-"+id);protect.Content=ActionLabel(locked?"\uE785":"\uE72E",locked?"取消固定":"固定");protect.Padding=new(2);protect.FontSize=12;protect.Margin=new(4,0,4,0);protectGrid.Children.Add(protect);row.Children.Add(protectGrid);
         var actionGrid=new Grid{Width=148,HorizontalAlignment=HorizontalAlignment.Right,Visibility=Visibility.Hidden,Background=tint};actionGrid.ColumnDefinitions.Add(new());actionGrid.ColumnDefinitions.Add(new());
         var pin=Button(pinned?"取消置顶":"置顶",()=>Edit(id,c=>c["pinned"]=!pinned));System.Windows.Automation.AutomationProperties.SetName(pin,pinned?"取消置顶":"置顶");System.Windows.Automation.AutomationProperties.SetAutomationId(pin,"Pin-"+id);pin.Content=ActionLabel(pinned?"\uE77A":"\uE718",pinned?"取消置顶":"置顶");pin.Padding=new(2);pin.FontSize=13;pin.Margin=new(6,0,3,0);actionGrid.Children.Add(pin);
-        var remove=Button("删除",()=>Delete(clip));System.Windows.Automation.AutomationProperties.SetName(remove,"删除记录");System.Windows.Automation.AutomationProperties.SetAutomationId(remove,"Delete-"+id);remove.Content=ActionLabel("\uE74D","删除");remove.FontSize=13;remove.Padding=new(2);remove.Foreground=B(dark?"#FFB5C2":"#B62E48");Grid.SetColumn(remove,1);remove.Margin=new(3,0,0,0);actionGrid.Children.Add(remove);row.Children.Add(actionGrid);
+        var remove=Button("删除",()=>Delete(clip));System.Windows.Automation.AutomationProperties.SetName(remove,"删除记录");System.Windows.Automation.AutomationProperties.SetAutomationId(remove,"Delete-"+id);remove.Content=ActionLabel("\uE74D","删除");remove.FontSize=13;remove.Padding=new(2);remove.SetResourceReference(Control.ForegroundProperty,"FloatClip.Danger");Grid.SetColumn(remove,1);remove.Margin=new(3,0,0,0);actionGrid.Children.Add(remove);row.Children.Add(actionGrid);
         foreach(var action in new[]{protect,pin,remove}){action.HorizontalAlignment=HorizontalAlignment.Stretch;action.VerticalAlignment=VerticalAlignment.Stretch;action.Margin=new(0);action.BorderThickness=new(0);action.Background=Brushes.Transparent;((Wpf.Ui.Controls.Button)action).Appearance=Wpf.Ui.Controls.ControlAppearance.Transparent;}
-        var scale=new ScaleTransform(1,1);var front=new Border{MinHeight=imageClip?208:88,CornerRadius=new(8),Background=translucent?new SolidColorBrush(mix(surface.Color,color.Color,dark ? .12 : .075)):surface,RenderTransform=scale,RenderTransformOrigin=new(.5,.5)};
+        var scale=new ScaleTransform(1,1);var front=new Border{MinHeight=imageClip?208:88,CornerRadius=DesignTokens.Radius("Card"),Background=translucent?new SolidColorBrush(mix(surface.Color,color.Color,dark ? .12 : .075)):surface,RenderTransform=scale,RenderTransformOrigin=new(.5,.5)};
+        var idleBrush=front.Background;front.MouseEnter+=(_,_)=>front.SetResourceReference(Border.BackgroundProperty,"FloatClip.Hover");front.MouseLeave+=(_,_)=>front.Background=idleBrush;
         var body=new Grid();front.Child=body;
         if(imageClip)
         {
@@ -227,13 +231,13 @@ public sealed partial class LocalClipboardWindow:Window
         void Mark(string code){var glyph=Glyph(code,14);((TextBlock)glyph).Foreground=color;glyph.Margin=new(0,0,0,6);markers.Children.Add(glyph);}
         if(pinned)Mark("\uE718");if(locked)Mark("\uE72E");if(clip["source"]!["id"]!.GetValue<string>()!=own)Mark(platform=="android"?"\uE8EA":platform=="ipad"?"\uE70A":"\uE770");if(imageClip)Mark("\uE91B");body.Children.Add(markers);
         var translate=new TranslateTransform();var slide=new Grid{RenderTransform=translate};slide.Children.Add(front);row.Children.Add(slide);
-        bool opened=false,moved=false,held=false;double start=0;Point down=new();var hold=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(520)};
-        void Press(bool on){double target=on&&SystemParameters.ClientAreaAnimation ? .98 : 1;var d=TimeSpan.FromMilliseconds(SystemParameters.ClientAreaAnimation?(on?90:160):0);scale.BeginAnimation(ScaleTransform.ScaleXProperty,new DoubleAnimation(target,d));scale.BeginAnimation(ScaleTransform.ScaleYProperty,new DoubleAnimation(target,d));}
+        bool opened=false,moved=false,held=false;double start=0;Point down=new();var hold=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(DesignTokens.Number("Motion.HoldMilliseconds"))};
+        void Press(bool on){double target=on&&DesignTokens.Motion("Press")!=TimeSpan.Zero?DesignTokens.Number("Motion.PressScale"):1;var d=DesignTokens.Motion(on?"Press":"State");scale.BeginAnimation(ScaleTransform.ScaleXProperty,new DoubleAnimation(target,d));scale.BeginAnimation(ScaleTransform.ScaleYProperty,new DoubleAnimation(target,d));}
         void Reveal(bool show,bool protectSide=false)
         {
             opened=show;protectGrid.Visibility=show&&protectSide?Visibility.Visible:Visibility.Hidden;actionGrid.Visibility=show&&!protectSide?Visibility.Visible:Visibility.Hidden;
-            double target=!show?0:protectSide?82:-148;var duration=new Duration(TimeSpan.FromMilliseconds(SystemParameters.ClientAreaAnimation?150:0));
-            translate.BeginAnimation(TranslateTransform.XProperty,new DoubleAnimation(translate.X,target,duration){EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut}},HandoffBehavior.SnapshotAndReplace);
+            double target=!show?0:protectSide?82:-148;var duration=new Duration(DesignTokens.Motion("State"));
+            translate.BeginAnimation(TranslateTransform.XProperty,new DoubleAnimation(translate.X,target,duration){EasingFunction=(IEasingFunction)Application.Current.FindResource("FloatClip.Motion.EaseOut")},HandoffBehavior.SnapshotAndReplace);
             closeSwipe=show?()=>Reveal(false):null;
         }
         var menu=new ContextMenu();
@@ -258,11 +262,7 @@ public sealed partial class LocalClipboardWindow:Window
     void Delete(JsonObject clip){deleted=new List<JsonObject>{(JsonObject)clip.DeepClone()};Edit(clip["id"]!.GetValue<string>(),null);PruneImagesPreservingUndo();}
     void ClearUnprotectedHistory()
     {
-        var before=vault.Load()["entries"]!.AsArray().OfType<JsonObject>().Where(c=>!ClipboardVault.IsPinned(c)&&!ClipboardVault.IsLocked(c)).Select(c=>(JsonObject)c.DeepClone()).ToList();
-        if(before.Count==0){syncStatus.Text="没有可清除的普通记录；固定和置顶记录已保留";return;}
-        int removed=vault.ClearUnprotected();var current=vault.Load()["entries"]!.AsArray().OfType<JsonObject>().Select(c=>c["id"]!.GetValue<string>()).ToHashSet();
-        deleted=before.Where(c=>!current.Contains(c["id"]!.GetValue<string>())).ToList();PruneImagesPreservingUndo();
-        Refresh();syncStatus.Text=$"已清除 {removed} 条普通记录，固定和置顶记录已保留";
+        deleted=null;viewModel.ClearHistoryCommand.Execute(null);UndoBar();syncStatus.Text=viewModel.StatusMessage;
     }
     void UndoBar()
     {
@@ -315,11 +315,12 @@ public sealed partial class LocalClipboardWindow:Window
     public void OpenSettings()=>Navigate(typeof(SettingsPage));
     FrameworkElement BuildSettingsPage()
     {
-        var panel=new StackPanel{Margin=new(18,6,18,20)};
-        panel.Children.Add(new TextBlock{Text="设置",FontSize=22,FontWeight=FontWeights.Medium,Margin=new(0,4,0,14)});
-        panel.Children.Add(MutedLabel("外观",new(0,0,0,8)));var modes=new ComboBox{ItemsSource=new[]{"跟随系统","浅色","深色","东京夜色"},SelectedIndex=mode=="light"?1:mode=="dark"?2:mode=="tokyo-night"?3:0,MinWidth=132};StyleInput(modes);System.Windows.Automation.AutomationProperties.SetAutomationId(modes,"ThemeMode");modes.SelectionChanged+=(_,_)=>Guard(()=>{mode=modes.SelectedIndex switch{1=>"light",2=>"dark",3=>"tokyo-night",_=>"system"};SavePreferences();ApplyPalette();BuildHeader();Refresh();});panel.Children.Add(SettingRow("应用主题","",modes));
+        var panel=new StackPanel{Margin=(Thickness)Application.Current.FindResource("FloatClip.Padding.Page")};
+        panel.Children.Add(new TextBlock{Text="设置",FontSize=DesignTokens.Number("Font.Title"),FontWeight=FontWeights.Medium,Margin=new(0,4,0,16)});
+        panel.Children.Add(MutedLabel("外观",new(0,0,0,8)));var modes=new ComboBox{ItemsSource=new[]{"跟随系统","浅色","深色（Tokyo Night）"},SelectedIndex=mode=="light"?1:mode is "dark" or "tokyo-night"?2:0,MinWidth=132};StyleInput(modes);System.Windows.Automation.AutomationProperties.SetAutomationId(modes,"ThemeMode");modes.SelectionChanged+=(_,_)=>Guard(()=>{mode=modes.SelectedIndex switch{1=>"light",2=>"tokyo-night",_=>"system"};SavePreferences();ApplyPalette();BuildHeader();Refresh();});panel.Children.Add(SettingRow("应用主题","",modes));
         void Option(string label,bool selected,Action<bool> change)=>panel.Children.Add(ToggleSetting(label,"",selected,change));
         Option("展开导航文字",expandedNavigation,v=>{expandedNavigation=v;UpdateNavigation();});
+        Option("减少动画",designPreferences.ReduceMotion,v=>{designPreferences.ReduceMotion=v;designPreferences.Save(prefsRoot);});
         Option("设备特征色",sourceColors,v=>sourceColors=v);Option("彩色卡片背景",translucent,v=>translucent=v);
         panel.Children.Add(SliderSetting("文字大小","剪贴板正文",12,18,clipFontSize,v=>clipFontSize=v,"ClipFontSize"));
         panel.Children.Add(SliderSetting("卡片间距","紧凑或宽松",4,18,cardSpacing,v=>cardSpacing=v,"CardSpacing"));

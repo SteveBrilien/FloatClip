@@ -13,8 +13,8 @@ android {
         minSdk = 28
         // Deliberately locked to Android 11 behavior for the fixed OriginOS target device.
         targetSdk = 30
-        versionCode = 21
-        versionName = "0.7.6"
+        versionCode = 22
+        versionName = "0.7.7"
     }
 
     // Keep the installed Share update identity; namespace only locates reused classes.

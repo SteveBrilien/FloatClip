@@ -1,0 +1,13 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+  <FontFamily x:Key="FloatClip.FontFamily">Segoe UI Variable, Segoe UI, Microsoft YaHei UI</FontFamily>
+  <sys:Double x:Key="FloatClip.Font.Caption">12</sys:Double><sys:Double x:Key="FloatClip.Font.Body">14</sys:Double><sys:Double x:Key="FloatClip.Font.Section">16</sys:Double><sys:Double x:Key="FloatClip.Font.Title">24</sys:Double>
+  <sys:Double x:Key="FloatClip.Space.4">4</sys:Double><sys:Double x:Key="FloatClip.Space.8">8</sys:Double><sys:Double x:Key="FloatClip.Space.12">12</sys:Double><sys:Double x:Key="FloatClip.Space.16">16</sys:Double><sys:Double x:Key="FloatClip.Space.24">24</sys:Double><sys:Double x:Key="FloatClip.Space.32">32</sys:Double>
+  <CornerRadius x:Key="FloatClip.Radius.Control">4</CornerRadius><CornerRadius x:Key="FloatClip.Radius.Card">8</CornerRadius><CornerRadius x:Key="FloatClip.Radius.Dialog">12</CornerRadius><CornerRadius x:Key="FloatClip.Radius.Panel">16</CornerRadius>
+  <sys:Double x:Key="FloatClip.Icon.Small">16</sys:Double><sys:Double x:Key="FloatClip.Icon.Standard">20</sys:Double><sys:Double x:Key="FloatClip.Icon.Large">24</sys:Double>
+  <sys:Double x:Key="FloatClip.Hit.Control">32</sys:Double><sys:Double x:Key="FloatClip.Hit.Title">40</sys:Double><sys:Double x:Key="FloatClip.Row.File">48</sys:Double>
+  <Thickness x:Key="FloatClip.Padding.Control">12,4</Thickness><Thickness x:Key="FloatClip.Padding.Card">16,12</Thickness><Thickness x:Key="FloatClip.Padding.Page">16,8,16,16</Thickness>
+  <Duration x:Key="FloatClip.Motion.Press">0:0:0.100</Duration><Duration x:Key="FloatClip.Motion.State">0:0:0.160</Duration><Duration x:Key="FloatClip.Motion.Panel">0:0:0.240</Duration>
+  <sys:Double x:Key="FloatClip.Motion.PressScale">0.985</sys:Double><sys:Double x:Key="FloatClip.Motion.HoldMilliseconds">520</sys:Double>
+  <CubicEase x:Key="FloatClip.Motion.EaseOut" EasingMode="EaseOut"/><CubicEase x:Key="FloatClip.Motion.EaseInOut" EasingMode="EaseInOut"/>
+  <sys:Double x:Key="FloatClip.Opacity.Window">1</sys:Double><sys:Double x:Key="FloatClip.Opacity.Disabled">1</sys:Double>
+</ResourceDictionary>

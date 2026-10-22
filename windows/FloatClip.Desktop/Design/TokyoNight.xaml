@@ -1,0 +1,11 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <SolidColorBrush x:Key="FloatClip.Background" Color="#1A1B26"/><SolidColorBrush x:Key="FloatClip.Surface" Color="#24283B"/>
+  <SolidColorBrush x:Key="FloatClip.TextPrimary" Color="#E4E9FF"/><SolidColorBrush x:Key="FloatClip.TextSecondary" Color="#BBC4E5"/>
+  <SolidColorBrush x:Key="FloatClip.Border" Color="#414868"/><SolidColorBrush x:Key="FloatClip.Accent" Color="#7AA2F7"/><SolidColorBrush x:Key="FloatClip.OnAccent" Color="#172033"/>
+  <SolidColorBrush x:Key="FloatClip.AccentHover" Color="#8CB0FF"/><SolidColorBrush x:Key="FloatClip.AccentPressed" Color="#6B91DC"/><SolidColorBrush x:Key="FloatClip.OnFileIcon" Color="#FFFFFF"/>
+  <SolidColorBrush x:Key="FloatClip.Hover" Color="#30364D"/><SolidColorBrush x:Key="FloatClip.Pressed" Color="#3A4261"/><SolidColorBrush x:Key="FloatClip.Selected" Color="#283457"/>
+  <SolidColorBrush x:Key="FloatClip.DisabledText" Color="#A7B2D6"/><SolidColorBrush x:Key="FloatClip.DisabledSurface" Color="#292E43"/>
+  <SolidColorBrush x:Key="FloatClip.Danger" Color="#FFB5C2"/><SolidColorBrush x:Key="FloatClip.Success" Color="#83D9BE"/>
+  <SolidColorBrush x:Key="FloatClip.Source.Windows" Color="#9AB7FF"/><SolidColorBrush x:Key="FloatClip.Source.Android" Color="#83D9BE"/><SolidColorBrush x:Key="FloatClip.Source.Tablet" Color="#C8ACEF"/>
+  <SolidColorBrush x:Key="FloatClip.File.Pdf" Color="#C43E55"/><SolidColorBrush x:Key="FloatClip.File.Word" Color="#2863B9"/><SolidColorBrush x:Key="FloatClip.File.Excel" Color="#24754F"/><SolidColorBrush x:Key="FloatClip.File.Presentation" Color="#BC5538"/><SolidColorBrush x:Key="FloatClip.File.Image" Color="#7852AB"/><SolidColorBrush x:Key="FloatClip.File.Archive" Color="#906521"/><SolidColorBrush x:Key="FloatClip.File.Default" Color="#58718E"/>
+</ResourceDictionary>

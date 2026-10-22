@@ -101,10 +101,12 @@ static class Program
         DesktopFluent.Initialize(app.Resources);
         Directory.CreateDirectory(output);
         System.Collections.Generic.IEnumerable<string> ResourceKeys(ResourceDictionary dictionary){foreach(object key in dictionary.Keys)yield return key.ToString()??"";foreach(var child in dictionary.MergedDictionaries)foreach(var key in ResourceKeys(child))yield return key;}
-        File.WriteAllText(Path.Combine(output,"fluent-control-keys.json"),JsonSerializer.Serialize(ResourceKeys(app.Resources).Where(k=>new[]{"Button","ComboBox","TextBox","MenuItem","ScrollBar"}.Any(k.Contains)).Distinct().ToArray(),new JsonSerializerOptions{WriteIndented=true}));
+        File.WriteAllText(Path.Combine(output,"fluent-control-keys.json"),JsonSerializer.Serialize(ResourceKeys(app.Resources).Where(k=>new[]{"Button","ComboBox","TextBox","MenuItem","ContextMenu","ScrollBar"}.Any(k.Contains)).Distinct().ToArray(),new JsonSerializerOptions{WriteIndented=true}));
         ClipboardHost? host=null;
         try
         {
+            var components=app.Resources.MergedDictionaries.Last();
+            foreach(object key in components.Keys)Check(components[key] is Style,"shared style resolves before opening UI: "+key);
             // Synthetic pixels include a semitransparent red pixel to exercise PNG alpha.
             byte[] pixels={0,0,128,128,0,255,0,255,255,0,0,255,255,255,255,255};
             var bitmap=BitmapSource.Create(2,2,96,96,PixelFormats.Pbgra32,null,pixels,8);bitmap.Freeze();
@@ -202,7 +204,7 @@ static class Program
             Theme("light");Snapshot(window,"clipboard-light");Theme("dark");Snapshot(window,"clipboard-dark");Snapshot(full,"fulltext-dark");
             foreach(var child in window.OwnedWindows.Cast<Window>())Check(((SolidColorBrush)child.Background).Color==((SolidColorBrush)window.Background).Color,"open child follows theme: "+child.Title);
             var themePicker=Descendants(settings).OfType<ComboBox>().Single(c=>System.Windows.Automation.AutomationProperties.GetAutomationId(c)=="ThemeMode");
-            themePicker.SelectedIndex=3;Pump();
+            themePicker.SelectedIndex=2;Pump();
             Check(File.ReadAllText(Path.Combine(dataRoot,"theme.txt"))=="tokyo-night"&&Field<bool>(window,"dark"),"Tokyo Night chosen through settings persists and uses dark window chrome");
             Check(((SolidColorBrush)window.Background).Color==Color.FromRgb(26,27,38)&&((SolidColorBrush)app.Resources["FloatClip.Surface"]).Color==Color.FromRgb(36,40,59),"Tokyo Night matches phone background and card palette");
             foreach(var child in window.OwnedWindows.Cast<Window>())Check(((SolidColorBrush)child.Background).Color==((SolidColorBrush)window.Background).Color,"open child follows Tokyo Night: "+child.Title);
@@ -213,8 +215,8 @@ static class Program
                 reloadedHost.Dispose();reloaded.Close();
             }
             Call(window,"ClearUnprotectedHistory");Check(vault.Load()["entries"]!.AsArray().Count==2,"clear keeps pinned and locked only");
-            var undo=Field<Border>(window,"undo");var undoButton=((DockPanel)undo.Child).Children.OfType<Button>().Single();undoButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(vault.Load()["entries"]!.AsArray().Count==4,"bulk clear undo restores text and image");
-            var imageAfter=vault.Load()["entries"]!.AsArray().OfType<JsonObject>().Single(c=>ClipboardVault.Kind(c)=="image");Check(vault.ReadImage(imageAfter).Length>0,"undo image blob retained");
+            var undo=Field<Border>(window,"undo");Check(undo.Visibility==Visibility.Collapsed&&Field<System.Collections.Generic.List<JsonObject>?>(window,"deleted")==null,"bulk clear has no undo action or retained deleted snapshot");
+            Call(window,"ClearUnprotectedHistory");Check(undo.Visibility==Visibility.Collapsed&&vault.Load()["entries"]!.AsArray().Count==2,"repeated empty clear keeps protected records without stale undo");vault.AddImage(png,2,2);Call(window,"Refresh",true);
             Theme("light");Snapshot(window,"clipboard-restored");
             var demonstration=vault.Load()["entries"]!.DeepClone();var capacity=vault.Load();var capacityRows=new JsonArray();
             for(int index=0;index<500;index++){var clip=(JsonObject)row.DeepClone();clip["id"]=Guid.NewGuid().ToString();clip["text"]="capacity "+index;clip["pinned"]=index<499;clip["locked"]=false;capacityRows.Add(clip);}
@@ -237,7 +239,9 @@ static class Program
             CheckFileTransfer(dataRoot);
             CheckFileCatalog(dataRoot);
             NativeSyncChecks.Run(dataRoot,Check);
-            File.WriteAllText(Path.Combine(output,"report.json"),JsonSerializer.Serialize(new{result="PASS",checks,isolated=true,userClipboardUntouched=true,utc=DateTime.UtcNow},new JsonSerializerOptions{WriteIndented=true}));
+            DesignChecks.Run(app,window,host,output,Check,Pump);
+            Check(host.UiFailureCount==0,"no guarded UI exceptions were hidden during acceptance");
+            File.WriteAllText(Path.Combine(output,"report.json"),JsonSerializer.Serialize(new{result="PASS",checks,isolated=true,userClipboardUntouched=true,uiFailures=host.UiFailureCount,utc=DateTime.UtcNow},new JsonSerializerOptions{WriteIndented=true}));
             if(args.Contains("--interactive"))
             {
                 foreach(var child in window.OwnedWindows.Cast<Window>().ToArray())child.Close();

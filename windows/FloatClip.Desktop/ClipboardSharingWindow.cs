@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using FloatClip.Share;
+using FloatClip.Desktop.Design;
 
 namespace FloatClip.Desktop;
 
@@ -26,11 +27,11 @@ public sealed class ClipboardSharingView:UserControl,IDisposable
     {
         this.sync=sync;
         SetResourceReference(BackgroundProperty,"FloatClip.Background");SetResourceReference(ForegroundProperty,"FloatClip.Text");
-        FontFamily=new System.Windows.Media.FontFamily("Segoe UI Variable, Segoe UI, Microsoft YaHei UI");FontSize=14;
-        content.Margin=new(18,6,18,20);Content=new ScrollViewer{Content=content,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
+        SetResourceReference(FontFamilyProperty,"FloatClip.FontFamily");SetResourceReference(FontSizeProperty,"FloatClip.Font.Body");
+        content.Margin=(Thickness)Application.Current.FindResource("FloatClip.Padding.Page");Content=new ScrollViewer{Content=content,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
         var heading=new DockPanel{LastChildFill=true,Margin=new(0,0,0,8)};
         master.OnContent=master.OffContent="";master.VerticalAlignment=VerticalAlignment.Center;master.Opacity=1;master.ToolTip="共享剪贴板";System.Windows.Automation.AutomationProperties.SetName(master,"共享剪贴板");master.Click+=(_,_)=>Configure();DockPanel.SetDock(master,Dock.Right);heading.Children.Add(master);
-        heading.Children.Add(new TextBlock{Text="我的设备",FontSize=23});content.Children.Add(heading);
+        heading.Children.Add(new TextBlock{Text="我的设备",FontSize=DesignTokens.Number("Font.Title")});content.Children.Add(heading);
         status.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Muted");status.TextWrapping=TextWrapping.Wrap;status.Margin=new(0,0,0,8);content.Children.Add(status);
         void Option(Wpf.Ui.Controls.ToggleSwitch box,string label,Panel parent){box.OnContent=box.OffContent="";System.Windows.Automation.AutomationProperties.SetName(box,label);box.Click+=(_,_)=>Configure();var row=new DockPanel{Margin=new(0,6,0,6),LastChildFill=true};box.Margin=new(14,0,0,0);DockPanel.SetDock(box,Dock.Right);row.Children.Add(box);var text=new TextBlock{Text=label,TextWrapping=TextWrapping.Wrap,VerticalAlignment=VerticalAlignment.Center};text.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Text");row.Children.Add(text);parent.Children.Add(row);}
 
@@ -87,8 +88,8 @@ public sealed class ClipboardSharingView:UserControl,IDisposable
         catch{pairingStatus.Text="暂时无法读取网络，请连接 Wi-Fi 后刷新。";}
     }
     static TextBlock Hint(string label){var block=new TextBlock{Text=label,TextWrapping=TextWrapping.Wrap,Margin=new(0,4,0,8),FontSize=13};block.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Muted");return block;}
-    static Border Card(UIElement child){var card=new Border{Child=child,Padding=new(14),Margin=new(0,0,0,10),CornerRadius=new(7),BorderThickness=new(1)};card.SetResourceReference(Border.BackgroundProperty,"FloatClip.Surface");card.SetResourceReference(Border.BorderBrushProperty,"FloatClip.Line");return card;}
-    static Button Button(string label,Action action){var b=new Wpf.Ui.Controls.Button{Content=label,MinHeight=32,Padding=new(12,5,12,5),Margin=new(0,6,0,0),HorizontalAlignment=HorizontalAlignment.Left};b.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");b.Click+=(_,_)=>action();return b;}
+    static Border Card(UIElement child){var card=new Border{Child=child,Padding=new(14),Margin=new(0,0,0,10),CornerRadius=DesignTokens.Radius("Card"),BorderThickness=new(1)};card.SetResourceReference(Border.BackgroundProperty,"FloatClip.Surface");card.SetResourceReference(Border.BorderBrushProperty,"FloatClip.Line");DesignTokens.Hover(card);return card;}
+    static Button Button(string label,Action action){var b=new Wpf.Ui.Controls.Button{Content=label,MinHeight=32,Padding=new(12,5,12,5),Margin=new(0,6,0,0),HorizontalAlignment=HorizontalAlignment.Left};DesignTokens.Button(b);b.Click+=(_,_)=>action();return b;}
     void Configure()
     {
         if(refreshing)return;

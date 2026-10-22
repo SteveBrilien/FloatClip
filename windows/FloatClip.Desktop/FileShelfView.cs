@@ -16,6 +16,7 @@ using System.Windows.Markup;
 using System.Windows.Media;
 using Microsoft.Win32;
 using FloatClip.Share;
+using FloatClip.Desktop.Design;
 
 namespace FloatClip.Desktop;
 
@@ -23,9 +24,9 @@ public sealed class FileShelfRow
 {
     public string Name{get;init;}="";
     public ImageSource ShellIcon=>ShellFileIcons.For(Name);
-    public Brush TypeBrush=>new SolidColorBrush((Color)ColorConverter.ConvertFromString(Extension switch{"PDF"=>"#C43E55","DOC" or "DOCX"=>"#2863B9","XLS" or "XLSX" or "CSV"=>"#24754F","PPT" or "PPTX"=>"#BC5538","PNG" or "JPG" or "JPEG" or "WEBP"=>"#7852AB","ZIP" or "7Z" or "RAR"=>"#906521",_=>"#58718E"}));
+    public Brush TypeBrush=>DesignTokens.Brush("File."+(Extension switch{"PDF"=>"Pdf","DOC" or "DOCX"=>"Word","XLS" or "XLSX" or "CSV"=>"Excel","PPT" or "PPTX"=>"Presentation","PNG" or "JPG" or "JPEG" or "WEBP"=>"Image","ZIP" or "7Z" or "RAR"=>"Archive",_=>"Default"}));
     public Brush IconBackground=>HasLocalFile?TypeBrush:Brushes.Transparent;
-    public Brush IconForeground=>HasLocalFile?Brushes.White:TypeBrush;
+    public Brush IconForeground=>HasLocalFile?DesignTokens.Brush("OnFileIcon"):TypeBrush;
     public string IconLabel=>Type switch{"Word"=>"W","Excel"=>"X","PowerPoint"=>"P","PDF"=>"P","图片"=>"\uE91B","文件"=>"\uE8A5",_=>Extension.Length<=3?Extension:"FILE"};
     public string Extension{get;init;}="";
     public string Modified{get;init;}="—";
@@ -74,15 +75,15 @@ public sealed class FileShelfView:UserControl,IDisposable
     {
         this.sync=sync;store=sync?.Files.Store??new FileShelfStore(System.IO.Path.Combine(preferencesRoot,"file-shelf.json"));
         SetResourceReference(BackgroundProperty,"FloatClip.Background");SetResourceReference(ForegroundProperty,"FloatClip.Text");
-        FontFamily=new FontFamily("Segoe UI Variable, Segoe UI, Microsoft YaHei UI");FontSize=14;
+        SetResourceReference(FontFamilyProperty,"FloatClip.FontFamily");SetResourceReference(FontSizeProperty,"FloatClip.Font.Body");
         var root=new Grid();
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
         root.RowDefinitions.Add(new RowDefinition{Height=new GridLength(1,GridUnitType.Star)});
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
         Content=root;
-        var heading=new StackPanel{Margin=new Thickness(18,12,18,14)};
-        heading.Children.Add(new TextBlock{Text="共享文件",FontSize=22,FontWeight=FontWeights.Medium});
+        var heading=new StackPanel{Margin=(Thickness)Application.Current.FindResource("FloatClip.Padding.Page")};
+        heading.Children.Add(new TextBlock{Text="共享文件",FontSize=DesignTokens.Number("Font.Title"),FontWeight=FontWeights.Medium});
         heading.Children.Add(batchProgress);
         root.Children.Add(heading);
 
@@ -91,10 +92,7 @@ public sealed class FileShelfView:UserControl,IDisposable
         var add=Button("添加文件",AddFiles);CommandIcon(add,"\uE8E5");System.Windows.Automation.AutomationProperties.SetAutomationId(add,"AddShelfFiles");actions.Items.Add(add);
         actions.Items.Add(new Separator{Margin=new Thickness(5,4,5,4)});
         downloadCommand=Button("下载",()=>_=DownloadSelected());CommandIcon(downloadCommand,"\uE896");((Wpf.Ui.Controls.Button)downloadCommand).Appearance=Wpf.Ui.Controls.ControlAppearance.Primary;
-        downloadCommand.ClearValue(Control.BackgroundProperty);downloadCommand.ClearValue(Control.ForegroundProperty);
-        var primaryStyle=new Style(typeof(Wpf.Ui.Controls.Button),downloadCommand.Style);
-        primaryStyle.Setters.Add(new Setter(Control.BackgroundProperty,new DynamicResourceExtension("FloatClip.Accent")));primaryStyle.Setters.Add(new Setter(Control.ForegroundProperty,new DynamicResourceExtension("FloatClip.OnAccent")));
-        var disabledPrimary=new Trigger{Property=IsEnabledProperty,Value=false};disabledPrimary.Setters.Add(new Setter(Control.ForegroundProperty,new DynamicResourceExtension("FloatClip.Muted")));disabledPrimary.Setters.Add(new Setter(Control.BackgroundProperty,new DynamicResourceExtension("FloatClip.Tint")));primaryStyle.Triggers.Add(disabledPrimary);downloadCommand.Style=primaryStyle;actions.Items.Add(downloadCommand);
+        DesignTokens.Button(downloadCommand,"Accent");actions.Items.Add(downloadCommand);
         previewCommand=Button("预览",OpenSelectedLocal);CommandIcon(previewCommand,"\uE8A7");actions.Items.Add(previewCommand);
         saveCommand=Button("另存为",()=>_=SaveLocalAs());CommandIcon(saveCommand,"\uE74E");actions.Items.Add(saveCommand);
         forwardCommand=Button("转发",ForwardSelected);CommandIcon(forwardCommand,"\uE72A");actions.Items.Add(forwardCommand);
@@ -155,30 +153,16 @@ public sealed class FileShelfView:UserControl,IDisposable
     static TextBlock Muted(string value,Thickness margin){var t=new TextBlock{Text=value,Margin=margin,TextWrapping=TextWrapping.Wrap,FontSize=12};t.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Muted");return t;}
     Button Button(string label,Action action)
     {
-        var b=new Wpf.Ui.Controls.Button{Content=label,Appearance=Wpf.Ui.Controls.ControlAppearance.Transparent,Padding=new Thickness(10,5,10,5),MinHeight=32,Margin=new Thickness(0,0,2,0)};
-        b.Style=(Style)Application.Current.FindResource("DefaultUiButtonStyle");
-        b.BorderThickness=new Thickness(0);b.Background=Brushes.Transparent;
-        b.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");b.Click+=(_,_)=>Run(action);return b;
+        var b=new Wpf.Ui.Controls.Button{Content=label,Appearance=Wpf.Ui.Controls.ControlAppearance.Transparent,Margin=new Thickness(0,0,DesignTokens.Number("Space.4"),0)};
+        DesignTokens.Button(b,"Toolbar");b.Click+=(_,_)=>Run(action);return b;
     }
     static void CommandIcon(Button button,string glyph){var label=button.Content;var panel=new StackPanel{Orientation=Orientation.Horizontal};panel.Children.Add(new TextBlock{Text=glyph,FontFamily=new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),FontSize=16,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,8,0)});panel.Children.Add(new TextBlock{Text=label?.ToString(),VerticalAlignment=VerticalAlignment.Center});button.Content=panel;System.Windows.Automation.AutomationProperties.SetName(button,label?.ToString());}
     static void ConfigureList(ListView list,ObservableCollection<FileShelfRow> rows)
     {
         list.ItemsSource=rows;list.SelectionMode=SelectionMode.Extended;list.MinHeight=92;list.BorderThickness=new Thickness(0);list.Padding=new Thickness(0);
         list.SetResourceReference(Control.BackgroundProperty,"FloatClip.Surface");list.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");list.SetResourceReference(Control.BorderBrushProperty,"FloatClip.Line");
-        var style=new Style(typeof(ListViewItem));
-        style.Setters.Add(new Setter(Control.ForegroundProperty,new System.Windows.DynamicResourceExtension("FloatClip.Text")));
-        style.Setters.Add(new Setter(Control.BackgroundProperty,Brushes.Transparent));style.Setters.Add(new Setter(Control.PaddingProperty,new Thickness(5,7,5,7)));style.Setters.Add(new Setter(Control.MinHeightProperty,50d));
-        style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty,HorizontalAlignment.Stretch));
-        var hover=new Trigger{Property=ListViewItem.IsMouseOverProperty,Value=true};hover.Setters.Add(new Setter(Control.BackgroundProperty,new System.Windows.DynamicResourceExtension("FloatClip.Tint")));style.Triggers.Add(hover);
-        var selected=new Trigger{Property=ListViewItem.IsSelectedProperty,Value=true};selected.Setters.Add(new Setter(Control.BackgroundProperty,new System.Windows.DynamicResourceExtension("FloatClip.Tint")));selected.Setters.Add(new Setter(Control.ForegroundProperty,new System.Windows.DynamicResourceExtension("FloatClip.Text")));style.Triggers.Add(selected);
-        list.ItemContainerStyle=style;
-        var headerStyle=new Style(typeof(GridViewColumnHeader));
-        headerStyle.Setters.Add(new Setter(Control.BackgroundProperty,new System.Windows.DynamicResourceExtension("FloatClip.Surface")));
-        headerStyle.Setters.Add(new Setter(Control.ForegroundProperty,new System.Windows.DynamicResourceExtension("FloatClip.Muted")));
-        headerStyle.Setters.Add(new Setter(Control.PaddingProperty,new Thickness(8,7,8,7)));
-        headerStyle.Setters.Add(new Setter(Control.BorderThicknessProperty,new Thickness(0,0,0,1)));headerStyle.Setters.Add(new Setter(Control.BorderBrushProperty,new System.Windows.DynamicResourceExtension("FloatClip.Line")));
-        headerStyle.Setters.Add(new Setter(Control.FontWeightProperty,FontWeights.Medium));list.Resources.Add(typeof(GridViewColumnHeader),headerStyle);
-        headerStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty,HorizontalAlignment.Left));
+        list.ItemContainerStyle=(Style)Application.Current.FindResource("FloatClip.File.Row");
+        list.Resources.Add(typeof(GridViewColumnHeader),Application.Current.FindResource("FloatClip.File.Header"));
         var view=new GridView();
         view.Columns.Add(new GridViewColumn{Header="名称",Width=265,CellTemplate=NameTemplate()});
         view.Columns.Add(new GridViewColumn{Header="修改时间",Width=128,DisplayMemberBinding=new Binding("Modified")});
@@ -214,11 +198,11 @@ public sealed class FileShelfView:UserControl,IDisposable
   <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="40"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
   <CheckBox IsChecked="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListViewItem}, Mode=TwoWay}" VerticalAlignment="Center" Focusable="False" ToolTip="选择文件" Width="20" MinWidth="0" Padding="0" Margin="0"/>
   <Grid Grid.Column="1" Width="28" Height="34" HorizontalAlignment="Left">
-   <Border Background="{Binding IconBackground}" CornerRadius="4"/>
+   <Border Background="{Binding IconBackground}" CornerRadius="{DynamicResource FloatClip.Radius.Control}"/>
    <Rectangle RadiusX="4" RadiusY="4" Margin="0.5" Stroke="{DynamicResource FloatClip.Accent}" StrokeThickness="1.3" StrokeDashArray="3,2">
     <Rectangle.Style><Style TargetType="Rectangle"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding HasLocalFile}" Value="False"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Rectangle.Style>
    </Rectangle>
-   <TextBlock Text="{Binding IconLabel}" FontSize="11" FontWeight="Medium" VerticalAlignment="Center" HorizontalAlignment="Center"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="White"/><Style.Triggers><DataTrigger Binding="{Binding HasLocalFile}" Value="False"><Setter Property="Foreground" Value="{DynamicResource FloatClip.Accent}"/></DataTrigger><DataTrigger Binding="{Binding Type}" Value="图片"><Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/></DataTrigger><DataTrigger Binding="{Binding Type}" Value="文件"><Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+   <TextBlock Text="{Binding IconLabel}" FontSize="11" FontWeight="Medium" VerticalAlignment="Center" HorizontalAlignment="Center"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource FloatClip.OnFileIcon}"/><Style.Triggers><DataTrigger Binding="{Binding HasLocalFile}" Value="False"><Setter Property="Foreground" Value="{DynamicResource FloatClip.Accent}"/></DataTrigger><DataTrigger Binding="{Binding Type}" Value="图片"><Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/></DataTrigger><DataTrigger Binding="{Binding Type}" Value="文件"><Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
   </Grid>
   <TextBlock Grid.Column="2" Text="{Binding Name}" Foreground="{DynamicResource FloatClip.Text}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip="{Binding Subtext}"/>
  </Grid>

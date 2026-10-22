@@ -1,7 +1,15 @@
 {
   "channel": "development",
   "platforms": {
-    "android": { "version": "0.7.6", "build": 21, "review": "docs/CANDIDATE_0.7.6_2026-10-23.md" },
-    "windows": { "version": "0.7.7", "build": 22, "review": "docs/WINDOWS_0.7.7_REVIEW_2026-10-23.md" }
+    "android": {
+      "version": "0.7.7",
+      "build": 22,
+      "review": "docs/CANDIDATE_ANDROID_0.7.7_2026-10-23.md"
+    },
+    "windows": {
+      "version": "0.7.7",
+      "build": 22,
+      "review": "docs/WINDOWS_WPF_DESIGN_077_2026-10-23.md"
+    }
   }
 }

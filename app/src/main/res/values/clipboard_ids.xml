@@ -5,4 +5,6 @@
     <item name="clipboard_devices" type="id"/>
     <item name="clipboard_back" type="id"/>
     <item name="clipboard_sources" type="id"/>
+    <item name="clipboard_clear" type="id"/>
+    <item name="clipboard_undo" type="id"/>
 </resources>

@@ -115,7 +115,12 @@ public final class ClipboardSync {
     public synchronized Entry copied(String text,long now,boolean excluded) throws Exception {
         if(!state.enabled)return null;
         applicationGrant++;
-        if(!state.send||excluded)return null;
+        if(!state.send||excluded) {
+            State next=state.copy();boolean changed=false;
+            for(Peer peer:next.peers.values())if(peer.pending!=null){peer.pending=null;changed=true;}
+            if(changed)save(next);
+            return null;
+        }
         if(state.clock>=MAX_CLOCK)throw new IOException("Clipboard clock exhausted");
         Entry entry=new Entry(UUID.randomUUID(),local,state.clock+1,now,text);State next=state.copy();
         next.clock=entry.clock;next.headClock=entry.clock;next.headOrigin=local.id;

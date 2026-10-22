@@ -40,6 +40,7 @@ import com.floatclip.app.accessibility.PasteAccessibilityService
 import com.floatclip.app.clipboard.ClipStore
 import com.floatclip.app.clipboard.ClipboardSources
 import com.floatclip.app.clipboard.ClipboardRepository
+import com.floatclip.app.clipboard.ClipboardImages
 import com.floatclip.app.integration.AccessibilityPasteBridge
 import com.floatclip.app.integration.IntegrationRegistry
 import com.floatclip.app.model.ClipEntry
@@ -94,6 +95,8 @@ class ClipboardOverlayService : Service() {
     private var activeCategory = ALL_CATEGORY
     private var activeSource = ""
     private var lastCapturedClipboard: String? = null
+    private var lastCapturedImage=""
+    private val undoOwner="overlay:"+java.util.UUID.randomUUID()
     private var captureFocusPending=false
     private val releaseCaptureFocus=Runnable { releaseClipboardFocus() }
 
@@ -206,6 +209,7 @@ class ClipboardOverlayService : Service() {
     }
 
     override fun onDestroy() {
+        if(::store.isInitialized)store.retainUndoImages(undoOwner,emptyList())
         releaseClipboardFocus()
         clipboardCaptureGeneration++
         handler.removeCallbacksAndMessages(null)
@@ -576,6 +580,10 @@ class ClipboardOverlayService : Service() {
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }, LinearLayout.LayoutParams(0, dp(40), 1f))
 
+        header.addView(iconButton(R.drawable.ic_delete, "全部清除，保留固定和置顶记录", palette.secondaryText) {
+            clearHistory()
+        }.apply { id=R.id.clipboard_clear; tooltipText="全部清除（保留固定和置顶）" }, LinearLayout.LayoutParams(dp(40),dp(40)))
+
         val pinButton = iconButton(
             R.drawable.ic_pin,
             if (panelPinnedMode) "退出固定模式" else "固定模式",
@@ -759,7 +767,7 @@ class ClipboardOverlayService : Service() {
     ) {
         panel.borderDragPx = dp(14)
         panel.topDragHeightPx = dp(50)
-        panel.topActionReservePx = dp(50)
+        panel.topActionReservePx = dp(90)
         var downX = 0f
         var downY = 0f
         var startX = 0
@@ -801,27 +809,47 @@ class ClipboardOverlayService : Service() {
         }
     }
 
-    private var lastDeletedEntry: ClipEntry? = null
+    private var lastDeletedEntries: List<ClipEntry> = emptyList()
     private fun appendUndo(container: LinearLayout) {
-        val removed=lastDeletedEntry ?: return
+        store.retainUndoImages(undoOwner,lastDeletedEntries)
+        if(lastDeletedEntries.isEmpty()) return
         val palette=themeProvider.palette()
         container.addView(TextView(this).apply {
-            text="记录已删除 · 撤销";textSize=14f;gravity=Gravity.CENTER;minimumHeight=dp(48)
+            id=R.id.clipboard_undo
+            text=if(lastDeletedEntries.size==1) "记录已删除 · 撤销" else "已清除 ${lastDeletedEntries.size} 条 · 撤销"
+            textSize=14f;gravity=Gravity.CENTER;minimumHeight=dp(48)
             setTextColor(palette.primaryText)
             setOnClickListener {
-                runCatching { store.restore(removed) }.onSuccess { lastDeletedEntry=null;renderEntries() }
+                runCatching { store.restoreAll(lastDeletedEntries) }.onSuccess { remaining ->
+                    lastDeletedEntries=remaining;renderSourceBar();renderCategoryBar();renderEntries();notifyHistoryChanged()
+                    if(remaining.isNotEmpty()) Toast.makeText(this@ClipboardOverlayService,"空间不足，尚有 ${remaining.size} 条待恢复；新记录和受保护记录已保留",Toast.LENGTH_LONG).show()
+                }
                     .onFailure { Toast.makeText(this@ClipboardOverlayService,"暂时无法恢复",Toast.LENGTH_SHORT).show() }
             }
         })
     }
     private fun deleteClip(entry: ClipEntry) {
-        store.delete(entry.id);lastDeletedEntry=entry;dismissEntryActionLayer(animated=false);renderEntries()
+        store.delete(entry.id);lastDeletedEntries=listOf(entry);dismissEntryActionLayer(animated=false);renderEntries();notifyHistoryChanged()
+    }
+    private fun clearHistory() {
+        runCatching { store.clearAll() }.onSuccess { removed ->
+            if(removed.isEmpty()) Toast.makeText(this,"没有可清除的普通记录；固定和置顶记录已保留",Toast.LENGTH_SHORT).show()
+            else {
+                lastDeletedEntries=removed;dismissEntryActionLayer(animated=false)
+                renderSourceBar();renderCategoryBar();renderEntries();notifyHistoryChanged()
+                Toast.makeText(this,"已清除 ${removed.size} 条普通记录，固定和置顶记录已保留",Toast.LENGTH_SHORT).show()
+            }
+        }.onFailure { Toast.makeText(this,"清除未完成，请保留本机数据并重试",Toast.LENGTH_LONG).show() }
+    }
+    private fun notifyHistoryChanged() {
+        sendBroadcast(Intent(com.floatclip.app.sync.ClipboardSyncService.HISTORY_CHANGED).setPackage(packageName),"$packageName.permission.INTERNAL")
     }
     private fun renderEntries() {
         if (!panelOpen || panelCollapsing) return
         val container = listContainer ?: return
         val palette = themeProvider.palette()
         container.removeAllViews()
+        appendUndo(container)
         val allItems = store.entries()
         val sourceItems = if(activeSource.isEmpty()) allItems else allItems.filter { it.sourceDeviceId == activeSource }
         val items = if (activeCategory == ALL_CATEGORY) {
@@ -842,11 +870,9 @@ class ClipboardOverlayService : Service() {
                 setTextColor(palette.secondaryText)
                 setPadding(dp(10), dp(28), dp(10), dp(28))
             })
-            appendUndo(container)
             return
         }
         items.forEach { container.addView(createClipRow(it)) }
-        appendUndo(container)
     }
 
     private fun renderSourceBar() {
@@ -934,7 +960,13 @@ class ClipboardOverlayService : Service() {
             },
             dp(78),
         )
-        wrapper.onSingleTap = {
+        wrapper.onSingleTap = tap@{
+            if(entry.kind=="image") {
+                runCatching { ClipboardImages.copy(this,store,entry) }
+                    .onSuccess { Toast.makeText(this,"已复制图片",Toast.LENGTH_SHORT).show();if(!panelPinnedMode)collapsePanel() }
+                    .onFailure { Toast.makeText(this,it.message ?: "图片复制未完成",Toast.LENGTH_LONG).show() }
+                return@tap
+            }
             val pasted=PasteAccessibilityService.paste(entry.text)
             if(!pasted) clipboard.writeText(entry.text)
             else com.floatclip.app.sync.SyncRuntime.userCopied(this,entry.text)
@@ -1015,11 +1047,7 @@ class ClipboardOverlayService : Service() {
                 setPadding(dp(14), dp(10), dp(10), dp(6))
             })
             row("取消") { dismissEntryActionLayer() }
-            row("确认删除", Color.rgb(218, 78, 78)) {
-                store.delete(entry.id)
-                dismissEntryActionLayer(animated = false)
-                renderEntries()
-            }
+            row("确认删除", Color.rgb(218, 78, 78)) { deleteClip(entry) }
         } else if (choosingCategory) {
             row("返回") { showEntryMenu(entry, anchor = anchor) }
             categoryStore.categories().distinct().forEach { category ->
@@ -1032,12 +1060,14 @@ class ClipboardOverlayService : Service() {
                 }
             }
         } else {
-            row("复制") {
-                clipboard.writeText(entry.text)
-                Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
+            if(entry.kind=="image")row("查看图片") { showImagePreview(entry) }
+            row(if(entry.kind=="image") "复制图片" else "复制") {
+                runCatching { if(entry.kind=="image")ClipboardImages.copy(this,store,entry) else clipboard.writeText(entry.text) }
+                    .onSuccess { Toast.makeText(this,"已复制",Toast.LENGTH_SHORT).show() }
+                    .onFailure { Toast.makeText(this,it.message ?: "复制未完成",Toast.LENGTH_LONG).show() }
                 dismissEntryActionLayer()
             }
-            if (PasteAccessibilityService.isConnected()) row("粘贴") {
+            if (entry.kind=="text" && PasteAccessibilityService.isConnected()) row("粘贴") {
                 dismissEntryActionLayer(animated = false)
                 pasteEntry(entry)
             }
@@ -1084,6 +1114,40 @@ class ClipboardOverlayService : Service() {
         entryActionLayer = layer
     }
 
+    private fun showImagePreview(entry:ClipEntry) {
+        val panel=panelView ?: return
+        val bitmap=ClipboardImages.thumbnail(store,entry,1600)
+        if(bitmap==null) { Toast.makeText(this,"图片暂不可用，请保留本机数据",Toast.LENGTH_LONG).show();return }
+        dismissEntryActionLayer(animated=false)
+        val palette=themeProvider.palette()
+        val layer=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL;isClickable=true
+            background=roundedBackground(palette.panelBackground,16f)
+            setPadding(dp(10),dp(6),dp(10),dp(8))
+        }
+        val header=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL }
+        header.addView(TextView(this).apply {
+            text="图片 ${entry.imageWidth} × ${entry.imageHeight}";textSize=14f;setTextColor(palette.primaryText)
+        },LinearLayout.LayoutParams(0,dp(44),1f))
+        header.addView(iconButton(R.drawable.ic_close,"关闭图片预览",palette.secondaryText) { dismissEntryActionLayer() },LinearLayout.LayoutParams(dp(44),dp(44)))
+        layer.addView(header)
+        layer.addView(ImageView(this).apply {
+            setImageBitmap(bitmap);scaleType=ImageView.ScaleType.FIT_CENTER;contentDescription="剪贴板图片预览"
+        },LinearLayout.LayoutParams(-1,0,1f))
+        layer.addView(TextView(this).apply {
+            text="复制图片";textSize=15f;gravity=Gravity.CENTER;minimumHeight=dp(48);setTextColor(accentColor(palette))
+            background=roundedBackground(withAlpha(accentColor(palette),if(palette.isDark)45 else 24),12f)
+            setOnClickListener {
+                runCatching { ClipboardImages.copy(this@ClipboardOverlayService,store,entry) }
+                    .onSuccess { Toast.makeText(this@ClipboardOverlayService,"已复制图片",Toast.LENGTH_SHORT).show() }
+                    .onFailure { Toast.makeText(this@ClipboardOverlayService,it.message ?: "复制未完成",Toast.LENGTH_LONG).show() }
+            }
+        })
+        panel.dragEnabled=false
+        panel.addView(layer,FrameLayout.LayoutParams(-1,-1))
+        entryActionLayer=layer
+    }
+
     private fun dismissEntryActionLayer(animated: Boolean = true) {
         val layer = entryActionLayer ?: return
         entryActionLayer = null
@@ -1101,6 +1165,7 @@ class ClipboardOverlayService : Service() {
     }
 
     private fun pasteEntry(entry: ClipEntry) {
+        if(entry.kind!="text")return
         val pasted = AccessibilityPasteBridge.pasteText(entry.text)
         if(pasted)com.floatclip.app.sync.SyncRuntime.userCopied(this,entry.text)
         if (!pasted) {
@@ -1114,6 +1179,25 @@ class ClipboardOverlayService : Service() {
         if (!panelOpen || panelCollapsing) return
         val panel = panelView ?: return
         val generation = ++clipboardCaptureGeneration
+        val imageClip=runCatching { clipboard.currentImageForCapture() }.getOrNull()
+        if(imageClip!=null) {
+            val event=ClipboardImages.event(imageClip)
+            if(event==lastCapturedImage)return
+            lastCapturedImage=event
+            ClipboardImages.captureAsync(applicationContext,imageClip,store) { result ->
+                result.onSuccess { entry ->
+                    if(entry!=null) {
+                        if(panelOpen&&!panelCollapsing){renderCategoryBar();renderEntries()}
+                        notifyHistoryChanged()
+                        if(showFeedback)Toast.makeText(this,"已收录图片",Toast.LENGTH_SHORT).show()
+                    }
+                }.onFailure {
+                    lastCapturedImage=""
+                    if(showFeedback)Toast.makeText(this,it.message ?: "图片未收录，请在前台重试",Toast.LENGTH_LONG).show()
+                }
+            }
+            return
+        }
         val text = runCatching { clipboard.readCurrentText(forCapture = true) }.getOrNull()
         if (generation != clipboardCaptureGeneration || panelView !== panel) return
         if (!text.isNullOrBlank() && text != lastCapturedClipboard) {

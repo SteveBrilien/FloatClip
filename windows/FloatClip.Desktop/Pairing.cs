@@ -71,8 +71,8 @@ public sealed class PairStore
     {
         Directory.CreateDirectory(root);path=Path.Combine(root,"paired-devices.dat");
         supported=OperatingSystem.IsWindows()||protect!=null&&unprotect!=null;
-        this.protect=protect??(b=>ProtectedData.Protect(b,null,DataProtectionScope.CurrentUser));
-        this.unprotect=unprotect??(b=>ProtectedData.Unprotect(b,null,DataProtectionScope.CurrentUser));
+        this.protect=protect??new Func<byte[],byte[]>(b=>ProtectedData.Protect(b,null,DataProtectionScope.CurrentUser));
+        this.unprotect=unprotect??new Func<byte[],byte[]>(b=>ProtectedData.Unprotect(b,null,DataProtectionScope.CurrentUser));
         if(!supported||!System.IO.File.Exists(path))return;
         try
         {
@@ -228,6 +228,7 @@ public sealed class PairStore
 }
 public sealed record NearbyDevice(string Name,IPAddress Address,string Pin,string Id,LanNetwork Network)
 {
+    public bool FileCatalog{get;init;}
     public override string ToString()=>Name+" · "+Address;
 }
 public static class Nearby
@@ -250,6 +251,7 @@ public static class Nearby
         var sender=Task.Run(async()=>{
             for(int i=0;i<3;i++) {
                 await udp.SendAsync(query,new IPEndPoint(network.Broadcast,46240),deadline.Token);
+                if(persistent){byte[] catalog=Encoding.ASCII.GetBytes("FLOATCLIP4|"+nonce);await Task.Delay(120,deadline.Token);await udp.SendAsync(catalog,new IPEndPoint(network.Broadcast,46240),deadline.Token);if(network.Gateway!=null&&network.Contains(network.Gateway))await udp.SendAsync(catalog,new IPEndPoint(network.Gateway,46240),deadline.Token);}
                 if(network.Gateway!=null && network.Contains(network.Gateway)) await udp.SendAsync(query,new IPEndPoint(network.Gateway,46240),deadline.Token);
                 await Task.Delay(800,deadline.Token);
             }
@@ -259,11 +261,11 @@ public static class Nearby
                 var answer=await udp.ReceiveAsync(deadline.Token);
                 if(answer.Buffer.Length>512 || !network.Contains(answer.RemoteEndPoint.Address) || answer.RemoteEndPoint.Port!=46240) continue;
                 string[] f=Encoding.ASCII.GetString(answer.Buffer).Split('|');
-                if(f.Length!=6 || f[0]!=prefix || f[1]!=nonce || f[2]!="46239" || f[3].Length!=64 || f[4].Length!=32) continue;
+                if(f.Length!=6 || f[0]!=prefix&&!(persistent&&f[0]=="FLOATCLIP4") || f[1]!=nonce || f[2]!="46239" || f[3].Length!=64 || f[4].Length!=32) continue;
                 try {
                     Convert.FromHexString(f[3]); Convert.FromHexString(f[4]);
                     string name=Wire.Decode(Convert.FromBase64String(f[5])); if(name.Length is <1 or >40 || name.Any(char.IsControl)) continue;
-                    var device=new NearbyDevice(name,answer.RemoteEndPoint.Address,f[3].ToLowerInvariant(),f[4],network); found[device.Address.ToString()]=device;
+                    var device=new NearbyDevice(name,answer.RemoteEndPoint.Address,f[3].ToLowerInvariant(),f[4],network){FileCatalog=f[0]=="FLOATCLIP4"};if(!found.TryGetValue(device.Address.ToString(),out var prior)||device.FileCatalog||!prior.FileCatalog)found[device.Address.ToString()]=device;
                 } catch { }
             }
         } catch(OperationCanceledException) { }
@@ -287,7 +289,7 @@ public static class Nearby
             tls.ReadTimeout=10000; tls.WriteTimeout=10000; tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions{TargetHost="FloatClip LAN P0",EnabledSslProtocols=SslProtocols.Tls12,CertificateRevocationCheckMode=System.Security.Cryptography.X509Certificates.X509RevocationMode.NoCheck},connection.Token).GetAwaiter().GetResult(); connection.CancelAfter(Timeout.Infinite); trace?.Invoke("tls-authenticated");
             byte[] token=store.Get(device.Pin),client=RandomNumberGenerator.GetBytes(32),id=Convert.FromHexString(device.Id);
             using(var hello=new MemoryStream()) {
-                Wire.WriteInt(hello,persistent?0x46435033:0x46435032,4); hello.Write(id); hello.WriteByte((byte)token.Length); hello.Write(token); hello.Write(client);
+                Wire.WriteInt(hello,persistent?(device.FileCatalog?0x46435034:0x46435033):0x46435032,4); hello.Write(id); hello.WriteByte((byte)token.Length); hello.Write(token); hello.Write(client);
                 byte[] packet=hello.ToArray(); tls.Write(packet,0,packet.Length); tls.Flush();
             }
             trace?.Invoke("hello-sent");
@@ -299,7 +301,7 @@ public static class Nearby
             if(!accepted || tls.ReadByte()!=1) throw new IOException("配对未确认，请在两端核对后重试");
             trace?.Invoke("remote-confirmed"); byte[] credential=Wire.ReadBytes(tls,32); trace?.Invoke("credential-read"); cancel.ThrowIfCancellationRequested(); store.Put(device.Pin,credential); trace?.Invoke("credential-saved");
             tls.ReadTimeout=180000;
-            return new Session(tls,()=>tcp.Dispose(),cache,persistent);
+            return new Session(tls,()=>tcp.Dispose(),cache,persistent,persistent&&device.FileCatalog);
         } catch(IOException) { tcp.Dispose(); throw; } catch { tcp.Dispose(); throw new IOException("连接失败，请检查所选网卡、手机发现状态和 TUN 流量排除"); }
     }
 }

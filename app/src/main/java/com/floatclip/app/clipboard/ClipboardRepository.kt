@@ -15,9 +15,15 @@ class ClipboardRepository(context: Context) {
             com.floatclip.app.sync.SyncRuntime.observe(appContext,clip)
             if(ClipboardWrites.isOwnClip(appContext,clip.description)||
                 clip.description.extras?.getBoolean("android.content.extra.IS_SENSITIVE",false)==true)return null
+            if(ClipboardImages.isImage(appContext,clip))return null
             return if(clip.itemCount>0)clip.getItemAt(0).text?.toString() else null
         }
         return bridge.readCurrent()?.text ?: PasteAccessibilityService.readClipboardText(false)
+    }
+    fun currentImageForCapture():android.content.ClipData? {
+        val clip=appContext.getSystemService(android.content.ClipboardManager::class.java).primaryClip ?: return null
+        if(ClipboardWrites.isOwnClip(appContext,clip.description) || clip.description.extras?.getBoolean("android.content.extra.IS_SENSITIVE",false)==true)return null
+        return clip.takeIf { ClipboardImages.isImage(appContext,it) }?.also { com.floatclip.app.sync.SyncRuntime.observe(appContext,it) }
     }
 
     fun writeText(text: String) {

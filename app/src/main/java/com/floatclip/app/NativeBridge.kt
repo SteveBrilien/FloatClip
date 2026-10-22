@@ -46,8 +46,8 @@ class NativeBridge(private val activity: Activity, private val legacy: (String) 
             .put("platform", "android").put("device", DeviceIdentity.json(activity)).put("legacy", true)
             .put("theme", OverlayPreferences(activity).themeMode().name.lowercase())
             .put("systemDark", activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES)
-        "vault.load" -> store.unifiedSnapshot()
-        "vault.commit" -> store.commitUnified(args.getString("revision"), args.getJSONArray("entries"))
+        "vault.load" -> store.textSnapshot()
+        "vault.commit" -> store.commitTextUnified(args.getString("revision"), args.getJSONArray("entries"))
         "clipboard.read" -> clipboard.readCurrentText().orEmpty().also { require(it.length <= 1000000) { "剪贴板文字过长" } }
         "clipboard.write" -> args.getString("text").let { require(it.length <= 1000000); clipboard.writeText(it); true }
         "theme.set" -> {

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
@@ -8,6 +9,20 @@ using FloatClip.Share;
 namespace FloatClip.Desktop;
 public static class Acceptance
 {
+    /** Launch the packaged shell without user history, system hooks or device connections. */
+    public static void RunDesktopUI(string dataRoot,string output)
+    {
+        var app=new System.Windows.Application{ShutdownMode=System.Windows.ShutdownMode.OnExplicitShutdown};DesktopFluent.Initialize(app.Resources);
+        using var host=new ClipboardHost(Path.GetFullPath(dataRoot),false);host.ShowPopup();
+        var timer=new System.Windows.Threading.DispatcherTimer{Interval=TimeSpan.FromMilliseconds(400)};
+        timer.Tick+=(_,_)=>{timer.Stop();try{
+            var window=app.Windows.OfType<LocalClipboardWindow>().Single();window.UpdateLayout();
+            if(!window.IsVisible||!window.IsEnabled||window.ActualWidth<420)throw new IOException("原生窗口未正确显示");
+            var surface=(System.Windows.FrameworkElement)window.Content;var bitmap=new System.Windows.Media.Imaging.RenderTargetBitmap((int)surface.ActualWidth,(int)surface.ActualHeight,96,96,System.Windows.Media.PixelFormats.Pbgra32);bitmap.Render(surface);
+            var encoder=new System.Windows.Media.Imaging.PngBitmapEncoder();encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));using(var image=System.IO.File.Create(output+".png"))encoder.Save(image);
+            System.IO.File.WriteAllText(output,JsonSerializer.Serialize(new{result="PASS",version=ShareUpdates.Version,build=ShareUpdates.Build,title=window.Title,visible=window.IsVisible,isolated=true,userClipboardUntouched=true}));
+        }catch(Exception e){Environment.ExitCode=1;System.IO.File.WriteAllText(output,JsonSerializer.Serialize(new{result="FAIL",error=e.ToString()}));}finally{app.Shutdown();}};timer.Start();app.Run();
+    }
     const string AndroidText="FloatClip-Android\n中文 📋\n\tcode  \r\n";
     const string WindowsText="FloatClip-Windows\n中文 📋\n\tcode  \r\n";
     public static void Run(string invite,string output)=>RunWith(cache=>LanClient.Connect(invite,cache),output);

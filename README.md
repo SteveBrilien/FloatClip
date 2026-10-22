@@ -1,6 +1,6 @@
 # FloatClip
 
-当前候选版为 **0.7.1**（Android build 14）。Android / Windows 直接进入本机剪贴板，原生本机与局域网无需网页登录；iPad / 跨网为可选的认证入口。正文优先、实时搜索、左滑置顶/删除与撤销、按压反馈和统一图标已落实到客户端。
+Windows 当前开发为 **0.7.5 / build 20 的 Fluent UI 预览阶段**，见 [最新预览与未完成项](docs/WINDOWS_FLUENT_REVIEW_2026-10-22.md)。文件传输适配尚未完成，不可部署当前源码作为完整发版。此前图片/emoji/更新验证见 [Windows 交互预览与验证](docs/WINDOWS_REVIEW_2026-10-22.md)。Android 保持 0.7.2 / build 17；正式发布源仍为 0.7.1。Android / Windows 直接进入本机剪贴板，原生本机与局域网无需网页登录；iPad / 跨网为可选的认证入口。
 
 [下载、验证证据与未完成项](docs/RELEASE_0.7.1.md) · [产品重整方案](docs/FloatClip-Product-Brief.md)。本版是交互测试版，Android 全天后台收录、长期设备接续和三端真机验收尚未完成。图标沿用 0.4.0。
 
@@ -12,7 +12,7 @@ Android 原版剪贴板与悬浮球、Windows 客户端、iPad PWA 使用同一�
 - [三端产品与兼容规范](docs/SHARE_PRODUCT_CONTRACT_2026-10-20.md)
 - [实施范围与迁移方案](docs/UNIFIED_0.6.0_PLAN.md)
 - Android 主模块：app（安装包 com.floatclip.probe，源码命名空间 com.floatclip.app）；nearby-probe 保留为旧 LAN 测试 / 兼容源码。
-- Windows：windows/FloatClip.Desktop；新共享界面需要 Microsoft WebView2 Runtime，提供离线本机工具和旧 LAN 入口。
+- Windows：windows/FloatClip.Desktop；一个原生剪贴板面板，设置/设备为非模态窗口；可选 iPad/Web 入口使用浏览器，无需 WebView2 Runtime。
 
 发行状态：Android / Windows / PWA 均为 0.6.0。Android 沿用当前 Share 的固定签名和包名，覆盖升级共享版；原版 FloatClip 可保留并存，历史记录需通过便携加密备份恢复。详见 [本次验证与发布状态](docs/RELEASE_0.6.0.md)。
 

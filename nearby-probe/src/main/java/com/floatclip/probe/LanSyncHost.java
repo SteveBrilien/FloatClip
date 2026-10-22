@@ -62,7 +62,7 @@ public final class LanSyncHost implements AutoCloseable {
         try{
             peer.setSoTimeout(10000);peer.setTcpNoDelay(true);peer.startHandshake();
             DataInputStream in=new DataInputStream(peer.getInputStream());DataOutputStream out=new DataOutputStream(peer.getOutputStream());
-            if(in.readInt()!=0x46435033)throw new IOException("FCP3 required");
+            int protocol=in.readInt();if(protocol!=0x46435033&&protocol!=0x46435034)throw new IOException("FCP3/FCP4 required");
             byte[] offered=new byte[16];in.readFully(offered);if(!MessageDigest.isEqual(offered,discoveryId))throw new IOException("Stale discovery");
             int length=in.readUnsignedByte();if(length!=0&&length!=32)throw new IOException("Invalid credential");
             byte[] token=new byte[length];in.readFully(token);byte[] client=new byte[32];in.readFully(client);
@@ -96,8 +96,10 @@ public final class LanSyncHost implements AutoCloseable {
                 public void notice(String message){delegate.notice(message);}
                 public void failure(Exception e){delegate.failure(e);}
                 public void sync(com.floatclip.share.ShareWire.Frame frame)throws Exception{delegate.sync(frame);}
+                public void catalog(byte[] data)throws Exception{delegate.catalog(data);}
+                public void fileFailed(String message){delegate.fileFailed(message);}
                 public void closed(){sockets.remove(peer);delegate.closed();}
-            },true);
+            },true,protocol==0x46435034);
             delegate.attached(session);events.connected(identity,session);session.start();handedOff=true;
         }catch(Exception ignored){/* No secrets or clipboard contents in diagnostics. */}
         finally{timeout.cancel(false);if(!handedOff){sockets.remove(peer);closeSocket(peer);}}
@@ -108,7 +110,7 @@ public final class LanSyncHost implements AutoCloseable {
             byte[] data=new byte[513];DatagramPacket query=new DatagramPacket(data,data.length);socket.receive(query);
             if(query.getLength()>128||!LanPair.sameSubnet(subnet.getAddress(),query.getAddress(),subnet.getNetworkPrefixLength())||System.nanoTime()<next)continue;
             String text=new String(query.getData(),0,query.getLength(),StandardCharsets.US_ASCII);
-            if(!text.matches("FLOATCLIP3\\|[0-9a-f]{32}"))continue;
+            if(!text.matches("FLOATCLIP[34]\\|[0-9a-f]{32}"))continue;
             next=System.nanoTime()+100000000L;
             String name=android.os.Build.MODEL;name=name.substring(0,Math.min(40,name.length()));
             byte[] answer=(text+"|"+LanPair.PORT+"|"+pin+"|"+LanPair.hex(discoveryId)+"|"+Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8))).getBytes(StandardCharsets.US_ASCII);

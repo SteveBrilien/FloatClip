@@ -53,11 +53,15 @@ object SyncRuntime {
         current()?.copied(text,"user:"+java.util.UUID.randomUUID(),
             shareGeneration=policy.sendGeneration.takeIf{policy.sending},recordHistory=false)
     }
+    fun unsupportedCopied(context:Context) {
+        if(SyncPreferences(context).enabled())current()?.copied("","unsupported:"+java.util.UUID.randomUUID(),true)
+    }
     fun observe(context: Context,clip: ClipData) {
         val policy=SyncPreferences(context).policy()
         if(!policy.enabled||ClipboardWrites.isOwnClip(context,clip.description))return
         val event=stamp(clip)
         if(clip.description.extras?.getBoolean("android.content.extra.IS_SENSITIVE",false)==true){current()?.copied("",event,true);return}
+        if(com.floatclip.app.clipboard.ClipboardImages.isImage(context,clip)){current()?.copied("",event,true);return}
         val value=if(clip.itemCount>0)clip.getItemAt(0).text?.toString().orEmpty() else ""
         if(value.isBlank()||value.toByteArray(Charsets.UTF_8).size>com.floatclip.share.ClipboardSync.MAX_BYTES){current()?.copied("",event,true);return}
         current()?.copied(value,event,shareGeneration=policy.sendGeneration.takeIf{policy.sending})

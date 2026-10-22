@@ -90,6 +90,15 @@ public final class ClipboardSyncChecks {
         recovery.disconnect();recovery.a.copied("revoked",now,false);recovery.a.configure(true,false,true,true);
         yes(recovery.a.pendingPeers(now).isEmpty());
 
+        Pair unsupported=new Pair();unsupported.enable();unsupported.disconnect();
+        unsupported.a.copied("must not reappear after an image copy",now,false);
+        yes(unsupported.a.pendingPeers(now).contains(BKEY));
+        unsupported.a.copied("",++now,true);
+        yes(unsupported.a.pendingPeers(now).isEmpty());
+        unsupported.restartA();unsupported.connect();yes(unsupported.bh.isEmpty());
+        unsupported.a.copied("ordinary text after image",++now,false);unsupported.pump();
+        yes(unsupported.ba.equals(List.of("ordinary text after image")));
+
         Path vectors=Paths.get(args[0]);Files.createDirectories(vectors);
         UUID epoch=UUID.fromString("10213243-5465-7687-98a9-bacbdcedfe0f");
         ClipboardSync.Entry sample=new ClipboardSync.Entry(UUID.fromString("00112233-4455-6677-8899-aabbccddeeff"),A,1234,1700000000000L,"FloatClip 同步 📋\n  exact text\r\n");

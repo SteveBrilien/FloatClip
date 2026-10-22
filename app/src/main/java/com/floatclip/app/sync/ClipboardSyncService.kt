@@ -18,6 +18,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import com.floatclip.app.R
+import com.floatclip.app.files.FileRuntime
 import com.floatclip.app.UnifiedActivity
 import com.floatclip.app.clipboard.ClipStore
 import com.floatclip.app.clipboard.ClipboardWrites
@@ -213,7 +214,7 @@ class ClipboardSyncService: Service() {
         backgroundCapture?.close();backgroundCapture=null
         paused=true;pairingUntil=0;pairRequest?.accept(false);pairRequest=null
         bluetoothPairing?.close();bluetoothPairing=null
-        for(link in links.values)link.close();links.clear()
+        for((key,link) in links){FileRuntime.get(this).disconnected(key,link.session);link.close()};links.clear()
         actor.execute{for(host in hosts.values)host.close();hosts.clear();bluetooth?.close();bluetooth=null;if(::engine.isInitialized)runCatching{engine.configure(false,prefs.sending(),prefs.receiving(),prefs.applying())}}
         setStatus("共享已暂停")
     }
@@ -274,8 +275,9 @@ class ClipboardSyncService: Service() {
                 // Publish ownership only after admission. A rejected Bluetooth candidate
                 // must never invalidate callbacks belonging to the existing LAN session.
                 connectionTokens[peer]=token
-                if(previous!=null){links.remove(peer,previous);previous.close()}
+                if(previous!=null){FileRuntime.get(this@ClipboardSyncService).disconnected(peer,previous.session);links.remove(peer,previous);previous.close()}
                 links[peer]=Link(peer,session)
+                FileRuntime.get(this@ClipboardSyncService).attach(peer,session){!closing&&!paused&&prefs.enabled()&&authorized(peer)&&connectionTokens[peer]==token&&engine.peerViews().none{it.key==peer&&!it.enabled}}
                 runCatching{configureEngine();engine.connected(peer);setStatus("${links.size} 台设备已连接 · 加密共享")}.onFailure{links.remove(peer)?.close();setStatus("设备授权状态未保存")}
             }}
             override fun sync(frame: ShareWire.Frame){if(!closing)actor.execute{if(!closing&&!paused&&prefs.enabled()&&(frame.type!=ClipboardSync.CLIP||prefs.receiving())&&authorized(peer)&&connectionTokens[peer]==token)runCatching{
@@ -283,13 +285,15 @@ class ClipboardSyncService: Service() {
                 if(frame.type==ClipboardSync.HELLO)engine.peerViews().firstOrNull{it.key==peer}?.let{credentials.rememberDevice(peer,it.device)}
             }.onFailure{links.remove(peer)?.close();setStatus("设备授权或同步校验失败，请重新核对")}}}
             override fun text(id: UUID,value: String,outgoing: Boolean)=Unit
-            override fun offered(offer: ShareWire.Offer){main.post{if(SyncRuntime.hasObserver())SyncRuntime.offer(peer,offer) else links[peer]?.session?.reject(offer.id)}}
-            override fun progress(id: UUID,name: String,done: Long,total: Long,outgoing: Boolean){main.post{SyncRuntime.progress(name,done,total,outgoing)}}
-            override fun file(offer: ShareWire.Offer,file: File,outgoing: Boolean){main.post{SyncRuntime.file(offer,file,outgoing)}}
+            override fun catalog(data:ByteArray){if(!closing)actor.execute{if(connectionTokens[peer]==token)runCatching{FileRuntime.get(this@ClipboardSyncService).catalog(peer,data)}.onFailure{links[peer]?.close();setStatus("文件清单校验失败，可重新连接后重试")}}}
+            override fun offered(offer: ShareWire.Offer){if(connectionTokens[peer]!=token)return;if(FileRuntime.get(this@ClipboardSyncService).offered(peer,offer))return;main.post{if(SyncRuntime.hasObserver())SyncRuntime.offer(peer,offer) else links[peer]?.session?.reject(offer.id)}}
+            override fun progress(id: UUID,name: String,done: Long,total: Long,outgoing: Boolean){if(connectionTokens[peer]!=token)return;FileRuntime.get(this@ClipboardSyncService).progress(peer,id,done,total,outgoing);main.post{SyncRuntime.progress(name,done,total,outgoing)}}
+            override fun file(offer: ShareWire.Offer,file: File,outgoing: Boolean){if(connectionTokens[peer]!=token)return;FileRuntime.get(this@ClipboardSyncService).received(peer,offer,file,outgoing);main.post{SyncRuntime.file(offer,file,outgoing)}}
+            override fun fileFailed(message:String){if(connectionTokens[peer]==token)FileRuntime.get(this@ClipboardSyncService).failed(peer,message)}
             override fun notice(message: String){setStatus(message)}
             override fun closed(){if(!closing)actor.execute {
                 val link=links[peer]
-                if(link!=null&&connectionTokens[peer]==token&&link.session.isClosed){links.remove(peer,link);link.close();engine.disconnected(peer);setStatus(if(links.isEmpty())"等待设备自动重连" else "${links.size} 台设备已连接")}
+                if(link!=null&&connectionTokens[peer]==token&&link.session.isClosed){FileRuntime.get(this@ClipboardSyncService).disconnected(peer,link.session);links.remove(peer,link);link.close();engine.disconnected(peer);setStatus(if(links.isEmpty())"等待设备自动重连" else "${links.size} 台设备已连接")}
             }}
         }
     }
@@ -319,7 +323,7 @@ class ClipboardSyncService: Service() {
         else if(links.isEmpty())setStatus(if(System.currentTimeMillis()<pairingUntil)"允许添加设备，90 秒内有效" else "等待已授权设备自动连接")
     }
     fun peers(): List<ClipboardSync.PeerView> = if(::engine.isInitialized)engine.peerViews() else emptyList()
-    fun peerEnabled(key: String,on: Boolean){if(!closing)actor.execute{runCatching{engine.peerEnabled(key,on)}.onFailure{setStatus("设备共享开关未保存")};main.post{refreshUi()}}}
+    fun peerEnabled(key: String,on: Boolean){if(!closing)actor.execute{runCatching{engine.peerEnabled(key,on);if(!on)links[key]?.close()}.onFailure{setStatus("设备共享开关未保存")};main.post{refreshUi()}}}
     fun session(peer: String)=links[peer]?.session
     private fun setStatus(value: String){status=value;main.post{if(!closing){getSystemService(NotificationManager::class.java).notify(NOTIFICATION,notification());SyncRuntime.changed()}}}
     private fun historyChanged(){sendBroadcast(Intent(HISTORY_CHANGED).setPackage(packageName),"$packageName.permission.INTERNAL")}

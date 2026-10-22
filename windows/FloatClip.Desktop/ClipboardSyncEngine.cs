@@ -137,7 +137,13 @@ public sealed class ClipboardSyncEngine
         {
             if(!state.Enabled)return null;
             applicationGrant++;
-            if(!state.Send||excluded)return null;
+            if(!state.Send||excluded)
+            {
+                var excludedState=state.Copy();bool changed=false;
+                foreach(var peer in excludedState.Peers.Values)if(peer.Pending!=null){peer.Pending=null;changed=true;}
+                if(changed)Save(excludedState);
+                return null;
+            }
             var entry=new SyncEntry(Guid.NewGuid(),local,checked(state.Clock+1),now,text);SyncProtocol.ValidateEntry(entry);
             var next=state.Copy();next.Clock=entry.Clock;next.HeadClock=entry.Clock;next.HeadOrigin=local.Id;
             foreach(var p in next.Peers.Values)if(p.Enabled&&p.Device!=null&&p.Receive&&p.Epoch!=Guid.Empty){p.Pending=entry;p.PendingEpoch=p.Epoch;p.QueuedAt=now;}

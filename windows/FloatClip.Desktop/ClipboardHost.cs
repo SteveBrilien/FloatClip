@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using System.Windows.Media.Imaging;
 using FloatClip.Share;
 
 namespace FloatClip.Desktop;
@@ -16,17 +17,20 @@ public sealed class ClipboardHost:IDisposable
 {
     public static ClipboardHost? Current{get;private set;}
     readonly Dispatcher dispatcher=Dispatcher.CurrentDispatcher;
-    readonly string root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"FloatClip","Host");
+    readonly string root;
+    readonly bool systemIntegration;
+    public string PreferencesRoot=>root;
     readonly HwndSource messages;
     readonly DesktopShellPreferences preferences;
     readonly string preferencesPath;
-    readonly System.Windows.Forms.NotifyIcon tray;
+    readonly System.Windows.Forms.NotifyIcon? tray;
     LocalClipboardWindow? popup;
     uint initialSequence,lastSequence;
     int hotkeyId=703;
     bool registered,disposed;
     public bool IsExiting=>disposed;
     public ClipboardVault Vault{get;}
+    public DesktopUpdates Updates{get;}
     public NativeClipboardSync? Sync{get;}
     public string? SyncError{get;}
     public bool Capture{get;set;}=true;
@@ -45,21 +49,31 @@ public sealed class ClipboardHost:IDisposable
     [DllImport("user32.dll")]static extern bool SetWindowPos(IntPtr hwnd,IntPtr after,int x,int y,int width,int height,uint flags);
     [StructLayout(LayoutKind.Sequential)]struct RectNative{public int Left,Top,Right,Bottom;}
 
-    public ClipboardHost()
+    // An isolated data root and disabled integration let desktop checks exercise the real
+    // view without capturing the user's clipboard, connecting peers or registering a hotkey.
+    public ClipboardHost(string? dataRoot=null,bool systemIntegration=true,DesktopUpdates? updates=null)
     {
+        if(systemIntegration&&dataRoot!=null||!systemIntegration&&string.IsNullOrWhiteSpace(dataRoot))
+            throw new ArgumentException("隔离验收必须使用独立数据目录并关闭系统集成");
+        this.systemIntegration=systemIntegration;
+        root=dataRoot??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"FloatClip","Host");
         Current=this;
         Directory.CreateDirectory(root);
         preferencesPath=Path.Combine(root,"desktop-shell.json");
         preferences=DesktopShellPreferences.Load(preferencesPath);
+        if(systemIntegration&&updates!=null)throw new ArgumentException("正式宿主使用已配置的更新源");
+        Updates=updates??new DesktopUpdates(Path.Combine(root,"Updates"));
         try{Capture=JsonNode.Parse(File.ReadAllText(Path.Combine(root,"clipboard-ui.json")))?["capture"]?.GetValue<bool>()??true;}catch{}
-        Vault=new ClipboardVault();
+        Vault=new ClipboardVault(dataRoot==null?null:Path.Combine(dataRoot,"Library"));
+        try{Vault.PruneOrphanedImages();}catch{} // Never destroy the vault if a prior run left damaged metadata.
         try
         {
-            Sync=new NativeClipboardSync(Vault,IncomingClipboard);
-            Sync.HistoryChanged+=NotifyChanged;Sync.Changed+=NotifyChanged;
+            if(systemIntegration){Sync=new NativeClipboardSync(Vault,IncomingClipboard);
+                Sync.HistoryChanged+=NotifyChanged;Sync.Changed+=NotifyChanged;}
         }
         catch{SyncError="共享状态暂时无法读取，请保留数据并检查存储。";}
         messages=new HwndSource(new HwndSourceParameters("FloatClip.ClipboardHost"){ParentWindow=new IntPtr(-3),WindowStyle=0});
+        if(!systemIntegration)return;
         messages.AddHook(Hook);
         initialSequence=GetClipboardSequenceNumber();
         if(!AddClipboardFormatListener(messages.Handle))throw new IOException("无法监听系统剪贴板");
@@ -76,8 +90,9 @@ public sealed class ClipboardHost:IDisposable
     }
     public void Start(bool background)
     {
-        ReadClipboard();Sync?.Start();
+        if(systemIntegration)ReadClipboard();Sync?.Start();
         if(!background||Pinned)ShowPopup(activate:!background);
+        if(systemIntegration)_=Updates.CheckAsync();
     }
     IntPtr Hook(IntPtr window,int message,IntPtr w,IntPtr l,ref bool handled)
     {
@@ -108,14 +123,29 @@ public sealed class ClipboardHost:IDisposable
             uint sequence=GetClipboardSequenceNumber();
             if(sequence!=0&&sequence==lastSequence)return;
             if(ClipboardWrites.IsOwnWrite()){lastSequence=sequence;return;}
-            if(!Clipboard.ContainsText()||Clipboard.ContainsData("ExcludeClipboardContentFromMonitorProcessing"))
+            if(Clipboard.ContainsData("ExcludeClipboardContentFromMonitorProcessing"))
             {Sync?.Copied("",true);lastSequence=sequence;return;}
-            string value=Clipboard.GetText();
-            if(string.IsNullOrWhiteSpace(value)){Sync?.Copied("",true);lastSequence=sequence;return;}
-            if(Capture)Vault.AddText(value);
-            lastSequence=sequence;
-            if(sequence!=initialSequence)Sync?.Copied(value);
-            NotifyChanged();
+            if(Clipboard.ContainsImage()||Clipboard.ContainsData(ClipboardImages.PngFormat)||Clipboard.ContainsData(DataFormats.GetDataFormat(17).Name)||Clipboard.ContainsData(DataFormats.Dib))
+            {
+                Sync?.Copied("",true);
+                if(Capture)
+                {
+                    var image=ClipboardImages.Read(Clipboard.GetDataObject());
+                    if(image!=null)Vault.AddImage(image.Value.Png,image.Value.Width,image.Value.Height);
+                }
+                lastSequence=sequence;
+                NotifyChanged();return;
+            }
+            if(Clipboard.ContainsText())
+            {
+                string value=Clipboard.GetText();
+                if(string.IsNullOrWhiteSpace(value)){Sync?.Copied("",true);lastSequence=sequence;return;}
+                if(Capture)Vault.AddText(value);
+                lastSequence=sequence;
+                if(sequence!=initialSequence)Sync?.Copied(value);
+                NotifyChanged();return;
+            }
+            Sync?.Copied("",true);lastSequence=sequence;
         }
         catch(COMException)
         {
@@ -135,8 +165,13 @@ public sealed class ClipboardHost:IDisposable
     }
     public void CopyByUser(string text)
     {
-        ClipboardWrites.Write(text);lastSequence=GetClipboardSequenceNumber();
+        if(systemIntegration){ClipboardWrites.Write(text);lastSequence=GetClipboardSequenceNumber();}
         Sync?.Copied(text);NotifyChanged();
+    }
+    public void CopyImageByUser(byte[] pngBytes)
+    {
+        if(systemIntegration){ClipboardWrites.WriteImage(pngBytes);lastSequence=GetClipboardSequenceNumber();}
+        Sync?.Copied("",true);NotifyChanged();
     }
     public void ShowPopup(bool activate=true)
     {
@@ -148,6 +183,7 @@ public sealed class ClipboardHost:IDisposable
     }
     // Legacy entry points activate the same clipboard surface.
     public void ShowLibrary()=>ShowPopup();
+    public void ShowDevices(){ShowPopup();popup?.OpenDevices();}
     public void ShowSettings()
     {
         ShowPopup();popup?.OpenSettings();
@@ -185,7 +221,7 @@ public sealed class ClipboardHost:IDisposable
         if(!DesktopShellPreferences.ValidHotkey(modifiers,key))throw new IOException("请选择包含 Ctrl、Alt 或 Win 的组合键；Win + V 由系统使用");
         if(registered&&modifiers==preferences.HotkeyModifiers&&key==preferences.HotkeyKey)return;
         int nextId=hotkeyId==703?704:703;
-        if(!RegisterHotKey(messages.Handle,nextId,0x4000|modifiers,key))throw new IOException("这个快捷键已被占用，请换一个组合");
+        if(systemIntegration&&!RegisterHotKey(messages.Handle,nextId,0x4000|modifiers,key))throw new IOException("这个快捷键已被占用，请换一个组合");
         uint oldModifiers=preferences.HotkeyModifiers,oldKey=preferences.HotkeyKey;
         preferences.HotkeyModifiers=modifiers;preferences.HotkeyKey=key;
         try{preferences.Save(preferencesPath);}
@@ -204,8 +240,9 @@ public sealed class ClipboardHost:IDisposable
         try{RememberPlacement();}catch{}
         disposed=true;Current=null;
         popup?.Close();
-        Sync?.Dispose();tray.Visible=false;tray.Dispose();
-        RemoveClipboardFormatListener(messages.Handle);
+        Sync?.Dispose();if(tray!=null){tray.Visible=false;tray.Dispose();}
+        Updates.Dispose();
+        if(systemIntegration)RemoveClipboardFormatListener(messages.Handle);
         if(registered)UnregisterHotKey(messages.Handle,hotkeyId);
         messages.RemoveHook(Hook);messages.Dispose();
     }

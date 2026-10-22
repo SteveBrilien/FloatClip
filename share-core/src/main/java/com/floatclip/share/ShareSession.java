@@ -22,12 +22,15 @@ public final class ShareSession implements AutoCloseable {
         default void failure(Exception problem) { }
         default void sync(ShareWire.Frame frame) throws Exception { throw new IOException("Sync adapter unavailable"); }
         default void attached(ShareSession session) { }
+        default void catalog(byte[] data) throws Exception { throw new IOException("File catalog unavailable"); }
+        default void fileFailed(String message) { }
     }
     private final InputStream input; private final OutputStream output; private final Closeable connection;
     private final File cache; private final Events events;
     private final Object writing=new Object(), state=new Object();
     private final AtomicBoolean closed=new AtomicBoolean();
     private final boolean persistent;
+    public final boolean catalogEnabled;
     private volatile long lastRead=System.nanoTime();
     private final ExecutorService fileWorker=Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService timer=Executors.newSingleThreadScheduledExecutor();
@@ -45,15 +48,21 @@ public final class ShareSession implements AutoCloseable {
         this(socket,cache,events,false);
     }
     public ShareSession(Socket socket,File cache,Events events,boolean persistent) throws IOException {
-        this(configure(socket).getInputStream(),socket.getOutputStream(),socket,cache,events,persistent);
+        this(socket,cache,events,persistent,false);
+    }
+    public ShareSession(Socket socket,File cache,Events events,boolean persistent,boolean catalog) throws IOException {
+        this(configure(socket).getInputStream(),socket.getOutputStream(),socket,cache,events,persistent,catalog);
     }
     private static Socket configure(Socket socket)throws IOException{
         socket.setSoTimeout(180000);socket.setTcpNoDelay(true);return socket;
     }
     /** Alternate authenticated transports can provide stream adapters without pretending to be TCP sockets. */
     public ShareSession(InputStream input,OutputStream output,Closeable connection,File cache,Events events,boolean persistent) throws IOException {
+        this(input,output,connection,cache,events,persistent,false);
+    }
+    public ShareSession(InputStream input,OutputStream output,Closeable connection,File cache,Events events,boolean persistent,boolean catalog) throws IOException {
         this.input=Objects.requireNonNull(input);this.output=Objects.requireNonNull(output);this.connection=Objects.requireNonNull(connection);
-        this.cache=cache;this.events=events;this.persistent=persistent;
+        this.cache=cache;this.events=events;this.persistent=persistent;this.catalogEnabled=persistent&&catalog;
         if(!cache.isDirectory()&&!cache.mkdirs())throw new IOException("File cache unavailable");
     }
     public void start() {
@@ -65,6 +74,7 @@ public final class ShareSession implements AutoCloseable {
         Thread reader=new Thread(this::readLoop,"floatclip-share-reader"); reader.start();
     }
     public boolean isClosed(){return closed.get();}
+    public void sendCatalog(byte[] data) throws IOException {if(!catalogEnabled||data.length<2||data.length>MAX_TEXT)throw new IOException("File catalog not negotiated");write(CATALOG,new UUID(0,0),data);}
     private void write(int type,UUID id,byte[] data) throws IOException {
         synchronized(writing) {
             if(closed.get()) throw new IOException("Session closed");
@@ -87,6 +97,9 @@ public final class ShareSession implements AutoCloseable {
         catch(IOException e) { close(); throw e; }
     }
     public void sendFile(File source,String name) throws IOException {
+        sendFile(source,name,null);
+    }
+    public void sendFile(File source,String name,UUID requestId) throws IOException {
         safeName(name);
         if(!source.isFile() || source.length()>MAX_FILE) throw new IOException("Choose a regular file up to 64 MiB");
         final Job job=new Job(source,name);
@@ -104,11 +117,11 @@ public final class ShareSession implements AutoCloseable {
                         size+=n; if(size>MAX_FILE) throw new IOException("File limit exceeded"); hash.update(buffer,0,n);
                     }
                 }
-                Offer offer=new Offer(UUID.randomUUID(),name,size,hash.digest());
+                Offer offer=new Offer(requestId==null?UUID.randomUUID():requestId,name,size,hash.digest());
                 synchronized(state) { if(outgoing!=job || closed.get()) return; job.offer=offer; }
                 events.progress(offer.id,name,0,size,true);
                 events.notice("等待对方接收文件"); write(OFFER,offer.id,offer.encode());
-            } catch(Exception e) { synchronized(state) { if(outgoing==job) outgoing=null; } events.notice("文件准备失败，请重新选择"); }
+            } catch(Exception e) { synchronized(state) { if(outgoing==job) outgoing=null; } events.fileFailed("文件准备失败，请重新选择");events.notice("文件准备失败，请重新选择"); }
         });
     }
     public void accept(UUID id) throws IOException {
@@ -148,7 +161,7 @@ public final class ShareSession implements AutoCloseable {
             if(done!=offer.size || !MessageDigest.isEqual(hash.digest(),offer.hash)) throw new IOException("Source file changed");
             synchronized(state) { if(outgoing!=job) return; job.endSent=true; }
             write(END,offer.id,offer.hash);
-        } catch(Exception e) { events.notice("文件传输中断，请重新发送"); close(); }
+        } catch(Exception e) { events.fileFailed("文件传输中断，请重新发送");events.notice("文件传输中断，请重新发送"); close(); }
     }
     private void pace(int bytes) throws InterruptedException {
         long delay;
@@ -167,6 +180,7 @@ public final class ShareSession implements AutoCloseable {
     }
     private void handle(Frame f) throws Exception {
         lastRead=System.nanoTime();
+        if(f.type==CATALOG){if(!catalogEnabled||!f.id.equals(new UUID(0,0))||f.data.length<2)throw new IOException("File catalog not negotiated");events.catalog(f.data);return;}
         if(f.type>=ClipboardSync.CLIP){
             if(!persistent)throw new IOException("Sync was not negotiated");
             if(f.type==ClipboardSync.PING)write(ClipboardSync.PONG,f.id,new byte[0]);
@@ -205,7 +219,7 @@ public final class ShareSession implements AutoCloseable {
                 if(job==null || job.offer==null || !job.offer.id.equals(f.id) || job.accepted) throw new IOException("Unexpected decision");
                 if(f.type==REJECT) outgoing=null; else job.accepted=true;
             }
-            if(f.type==ACCEPT) fileWorker.execute(() -> sendBody(job)); else events.notice("对方未接收文件");
+            if(f.type==ACCEPT) fileWorker.execute(() -> sendBody(job)); else { events.notice("对方未接收文件"); events.fileFailed("对方未接收文件"); }
         } else if(f.type==CHUNK) {
             pace(f.data.length-4);
             synchronized(state) {

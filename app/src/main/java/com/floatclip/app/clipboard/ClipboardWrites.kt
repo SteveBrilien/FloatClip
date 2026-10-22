@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.PersistableBundle
 import java.util.UUID
+import android.net.Uri
 
 /** Identifies our write event, rather than suppressing any later copy of the same text. */
 object ClipboardWrites {
@@ -26,6 +27,13 @@ object ClipboardWrites {
     fun copyByUser(context: Context,manager: ClipboardManager,text: String) {
         write(context,manager,text)
         com.floatclip.app.sync.SyncRuntime.userCopied(context,text)
+    }
+    fun writeImage(context:Context,manager:ClipboardManager,uri:Uri) {
+        val token=UUID.randomUUID().toString()
+        val clip=ClipData.newUri(context.contentResolver,"FloatClip 图片",uri)
+        clip.description.extras=PersistableBundle().apply { putString(EXTRA,token) }
+        context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().putString(TOKEN,token).apply()
+        lastObservedOwn=true;manager.setPrimaryClip(clip)
     }
 
     fun isOwnClip(context: Context, description: ClipDescription): Boolean {

@@ -2,6 +2,9 @@ package com.floatclip.app.ui
 
 import android.app.Dialog
 import android.content.Context
+import android.content.ComponentCallbacks
+import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
@@ -26,6 +29,45 @@ object FloatDialog {
         val card:Int,val text:Int,val muted:Int,val line:Int,val field:Int,val accent:Int,val tint:Int,val dark:Boolean
     )
 
+    /** Repaint an open surface in place: typed text, selection and action callbacks stay intact. */
+    private class ThemedDialog(context:Context):Dialog(context),ComponentCallbacks,SharedPreferences.OnSharedPreferenceChangeListener {
+        var repaint: (() -> Unit)? = null
+        private val app=context.applicationContext
+        private val appearance=app.getSharedPreferences("floatclip_overlay",Context.MODE_PRIVATE)
+        override fun onStart() {
+            super.onStart()
+            app.registerComponentCallbacks(this)
+            appearance.registerOnSharedPreferenceChangeListener(this)
+            repaint?.invoke()
+        }
+        override fun onStop() {
+            app.unregisterComponentCallbacks(this)
+            appearance.unregisterOnSharedPreferenceChangeListener(this)
+            super.onStop()
+        }
+        private fun refresh() { window?.decorView?.post { if(isShowing)repaint?.invoke() } }
+        override fun onConfigurationChanged(newConfig:Configuration) = refresh()
+        override fun onLowMemory() = Unit
+        override fun onSharedPreferenceChanged(prefs:SharedPreferences?,key:String?) = refresh()
+    }
+
+    private fun repaint(view:View,old:P,next:P) {
+        fun color(value:Int)=when(value) {
+            old.text->next.text;old.muted->next.muted;old.accent->next.accent
+            old.card->next.card;old.field->next.field;old.tint->next.tint;old.line->next.line
+            else->value
+        }
+        if(view is TextView) {
+            view.setTextColor(color(view.currentTextColor))
+            view.setHintTextColor(color(view.currentHintTextColor))
+        }
+        when(val background=view.background) {
+            is GradientDrawable->background.color?.defaultColor?.let { background.setColor(color(it)) }
+            is ColorDrawable->background.color=color(background.color)
+        }
+        if(view is ViewGroup)for(index in 0 until view.childCount)repaint(view.getChildAt(index),old,next)
+    }
+
     fun show(
         context:Context,
         title:String,
@@ -38,7 +80,7 @@ object FloatDialog {
         onPositive:((Handle)->Boolean)?=null,
     ):Handle {
         val p=palette(context)
-        val dialog=Dialog(context)
+        val dialog=ThemedDialog(context)
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
         val density=context.resources.displayMetrics.density
         fun dp(v:Int)=(v*density).toInt()
@@ -92,6 +134,15 @@ object FloatDialog {
                 addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
                 attributes=attributes.apply { dimAmount=0.55f }
                 setLayout((context.resources.displayMetrics.widthPixels-dp(40)).coerceAtMost(dp(420)),WindowManager.LayoutParams.WRAP_CONTENT)
+            }
+        }
+        var applied=p
+        dialog.repaint={
+            val next=palette(context)
+            if(next!=applied) {
+                repaint(shell,applied,next)
+                (shell.background as GradientDrawable).setStroke(dp(1),next.line)
+                applied=next
             }
         }
         dialog.show()

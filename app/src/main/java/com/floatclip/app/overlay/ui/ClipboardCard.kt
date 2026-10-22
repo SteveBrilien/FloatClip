@@ -13,6 +13,8 @@ import android.widget.TextView
 import com.floatclip.app.R
 import com.floatclip.app.model.ClipEntry
 import com.floatclip.app.prefs.OverlayPreferences
+import com.floatclip.app.clipboard.ClipStore
+import com.floatclip.app.clipboard.ClipboardImages
 
 /** The content owns the row; provenance never consumes a second line. */
 class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foreground: Int,
@@ -36,7 +38,7 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
             2 -> if(compact) 72 else 78
             else -> if(compact) 90 else 98
         }
-        minimumHeight = dp(minHeight)
+        minimumHeight = dp(if(entry.kind=="image")132 else minHeight)
         background = GradientDrawable().apply {
             val tinted = if(prefs.translucentCards()) mix(surface,accent,if(dark) .10f else .055f) else surface
             val cardColor = if(prefs.translucentCards()) {
@@ -52,7 +54,18 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
         }
         val hasSource = entry.sourceDeviceId != "local"
         val markerWidth = if(hasSource || entry.pinned || entry.locked) 38 else 16
-        addView(TextView(context).apply {
+        if(entry.kind=="image") {
+            val image=ClipboardImages.thumbnail(ClipStore(context),entry)
+            addView(ImageView(context).apply {
+                setImageBitmap(image);scaleType=ImageView.ScaleType.FIT_CENTER
+                contentDescription=if(image==null)"图片暂不可用" else "图片 ${entry.imageWidth} × ${entry.imageHeight}"
+                setPadding(dp(12),dp(10),dp(markerWidth),dp(30))
+            },LayoutParams(-1,dp(132)))
+            addView(TextView(context).apply {
+                text=if(image==null)"图片暂不可用" else "${entry.imageWidth} × ${entry.imageHeight} · PNG"
+                textSize=12f;setTextColor(foreground);alpha=.72f;setPadding(dp(14),0,dp(markerWidth),dp(9))
+            },LayoutParams(-1,-2,Gravity.BOTTOM))
+        } else addView(TextView(context).apply {
             text = entry.text; textSize = if(compact) 15f else 16f
             setTextColor(foreground); includeFontPadding = false; setLineSpacing(dp(2).toFloat(),1f)
             gravity = Gravity.CENTER_VERTICAL; maxLines = lines

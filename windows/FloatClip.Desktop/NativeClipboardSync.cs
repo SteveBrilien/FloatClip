@@ -32,6 +32,7 @@ public sealed class NativeClipboardSync: IDisposable
     readonly ConcurrentDictionary<string,byte> connecting=new(),blocked=new();
     readonly CancellationTokenSource lifetime=new();
     readonly object optionsGate=new(),operationGate=new();
+    readonly object traceGate=new();
     CancellationTokenSource operations=new();
     CancellationToken OperationToken{get{lock(operationGate)return operations.Token;}}
     void CancelOperations(){lock(operationGate){operations.Cancel();operations=new();}}
@@ -42,20 +43,27 @@ public sealed class NativeClipboardSync: IDisposable
     public event Action? Changed;
     public event Action? HistoryChanged;
     public event Action<Session>? SessionOpened;
-    public int ConnectedCount=>links.Count;
+    public int ConnectedCount=>links.Values.Count(link=>link.Ready);
+    public string? ConnectionTransport(string key)=>links.TryGetValue(key,out var link)&&link.Ready?link.Kind:null;
     public PairStore Pairing=>pairs;
+    public DesktopTransfers Transfers{get;}
+    public FileCatalog Files{get;}
     public Session? FirstSession=>links.Values.FirstOrDefault()?.Session;
 
-    public NativeClipboardSync(ClipboardVault vault,Action<SyncEntry,long> apply)
+    public NativeClipboardSync(ClipboardVault vault,Action<SyncEntry,long> apply):this(vault,apply,null){}
+    internal NativeClipboardSync(ClipboardVault vault,Action<SyncEntry,long> apply,string? isolatedRoot)
     {
         this.vault=vault;this.apply=apply;
-        root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"FloatClip","Host");cache=Path.Combine(root,"SyncCache");Directory.CreateDirectory(cache);
-        string pairedRoot=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"FloatClip","Share");
+        root=isolatedRoot??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"FloatClip","Host");cache=Path.Combine(root,"SyncCache");Directory.CreateDirectory(cache);
+        string pairedRoot=isolatedRoot==null?Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"FloatClip","Share"):Path.Combine(isolatedRoot,"Share");
         pairs=new PairStore(pairedRoot);
         if(File.Exists(Path.Combine(root,"sync-options.json"))&&new FileInfo(Path.Combine(root,"sync-options.json")).Length>16384)throw new IOException("共享设置过大");
         options=File.Exists(Path.Combine(root,"sync-options.json"))?JsonSerializer.Deserialize<Options>(File.ReadAllText(Path.Combine(root,"sync-options.json")))??throw new IOException("共享设置损坏"):new();
         var device=vault.Device();var local=new SyncDevice(Guid.Parse(device["id"]!.GetValue<string>()),device["name"]!.GetValue<string>(),"windows");
         engine=new ClipboardSyncEngine(local,LoadState,SaveSyncState,Send,PersistSharedEntry,ApplyReceived);
+        string PeerName(string key)=>engine.Snapshot().Peers.TryGetValue(key,out var peer)?peer.Device?.Name??pairs.Describe(key)?.Name??"已配对设备":pairs.Describe(key)?.Name??"已配对设备";
+        Transfers=new DesktopTransfers(PeerName,FileAllowed);
+        Files=new FileCatalog(root,cache,FileAllowed,PeerName);
         if(!pairs.Corrupt)
         {
             // v1 Windows keyed sync peers by the Android TLS pin. PairStore v2 derives the
@@ -71,6 +79,11 @@ public sealed class NativeClipboardSync: IDisposable
         Status=enabled?"等待已授权设备自动连接":"共享已关闭";
         pairs.Changed+=AuthorizationChanged;
         NetworkChange.NetworkAddressChanged+=NetworkChanged;
+    }
+    void Trace(string operation,object? detail=null)
+    {
+        // Deliberately exclude clipboard contents, credentials, file names and device IDs.
+        try{lock(traceGate){string path=Path.Combine(root,"sync-diagnostics.jsonl");if(File.Exists(path)&&new FileInfo(path).Length>65536)File.WriteAllText(path,"");File.AppendAllText(path,JsonSerializer.Serialize(new{utc=DateTime.UtcNow,operation,detail})+Environment.NewLine);}}catch{}
     }
     void SaveSyncState(byte[] bytes){try{SaveState(bytes);}catch(Exception e)when(e is IOException or UnauthorizedAccessException or CryptographicException){throw new PersistenceFailure(e);}}
     void PersistSharedEntry(SyncEntry entry){try{vault.ReceiveShared(entry);}catch(Exception e)when(e is IOException or UnauthorizedAccessException or CryptographicException){throw new PersistenceFailure(e);}try{HistoryChanged?.Invoke();}catch{/* A closed view cannot invalidate durable history. */}}
@@ -95,6 +108,12 @@ public sealed class NativeClipboardSync: IDisposable
     }
     public ClipboardSyncEngine.State Snapshot(){var s=engine.Snapshot();s.Enabled=enabled;return s;}
     public bool Automatic{get{lock(optionsGate)return options.Automatic;}}
+    public void ReconnectNow()
+    {
+        if(!enabled)throw new IOException("请先开启共享剪贴板");
+        if(!Automatic)throw new IOException("请先在同步选项中开启自动连接");
+        blocked.Clear();EnsureBluetooth();bluetooth?.Nudge();Signal();SetStatus("正在重新连接已授权设备");
+    }
     public bool MayApply(SyncEntry entry,long grant)=>enabled&&!disposed&&engine.MayApply(entry,grant);
     public void Configure(bool on,bool sending,bool receiving,bool applying,bool automatic)
     {
@@ -106,7 +125,8 @@ public sealed class NativeClipboardSync: IDisposable
         lock(optionsGate){options.Automatic=automatic;SaveOptions();}
         enabled=on;Start();if(on&&automatic)EnsureBluetooth();else StopBluetooth();Signal();SetStatus(on?"等待已授权设备自动连接":"共享已暂停");
     }
-    public void SetPeerEnabled(string relationKey,bool on){if(pairs.GetByKey(relationKey).Length!=32)throw new IOException("设备授权不存在");engine.SetPeerEnabled(relationKey,on);Changed?.Invoke();}
+    bool FileAllowed(string key)=>enabled&&!disposed&&pairs.GetByKey(key).Length==32&&(!engine.Snapshot().Peers.TryGetValue(key,out var peer)||peer.Enabled);
+    public void SetPeerEnabled(string relationKey,bool on){if(pairs.GetByKey(relationKey).Length!=32)throw new IOException("设备授权不存在");engine.SetPeerEnabled(relationKey,on);if(!on&&links.TryGetValue(relationKey,out var link))Remove(relationKey,link);Changed?.Invoke();}
     public void Forget(string relationKey){pairs.RemoveKey(relationKey);engine.Forget(relationKey);}
     public void Start()
     {
@@ -132,6 +152,7 @@ public sealed class NativeClipboardSync: IDisposable
     public void Copied(string value,bool excluded=false)
     {
         if(!enabled||disposed)return;
+        Trace("copy-observed",new{excluded,characters=value.Length,connections=ConnectedCount});
         try
         {
             var entry=engine.Copied(value,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),excluded);
@@ -188,6 +209,7 @@ public sealed class NativeClipboardSync: IDisposable
     }
     void AttachSession(string key,Session session,string kind)
     {
+        Trace("transport-admitted",new{kind});
         int priority=kind=="lan"?2:1;
         Link link;
         lock(linkGate)
@@ -205,23 +227,26 @@ public sealed class NativeClipboardSync: IDisposable
         session.Sync=frame=>
         {
             if(!enabled||!links.TryGetValue(key,out var active)||!ReferenceEquals(active,link)||pairs.GetByKey(key).Length!=32)return;
+            Trace("sync-received",new{kind,type=frame.Type});
             try
             {
                 engine.Accept(key,frame,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-                if(frame.Type==SyncProtocol.Hello&&engine.Snapshot().Peers.TryGetValue(key,out var peer)&&peer.Device!=null)pairs.RememberDevice(key,peer.Device);
+                if(frame.Type==SyncProtocol.Hello&&engine.Snapshot().Peers.TryGetValue(key,out var peer)&&peer.Device!=null){pairs.RememberDevice(key,peer.Device);link.Ready=true;Trace("hello-ready",new{kind,send=peer.Send,receive=peer.Receive});SetStatus(ConnectedCount+" 台设备同步就绪 · "+(kind=="bluetooth"?"蓝牙加密短连接":"局域网加密共享"));}
             }
             catch(PersistenceFailure){Remove(key,link);SetStatus("本机保存失败，内容尚未确认送达；存储恢复后将重试连接");Signal();}
-            catch{blocked[key]=0;Remove(key,link);SetStatus("设备身份或同步校验失败，请重新核对授权");}
+            catch(Exception e){Trace("sync-rejected",new{error=e.GetType().Name});blocked[key]=0;Remove(key,link);SetStatus("设备身份或同步校验失败，请重新核对授权");}
         };
         session.Closed=()=>{Remove(key,link);Signal();};
-        session.Offered=offer=>{try{session.Reject(offer.Id);}catch{session.Dispose();}};
+        Transfers.Attach(key,session,kind);
+        if(kind=="lan")Files.Attach(key,session);
         session.Failure=_=>SetStatus(kind=="bluetooth"?"蓝牙短连接结束，等待下次同步":"连接中断，等待自动重连");
         try
         {
             engine.Connected(key);
             try{SessionOpened?.Invoke(session);}catch{}
+            SetStatus("正在完成同步握手…");
             session.Start();
-            SetStatus(links.Count+" 台设备已连接 · "+(kind=="bluetooth"?"蓝牙加密短连接":"局域网加密共享"));
+            _=Task.Run(async()=>{try{await Task.Delay(TimeSpan.FromSeconds(8),lifetime.Token);if(!link.Ready&&links.TryGetValue(key,out var current)&&ReferenceEquals(current,link)){Trace("hello-timeout",new{kind});Remove(key,link);Signal();SetStatus("同步握手超时，等待重新连接");}}catch(OperationCanceledException){}});
         }
         catch{Remove(key,link);throw;}
     }
@@ -297,6 +322,7 @@ public sealed class NativeClipboardSync: IDisposable
         readonly SemaphoreSlim signal=new(0,1);
         readonly CancellationTokenSource stop=new();
         int dead;
+        public volatile bool Ready;
         public readonly Session Session;public readonly string Kind;public readonly int Priority;
         public Link(NativeClipboardSync owner,string key,Session session,string kind,int priority){this.owner=owner;this.key=key;Session=session;Kind=kind;Priority=priority;_=Task.Run(WriteLoop);}
         public void Queue(Frame frame){if(dead!=0)return;pending[frame.Type]=frame;try{signal.Release();}catch(SemaphoreFullException){}}
@@ -308,7 +334,7 @@ public sealed class NativeClipboardSync: IDisposable
                 {
                     await signal.WaitAsync(stop.Token);
                     foreach(int type in new[]{SyncProtocol.Hello,SyncProtocol.Ack,SyncProtocol.Clip})
-                        if(pending.TryRemove(type,out var frame)&&owner.enabled&&owner.pairs.GetByKey(key).Length==32&&owner.engine.MaySend(key,frame))Session.SendSync(frame);
+                        if(pending.TryRemove(type,out var frame)&&owner.enabled&&owner.pairs.GetByKey(key).Length==32&&owner.engine.MaySend(key,frame)){Session.SendSync(frame);owner.Trace("sync-sent",new{kind=Kind,type});}
                 }
             }
             catch(OperationCanceledException){}

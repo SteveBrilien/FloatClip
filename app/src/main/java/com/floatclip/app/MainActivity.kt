@@ -34,6 +34,7 @@ import com.floatclip.app.accessibility.PasteAccessibilityService
 import com.floatclip.app.backup.VaultBackupManager
 import com.floatclip.app.clipboard.ClipStore
 import com.floatclip.app.clipboard.ClipboardWrites
+import com.floatclip.app.clipboard.ClipboardImages
 import com.floatclip.app.integration.IntegrationRegistry
 import com.floatclip.app.model.ClipEntry
 import com.floatclip.app.overlay.ClipboardOverlayService
@@ -75,7 +76,9 @@ open class MainActivity : Activity() {
     private var historyCategory: String = ALL_CATEGORY
     private var sourceFilter = ""
     private var historyList: LinearLayout? = null
-    private var undoEntry: ClipEntry? = null
+    private var undoEntries: List<ClipEntry> = emptyList()
+    private val undoOwner="main:"+java.util.UUID.randomUUID()
+    private var lastImageCapture=""
     private var undoBar: LinearLayout? = null
     private val clipboardChanged = ClipboardManager.OnPrimaryClipChangedListener { captureCurrentClipboard() }
     private val sharedHistoryChanged=object: BroadcastReceiver(){override fun onReceive(context: Context?,intent: Intent?){
@@ -153,6 +156,7 @@ open class MainActivity : Activity() {
         return super.dispatchTouchEvent(event)
     }
     override fun onDestroy() {
+        if(::clipStore.isInitialized)clipStore.retainUndoImages(undoOwner,emptyList())
         unregisterReceiver(sharedHistoryChanged)
         getSystemService(ClipboardManager::class.java).removePrimaryClipChangedListener(clipboardChanged)
         super.onDestroy()
@@ -163,6 +167,22 @@ open class MainActivity : Activity() {
         val manager=getSystemService(ClipboardManager::class.java)
         val clip=runCatching { manager.primaryClip }.getOrNull() ?: return
         if(ClipboardWrites.isOwnClip(this,clip.description)) return
+        if(clip.description.extras?.getBoolean("android.content.extra.IS_SENSITIVE",false)==true) { SyncRuntime.observe(this,clip);return }
+        if(ClipboardImages.isImage(this,clip)) {
+            SyncRuntime.observe(this,clip)
+            val event=ClipboardImages.event(clip)
+            if(event==lastImageCapture)return
+            lastImageCapture=event
+            ClipboardImages.captureAsync(applicationContext,clip,clipStore) { result ->
+                result.onSuccess { entry ->
+                    if(entry!=null) { if(!isDestroyed&&currentPage==PAGE_CLIPBOARD)refreshHistory();notifyHistoryChanged() }
+                }.onFailure {
+                    lastImageCapture=""
+                    if(!isDestroyed)Toast.makeText(this,it.message ?: "图片未收录，请在前台重试",Toast.LENGTH_LONG).show()
+                }
+            }
+            return
+        }
         val value=clip.takeIf { it.itemCount>0 }?.getItemAt(0)?.text?.toString()
         if(value.isNullOrBlank()) return
         runCatching {
@@ -263,9 +283,16 @@ open class MainActivity : Activity() {
         if(!nested) bar.addView(ImageView(this).apply { setImageResource(R.drawable.ic_floatclip_app); importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO },LinearLayout.LayoutParams(dp(28),dp(28)).apply { marginEnd=dp(10) })
         bar.addView(textView(title, 21f, true), LinearLayout.LayoutParams(0, dp(56), 1f))
         if (currentPage == PAGE_CLIPBOARD && !categoryManagement) {
+            bar.addView(headerIcon(R.drawable.ic_delete, "全部清除，保留固定和置顶记录", ::clearHistory).apply {
+                id=R.id.clipboard_clear
+                tooltipText="全部清除（保留固定和置顶）"
+            }, LinearLayout.LayoutParams(dp(48), dp(48)))
             bar.addView(headerIcon(R.drawable.ic_device_computer, "我的设备") {
                 startActivity(Intent(this,DeviceActivity::class.java).putExtra("devicesOnly",true))
             }.apply { id=R.id.clipboard_devices }, LinearLayout.LayoutParams(dp(48), dp(48)))
+            bar.addView(headerIcon(R.drawable.ic_folder,"共享文件") {
+                startActivity(Intent(this,com.floatclip.app.files.FileActivity::class.java))
+            },LinearLayout.LayoutParams(dp(48),dp(48)))
             bar.addView(headerIcon(R.drawable.ic_settings_controls,"设置") {
                 currentPage=PAGE_SETTINGS; settingsSection=""; render()
             }.apply { id=R.id.clipboard_settings },LinearLayout.LayoutParams(dp(48),dp(48)))
@@ -428,10 +455,10 @@ open class MainActivity : Activity() {
             },LinearLayout.LayoutParams(-2,dp(44)).apply { marginEnd=dp(4) })
         }
         filterScroll.addView(filters);content.addView(filterScroll)
-        historyList=LinearLayout(this).apply { id=R.id.clipboard_list; orientation=LinearLayout.VERTICAL }
-        content.addView(historyList)
         undoBar=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL; visibility=View.GONE }
         content.addView(undoBar)
+        historyList=LinearLayout(this).apply { id=R.id.clipboard_list; orientation=LinearLayout.VERTICAL }
+        content.addView(historyList)
         refreshHistory(); showUndo()
     }
 
@@ -1107,17 +1134,22 @@ open class MainActivity : Activity() {
             dp(78),
         )
         wrapper.onSingleTap = {
-            ClipboardWrites.copyByUser(this,getSystemService(ClipboardManager::class.java),entry.text)
-            Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
+            runCatching {
+                if(entry.kind=="image")ClipboardImages.copy(this,clipStore,entry)
+                else ClipboardWrites.copyByUser(this,getSystemService(ClipboardManager::class.java),entry.text)
+            }.onSuccess { Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show() }
+                .onFailure { Toast.makeText(this,it.message ?: "复制未完成",Toast.LENGTH_LONG).show() }
         }
         wrapper.onLongPress = {
             FloatDialog.actions(
                 this,
                 entry.sourceDeviceName,
-                listOf("查看全文", "更改分类", if(entry.locked) "取消保护" else "保护", if (entry.pinned) "取消置顶" else "置顶", "删除"),
+                listOf(if(entry.kind=="image") "查看图片" else "查看全文", "更改分类", if(entry.locked) "取消保护" else "保护", if (entry.pinned) "取消置顶" else "置顶", "删除"),
             ) { which ->
                 when (which) {
-                    0 -> FloatDialog.show(
+                    0 -> if(entry.kind=="image") runCatching { ClipboardImages.preview(this,clipStore,entry) }.onFailure {
+                        Toast.makeText(this,it.message ?: "图片暂不可用",Toast.LENGTH_LONG).show()
+                    } else FloatDialog.show(
                         this,
                         entry.sourceDeviceName,
                         entry.text,
@@ -1138,17 +1170,33 @@ open class MainActivity : Activity() {
     }
 
     private fun deleteEntry(entry: ClipEntry) {
-        clipStore.delete(entry.id);undoEntry=entry;refreshHistory();showUndo();notifyOverlayAppearanceChanged()
+        clipStore.delete(entry.id);undoEntries=listOf(entry);refreshHistory();showUndo();notifyHistoryChanged()
+    }
+    private fun clearHistory() {
+        runCatching { clipStore.clearAll() }.onSuccess { removed ->
+            if (removed.isEmpty()) {
+                Toast.makeText(this,"没有可清除的普通记录；固定和置顶记录已保留",Toast.LENGTH_SHORT).show()
+            } else {
+                undoEntries=removed;refreshHistory();showUndo();notifyHistoryChanged()
+                Toast.makeText(this,"已清除 ${removed.size} 条普通记录，固定和置顶记录已保留",Toast.LENGTH_SHORT).show()
+            }
+        }.onFailure { Toast.makeText(this,"清除未完成，请保留本机数据并重试",Toast.LENGTH_LONG).show() }
     }
     private fun showUndo() {
+        clipStore.retainUndoImages(undoOwner,undoEntries)
         val row=undoBar ?: return
-        row.removeAllViews();row.visibility=if(undoEntry==null) View.GONE else View.VISIBLE
-        row.addView(textView("记录已删除",14f,false,colors.secondaryText),LinearLayout.LayoutParams(0,dp(48),1f))
+        row.removeAllViews();row.visibility=if(undoEntries.isEmpty()) View.GONE else View.VISIBLE
+        row.addView(textView(if(undoEntries.size==1) "记录已删除" else "已清除 ${undoEntries.size} 条记录",14f,false,colors.secondaryText),LinearLayout.LayoutParams(0,dp(48),1f))
         row.addView(compactTextAction("撤销") {
-            val entry=undoEntry ?: return@compactTextAction
-            runCatching { clipStore.restore(entry) }.onSuccess { undoEntry=null;refreshHistory();showUndo();notifyOverlayAppearanceChanged() }
+            runCatching { clipStore.restoreAll(undoEntries) }.onSuccess { remaining ->
+                undoEntries=remaining;refreshHistory();showUndo();notifyHistoryChanged()
+                if(remaining.isNotEmpty()) Toast.makeText(this,"空间不足，尚有 ${remaining.size} 条待恢复；新记录和受保护记录已保留",Toast.LENGTH_LONG).show()
+            }
                 .onFailure { Toast.makeText(this,it.message ?: "暂时无法恢复",Toast.LENGTH_LONG).show() }
-        })
+        }.apply { id=R.id.clipboard_undo })
+    }
+    private fun notifyHistoryChanged() {
+        sendBroadcast(Intent(ClipboardSyncService.HISTORY_CHANGED).setPackage(packageName),"$packageName.permission.INTERNAL")
     }
     private fun checkClientUpdate() {
         Toast.makeText(this,"正在检查更新…",Toast.LENGTH_SHORT).show()

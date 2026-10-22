@@ -12,4 +12,10 @@ data class ClipEntry(
     val sourceDeviceId: String = "local",
     val sourceDeviceName: String = "本机",
     val sourcePlatform: String = "android",
+    val kind: String = "text",
+    val imageRef: String = "",
+    val imageSha256: String = "",
+    val imageBytes: Int = 0,
+    val imageWidth: Int = 0,
+    val imageHeight: Int = 0,
 )

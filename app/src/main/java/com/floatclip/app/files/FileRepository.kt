@@ -60,6 +60,7 @@ class FileRepository(private val context:Context):AutoCloseable {
     private fun safeFile(path:String,parent:File):File?=runCatching{val f=File(path).canonicalFile;f.takeIf{it.isFile&&it.path.startsWith(parent.canonicalPath+File.separator)}}.getOrNull()
     fun local(row:SharedFile):File?=safeFile(row.source,sources)?:safeFile(row.cached,wireCache)
     fun snapshot():List<SharedFile> = synchronized(lock){rows.values.sortedByDescending{it.shared}.toList()}
+    fun connectedFilePeers():Int=synchronized(lock){links.values.count{!it.session.isClosed&&it.allowed()}}
     fun byKey(key:String):SharedFile?=synchronized(lock){rows[key]}
     private fun encode(row:SharedFile)=JSONObject().put("id",row.id).put("version",row.version).put("name",row.name).put("size",row.size).put("modified",row.modified).put("created",row.created).put("shared",row.shared)
     private fun parse(json:JSONObject,peer:String):SharedFile {

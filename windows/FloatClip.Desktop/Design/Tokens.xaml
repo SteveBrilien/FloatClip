@@ -14,7 +14,10 @@
   <Thickness x:Key="FloatClip.Margin.Section">0,16,0,8</Thickness><Thickness x:Key="FloatClip.Margin.Top8">0,8,0,0</Thickness><Thickness x:Key="FloatClip.Margin.Top4">0,4,0,0</Thickness><Thickness x:Key="FloatClip.Margin.End8">0,0,8,0</Thickness><Thickness x:Key="FloatClip.Margin.Bottom12">0,0,0,12</Thickness>
   <sys:Double x:Key="FloatClip.Device.MethodWidth">184</sys:Double>
   <Duration x:Key="FloatClip.Motion.Press">0:0:0.100</Duration><Duration x:Key="FloatClip.Motion.State">0:0:0.160</Duration><Duration x:Key="FloatClip.Motion.Panel">0:0:0.240</Duration>
-  <sys:Double x:Key="FloatClip.Motion.PressScale">0.985</sys:Double><sys:Double x:Key="FloatClip.Motion.HoldMilliseconds">520</sys:Double>
+  <sys:Double x:Key="FloatClip.Motion.PressScale">0.975</sys:Double><sys:Double x:Key="FloatClip.Motion.HoldMilliseconds">520</sys:Double>
+  <sys:Double x:Key="FloatClip.Category.BadgeMaxWidth">96</sys:Double>
   <CubicEase x:Key="FloatClip.Motion.EaseOut" EasingMode="EaseOut"/><CubicEase x:Key="FloatClip.Motion.EaseInOut" EasingMode="EaseInOut"/>
+  <Duration x:Key="FloatClip.Motion.CopyFeedback">0:0:0.640</Duration>
+  <Thickness x:Key="FloatClip.Margin.Start8">8,0,0,0</Thickness>
   <sys:Double x:Key="FloatClip.Opacity.Window">1</sys:Double><sys:Double x:Key="FloatClip.Opacity.Disabled">1</sys:Double>
 </ResourceDictionary>

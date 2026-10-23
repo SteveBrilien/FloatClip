@@ -1,0 +1,14 @@
+{
+  "version": "0.7.8", "build": 25,
+  "windows": {
+    "exeBytes": 207636017,
+    "exeSha256": "c58d162ad9200961d9d5c3e1a44580c9c54cd2b331c363f809f287b2372779a1",
+    "zipBytes": 79026261,
+    "zipSha256": "87f5e7240d116ea44294e266688ae350db5f5ea9c37ba0f3a99dd68b39de8b6c",
+    "licenses": 9,
+    "artifactId": "artifact-8290667c07344a66b77476472975c9d1"
+  },
+  "updateChecks": {"checks": 45, "liveSignedPublication": "0.7.1 / build 14", "packageInstalled": false},
+  "candidateLinkExpiryUtc": "2026-10-30T12:20:46Z",
+  "publicUpdatePromoted": false
+}

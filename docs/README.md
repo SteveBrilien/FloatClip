@@ -1,0 +1,18 @@
+# 文档入口
+
+当前原生开发线：**0.7.8 / build 25 候选**。公共签名更新仍为 0.7.1；构建成功、候选可下载与正式推送是不同状态。
+
+| 用途 | 当前资料 |
+| --- | --- |
+| 本轮修订与未验收项 | [build 25](CANDIDATE_078_BUILD25_2026-10-23.md) |
+| Windows 唯一设计规范 | [Design System](design/FLOATCLIP_WINDOWS_DESIGN_SYSTEM.md) |
+| 设计改动记录 | [设计变更](design/CHANGELOG.md) |
+| 更新源、验签、发布步骤 | [原生更新](NATIVE_UPDATES_2026-10-23.md) |
+| ZIP 编码及系统网络修复 | [build 24](WINDOWS_078_HOTFIX_2026-10-23.md) |
+| 云端接续 | [交接文档](CLOUD_CONTINUATION_2026-10-23.md) |
+| 仓库维护范围与权限 | [维护记录](REPOSITORY_MAINTENANCE_2026-10-23.md) |
+| 公共旧版本 | [0.7.1](RELEASE_0.7.1.md)、[0.6.0](RELEASE_0.6.0.md) |
+
+`design/` 是 Windows 当前规范。`ui/` 中 HTML/图片是设计参考；不能把参考稿当成已交付的原生功能。带版本或日期的旧报告保留当时结论，不覆盖本页当前入口。
+
+[历史首页](archive/README_PRE_078.md)与[历史状态](archive/STATUS_PRE_078.md)收纳了先前互相冲突的首页说明。原来的专题文档链接仍保留，便于追溯既有决策。

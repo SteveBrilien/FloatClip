@@ -1,6 +1,6 @@
 # FloatClip 云端续接资料
 
-最新增量：Windows **0.7.8 / build 24**，Android **0.7.8 / build 23**。先读 [build 24 修复记录](WINDOWS_078_HOTFIX_2026-10-23.md)：预览加入旧 ZIP 编码兼容，Windows 更新改用系统原生 WinHTTP 网络组件并保留两处源的失败原因。桌面 170 项、更新 45 项检查和打包后隔离启动通过；后文 build 23 描述保留为上一轮交接背景。当前 Github 推送可使用小主机原有部署密钥，密钥内容不要导出或放进聊天/Git。
+最新增量：两端 **0.7.8 / build 25 候选**，先读 [build 25 与设备边界](CANDIDATE_078_BUILD25_2026-10-23.md) 和 [文档入口](README.md)。分类/反馈/背景模式、手机主动图片收录及文件会话显示已调整，Windows 修复蓝牙阻止 LAN 接续。原数据和协议兼容，公共 feed 仍为 0.7.1，手机调试当前离线。以下 build 24/23 留作历史背景：先读 [build 24 修复记录](WINDOWS_078_HOTFIX_2026-10-23.md)：预览加入旧 ZIP 编码兼容，Windows 更新改用系统原生 WinHTTP 网络组件并保留两处源的失败原因。桌面 170 项、更新 45 项检查和打包后隔离启动通过；后文 build 23 描述保留为上一轮交接背景。当前 Github 推送可使用小主机原有部署密钥，密钥内容不要导出或放进聊天/Git。
 
 从本轮 `codex/wpf-design-system-077` 分支继续。先读根 AGENTS.md、`design/FLOATCLIP_WINDOWS_DESIGN_SYSTEM.md`、`design/CHANGELOG.md`、`CANDIDATE_0.7.8_2026-10-23.md`、`NATIVE_UPDATES_2026-10-23.md`；保留 WPF + XAML。WebView2 实验另存分支，不作为当前路线。Windows 和 Android 当前候选均为 0.7.8 / build 23；0.7.7 和更旧记录仅作历史证据。用户负责候选外观检查，不能代替其宣称验收。
 

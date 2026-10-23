@@ -39,6 +39,13 @@
         </activity>
 
         <activity android:name=".MainActivity" android:exported="false" />
+        <activity android:name=".clipboard.ImageImportActivity" android:exported="true" android:label="FloatClip 剪贴板" android:configChanges="uiMode|orientation|screenSize">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity>
         <activity android:name=".files.FileActivity" android:exported="false" android:configChanges="uiMode|orientation|screenSize" />
         <activity android:name=".DeviceActivity" android:exported="false" android:configChanges="uiMode|orientation|screenSize" />
         <activity android:name=".NodeActivity" android:exported="false" android:configChanges="uiMode|orientation|screenSize" android:windowSoftInputMode="adjustResize" />

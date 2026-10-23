@@ -1,0 +1,38 @@
+name: Windows WPF CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.402'
+      - name: Isolated desktop checks
+        run: dotnet run --project windows/FloatClip.DesktopChecks -c Release
+      - name: Update validation
+        run: dotnet run --project windows/FloatClip.UpdateChecks -c Release
+      - name: Package Windows x64
+        run: dotnet publish windows/FloatClip.Desktop -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o analysis/windows-ci
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FloatClip-Windows-ci-only
+          path: analysis/windows-ci/
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FloatClip-Windows-check-evidence
+          path: analysis/desktop-checks/
+          retention-days: 14

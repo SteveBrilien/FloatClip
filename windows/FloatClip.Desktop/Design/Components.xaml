@@ -49,11 +49,23 @@
     </Grid><ControlTemplate.Triggers>
       <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Row" Property="Background" Value="{DynamicResource FloatClip.Hover}"/></Trigger>
       <Trigger Property="IsSubmenuOpen" Value="True"><Setter TargetName="Row" Property="Background" Value="{DynamicResource FloatClip.Hover}"/></Trigger>
+      <Trigger Property="IsChecked" Value="True"><Setter TargetName="Row" Property="Background" Value="{DynamicResource FloatClip.Selected}"/><Setter Property="FontWeight" Value="SemiBold"/></Trigger>
       <Trigger Property="HasItems" Value="True"><Setter TargetName="Arrow" Property="Visibility" Value="Visible"/></Trigger>
       <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource FloatClip.DisabledText}"/></Trigger>
     </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
   </Style>
   <Style x:Key="FloatClip.File.Row" TargetType="ListViewItem">
+    <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListViewItem">
+      <Grid SnapsToDevicePixels="True">
+        <Border Background="{TemplateBinding Background}"/>
+        <GridViewRowPresenter Content="{TemplateBinding Content}" Columns="{Binding View.Columns,RelativeSource={RelativeSource AncestorType=ListView}}" Margin="{TemplateBinding Padding}" VerticalAlignment="Center"/>
+        <Border x:Name="FocusOutline" BorderBrush="{DynamicResource FloatClip.Accent}" BorderThickness="1" Visibility="Collapsed" IsHitTestVisible="False"/>
+      </Grid>
+      <ControlTemplate.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="FocusOutline" Property="Visibility" Value="Visible"/></Trigger></ControlTemplate.Triggers>
+    </ControlTemplate></Setter.Value></Setter>
     <Setter Property="Foreground" Value="{DynamicResource FloatClip.TextPrimary}"/><Setter Property="Background" Value="Transparent"/>
     <Setter Property="Padding" Value="{DynamicResource FloatClip.Padding.FileRow}"/><Setter Property="MinHeight" Value="{DynamicResource FloatClip.Row.File}"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/>
     <Style.Triggers>
@@ -81,5 +93,17 @@
   <Style x:Key="FloatClip.ToggleSwitch" TargetType="ui:ToggleSwitch" BasedOn="{StaticResource {x:Type ui:ToggleSwitch}}"><Setter Property="OnContent" Value=""/><Setter Property="OffContent" Value=""/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="HorizontalAlignment" Value="Right"/><Setter Property="MinHeight" Value="{DynamicResource FloatClip.Hit.Control}"/><Setter Property="MinWidth" Value="{DynamicResource FloatClip.Space.48}"/></Style>
   <Style x:Key="FloatClip.Setting.OptionRow" TargetType="Border" BasedOn="{StaticResource FloatClip.Setting.Row}">
     <Setter Property="Height" Value="{DynamicResource FloatClip.Device.OptionHeight}"/><Setter Property="Padding" Value="{DynamicResource FloatClip.Padding.OptionRow}"/>
+  </Style>
+  <Style x:Key="FloatClip.Category.Swatch" TargetType="Border">
+    <Setter Property="Width" Value="{DynamicResource FloatClip.Space.12}"/><Setter Property="Height" Value="{DynamicResource FloatClip.Space.12}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource FloatClip.Radius.Control}"/><Setter Property="Background" Value="{DynamicResource FloatClip.Accent}"/>
+    <Style.Triggers>
+      <Trigger Property="Tag" Value="blue"><Setter Property="Background" Value="{DynamicResource FloatClip.Category.Blue}"/></Trigger>
+      <Trigger Property="Tag" Value="teal"><Setter Property="Background" Value="{DynamicResource FloatClip.Category.Teal}"/></Trigger>
+      <Trigger Property="Tag" Value="purple"><Setter Property="Background" Value="{DynamicResource FloatClip.Category.Purple}"/></Trigger>
+      <Trigger Property="Tag" Value="orange"><Setter Property="Background" Value="{DynamicResource FloatClip.Category.Orange}"/></Trigger>
+      <Trigger Property="Tag" Value="red"><Setter Property="Background" Value="{DynamicResource FloatClip.Category.Red}"/></Trigger>
+      <Trigger Property="Tag" Value="neutral"><Setter Property="Background" Value="{DynamicResource FloatClip.TextSecondary}"/></Trigger>
+    </Style.Triggers>
   </Style>
 </ResourceDictionary>

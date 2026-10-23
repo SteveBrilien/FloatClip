@@ -2,6 +2,13 @@
 
 All notable FloatClip development changes are recorded here.
 
+## 2026-10-23 — 0.7.8 / build 25 candidate
+
+- Restore usable category selection/colors, visible copy feedback and flat file-row selection in WPF. Add opt-in clipboard background modes with solid fallback; transparent mode takes effect after restarting the app.
+- Simplify Android file actions, expose image/screenshot picker and share target, and show file-capable connection status.
+- Permit trusted LAN upgrade while a Bluetooth text session exists. Retain existing vault, pairing and protocol formats.
+- Archive stale landing/status text, remove six old duplicate APKs from the current tree and add Windows CI. Public signed update feed remains 0.7.1; physical device acceptance is pending.
+
 ## 2026-10-20
 
 ### 0.7.1 clipboard-first interaction candidate

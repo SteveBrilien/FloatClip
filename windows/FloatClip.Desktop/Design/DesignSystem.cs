@@ -36,8 +36,10 @@ public sealed class DesignPreferences
     public bool ReduceMotion{get;set;}
     public bool EnableMaterial{get;set;}
     public double WindowOpacity{get;set;}=1;
+    public string ClipboardBackground{get;set;}="solid";
+    public double BackgroundOpacity{get;set;}=.88;
     public static bool ReducedMotion{get;private set;}
-    public static DesignPreferences Load(string root){try{var p=JsonSerializer.Deserialize<DesignPreferences>(File.ReadAllText(Path.Combine(root,"design-preferences.json")))??new();p.WindowOpacity=Math.Clamp(p.WindowOpacity,.85,1);ReducedMotion=p.ReduceMotion;return p;}catch{ReducedMotion=false;return new();}}
+    public static DesignPreferences Load(string root){try{var p=JsonSerializer.Deserialize<DesignPreferences>(File.ReadAllText(Path.Combine(root,"design-preferences.json")))??new();p.WindowOpacity=Math.Clamp(p.WindowOpacity,.85,1);p.BackgroundOpacity=Math.Clamp(p.BackgroundOpacity,.6,1);if(p.ClipboardBackground is not ("solid" or "acrylic" or "transparent"))p.ClipboardBackground="solid";ReducedMotion=p.ReduceMotion;return p;}catch{ReducedMotion=false;return new();}}
     public void Save(string root){string path=Path.Combine(root,"design-preferences.json");File.WriteAllText(path+".tmp",JsonSerializer.Serialize(this));File.Move(path+".tmp",path,true);ReducedMotion=ReduceMotion;}
 }
 public sealed record MaterialCapability(bool Dwm,bool Transparency,bool Mica,string Fallback);
@@ -49,7 +51,7 @@ public static class MaterialPolicy
         bool dwm=false;try{_=DwmIsCompositionEnabled(out dwm);}catch{}
         bool transparency=(int?)Registry.GetValue("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize","EnableTransparency",1)!=0;
         bool mica=OperatingSystem.IsWindowsVersionAtLeast(10,0,22621)&&dwm&&transparency&&!SystemParameters.HighContrast;
-        return new(dwm,transparency,mica,floating?"特殊悬浮窗材质/焦点验收未完成，使用纯色":!mica?"系统条件不满足，使用纯色":"具备 Mica 条件，启用仍需视觉验收");
+        return new(dwm,transparency,mica,!mica?"系统条件不满足，使用纯色":"系统具备材质条件；实际模式与回退由背景服务决定");
     }
 }
 public static class DesignStates

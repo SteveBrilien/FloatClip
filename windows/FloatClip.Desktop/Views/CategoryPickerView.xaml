@@ -1,0 +1,8 @@
+<UserControl x:Class="FloatClip.Desktop.Views.CategoryPickerView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:ui="clr-namespace:Wpf.Ui.Controls;assembly=Wpf.Ui">
+  <StackPanel Margin="{DynamicResource FloatClip.Padding.Card}">
+    <TextBlock Text="选择分类或输入新名称" Foreground="{DynamicResource FloatClip.TextPrimary}" Margin="{DynamicResource FloatClip.Margin.Bottom12}"/>
+    <ComboBox ItemsSource="{Binding Categories}" IsEditable="True" IsTextSearchEnabled="False" Text="{Binding Category,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="记录分类"/>
+    <TextBlock Text="{Binding Error}" Foreground="{DynamicResource FloatClip.Danger}" TextWrapping="Wrap" Margin="{DynamicResource FloatClip.Margin.Top8}"/>
+    <ui:Button Content="保存" Command="{Binding SaveCommand}" Style="{StaticResource FloatClip.Button.Accent}" HorizontalAlignment="Right" Margin="{DynamicResource FloatClip.Margin.Top8}"/>
+  </StackPanel>
+</UserControl>

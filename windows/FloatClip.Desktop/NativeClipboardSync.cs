@@ -196,7 +196,8 @@ public sealed class NativeClipboardSync: IDisposable
         string? key=known;Link? added=null;
         try
         {
-            if(key!=null&&links.ContainsKey(key))return;
+            // An active text-only Bluetooth burst must not prevent a trusted LAN upgrade.
+            if(key!=null&&links.TryGetValue(key,out var current)&&current.Kind=="lan")return;
             using var cancel=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token,cancellation);
             var session=await Task.Run(()=>Nearby.Connect(device,cache,pairs,verify,cancel.Token,persistent:true),cancel.Token);
             key=pairs.KeyForPin(pin)??throw new IOException("设备授权未保存");
@@ -266,7 +267,7 @@ public sealed class NativeClipboardSync: IDisposable
                 if(enabled&&Automatic)
                 {
                     using var attempt=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token,OperationToken);
-                    string[] pending=pairs.Pins().Where(pin=>{string? key=pairs.KeyForPin(pin);return key!=null&&!links.ContainsKey(key)&&!blocked.ContainsKey(key);}).ToArray();
+                    string[] pending=pairs.Pins().Where(pin=>{string? key=pairs.KeyForPin(pin);return key!=null&&(!links.TryGetValue(key,out var current)||current.Kind!="lan")&&!blocked.ContainsKey(key);}).ToArray();
                     if(pending.Length>0)
                     {
                         bool found=false;string? selected;lock(optionsGate)selected=options.SelectedAdapter;

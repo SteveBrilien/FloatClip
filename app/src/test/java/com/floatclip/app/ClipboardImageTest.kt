@@ -158,5 +158,18 @@ class ClipboardImageTest {
         assertTrue(ClipboardImages.isImage(ctx,clip))
         assertTrue(runCatching { ClipboardImages.capture(ctx,clip,store) }.isFailure)
         assertEquals("keep",store.entries().single().text)
+        assertTrue(runCatching {ClipboardImages.importUri(ctx,clip.getItemAt(0).uri,store)}.isFailure)
+        assertEquals("keep",store.entries().single().text)
+        assertTrue(runCatching {ClipboardImages.importUri(ctx,Uri.parse("file:///sdcard/screenshot.png"),store)}.isFailure)
+    }
+    @Test fun explicitScreenshotImportDoesNotDependOnSystemClipboard() {
+        val ctx=context();val store=ClipStore(ctx,cipher)
+        val uri=Uri.parse("content://test.screenshot/selected")
+        org.robolectric.Shadows.shadowOf(ctx.contentResolver).registerInputStream(uri,java.io.ByteArrayInputStream(png))
+        val image=ClipboardImages.importUri(ctx,uri,store)!!
+        assertEquals("image",image.kind);assertEquals(1,image.imageWidth);assertEquals(1,image.imageHeight)
+        assertEquals("image",ClipStore(ctx,cipher).entries().single().kind)
+        val activity=ctx.packageManager.getActivityInfo(android.content.ComponentName(ctx,com.floatclip.app.clipboard.ImageImportActivity::class.java),0)
+        assertTrue(activity.exported)
     }
 }

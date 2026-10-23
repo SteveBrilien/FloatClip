@@ -69,10 +69,13 @@ public final class BluetoothSyncHost implements AutoCloseable {
                 public void notice(String message){delegate.notice(message);}
                 public void failure(Exception e){delegate.failure(e);}
                 public void sync(com.floatclip.share.ShareWire.Frame frame)throws Exception{delegate.sync(frame);}
+                public void catalog(byte[] data)throws Exception{delegate.catalog(data);}
+                public void rejected(com.floatclip.share.ShareWire.Offer offer){delegate.rejected(offer);}
+                public void fileFailed(String message){delegate.fileFailed(message);}
                 public void closed(){sockets.remove(socket);delegate.closed();}
-            },true);
+            },true,true);
             delegate.attached(session);events.connected(relation,socket.getRemoteDevice().getAddress(),session);session.start();
-            deadlines.schedule(session::close,12,TimeUnit.SECONDS);handedOff=true;
+            deadlines.schedule(session::close,180,TimeUnit.SECONDS);handedOff=true;
         }catch(Exception ignored){}finally{timeout.cancel(false);if(!handedOff){sockets.remove(socket);closeSocket(socket);}}
     }
     private static void closeSocket(BluetoothSocket socket){try{socket.close();}catch(IOException ignored){}}

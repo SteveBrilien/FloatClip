@@ -55,7 +55,9 @@ static class Program
             }
             byte[] liveFixture=File.ReadAllBytes("updates/native-updates.json");
             using var fixtureEnvelope=JsonDocument.Parse(liveFixture);string fixtureToken=fixtureEnvelope.RootElement.GetProperty("nativeUpdates").GetProperty("share-preview").GetString()!;string rawPayload=fixtureToken.Split('.')[1].Replace('-','+').Replace('_','/');using var fixturePayload=JsonDocument.Parse(Convert.FromBase64String(rawPayload.PadRight((rawPayload.Length+3)/4*4,'=')));long fixtureTime=fixturePayload.RootElement.GetProperty("issuedAt").GetInt64()+1;
-            Check(ShareUpdates.Parse(UpdateManifestVerifier.Verify(liveFixture,now:fixtureTime)).Version=="0.7.1","Python RS256 publication verifies with the compiled Windows public key");
+            var expectedFixture=ShareUpdates.Parse(System.Text.Encoding.UTF8.GetBytes(fixturePayload.RootElement.GetProperty("release").GetRawText()));
+            var verifiedFixture=ShareUpdates.Parse(UpdateManifestVerifier.Verify(liveFixture,now:fixtureTime));
+            Check(verifiedFixture==expectedFixture,"Python RS256 publication verifies with the compiled Windows public key and preserves the signed platform release");
             await Reject(()=>Task.FromResult(UpdateManifestVerifier.Verify(liveFixture,now:DateTimeOffset.UtcNow.AddYears(2).ToUnixTimeSeconds())),"expired signature metadata rejected");
             using(var rsa=RSA.Create(2048)) {
                 string B64(byte[] data)=>Convert.ToBase64String(data).TrimEnd('=').Replace('+','-').Replace('/','_');

@@ -56,24 +56,33 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
         val markerWidth = if(hasSource || entry.pinned || entry.locked) 38 else 16
         if(entry.kind=="image") {
             val longImage=entry.imageHeight>entry.imageWidth*2.2f
-            val image=ClipboardImages.thumbnail(ClipStore(context),entry,if(longImage)1600 else 480)
             val previewHeight=if(longImage)224 else 132
             minimumHeight=dp(previewHeight)
-            val cropTop=android.graphics.Matrix()
-            addView(ImageView(context).apply {
-                setImageBitmap(image);scaleType=if(longImage)ImageView.ScaleType.MATRIX else ImageView.ScaleType.FIT_CENTER
-                if(longImage&&image!=null)addOnLayoutChangeListener { view,_,_,_,_,_,_,_,_ ->
-                    val width=(view.width-view.paddingLeft-view.paddingRight).coerceAtLeast(1)
-                    val factor=width.toFloat()/image.width
-                    cropTop.setScale(factor,factor);imageMatrix=cropTop
-                }
-                contentDescription=if(image==null)"图片暂不可用" else "图片 ${entry.imageWidth} × ${entry.imageHeight}"
+            val preview=ImageView(context).apply {
+                scaleType=if(longImage)ImageView.ScaleType.MATRIX else ImageView.ScaleType.FIT_CENTER
+                cropToPadding=true
+                contentDescription="正在载入图片"
                 setPadding(dp(12),dp(10),dp(markerWidth),dp(30))
-            },LayoutParams(-1,dp(previewHeight)))
-            addView(TextView(context).apply {
-                text=if(image==null)"图片暂不可用" else "${entry.imageWidth} × ${entry.imageHeight} · ${if(longImage) "长图 · 点击展开" else "点击预览"}"
-                textSize=12f;setTextColor(foreground);alpha=.72f;setPadding(dp(14),0,dp(markerWidth),dp(9))
-            },LayoutParams(-1,-2,Gravity.BOTTOM))
+            }
+            val label=TextView(context).apply {
+                text="${entry.imageWidth} × ${entry.imageHeight} · ${if(longImage) "长图 · 点击展开" else "点击预览"}"
+                textSize=12f;maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END
+                setTextColor(foreground);alpha=.72f;setPadding(dp(14),0,dp(markerWidth),dp(9))
+            }
+            addView(preview,LayoutParams(-1,dp(previewHeight)))
+            addView(label,LayoutParams(-1,-2,Gravity.BOTTOM))
+            fun positionLongImage() {
+                val drawable=preview.drawable?:return
+                val width=(preview.width-preview.paddingLeft-preview.paddingRight).coerceAtLeast(1)
+                val factor=width.toFloat()/drawable.intrinsicWidth.coerceAtLeast(1)
+                preview.imageMatrix=android.graphics.Matrix().apply{setScale(factor,factor)}
+            }
+            if(longImage)preview.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> positionLongImage() }
+            ClipboardImages.thumbnailAsync(ClipStore(context),entry,if(longImage)1600 else 480) { image ->
+                preview.setImageBitmap(image)
+                preview.contentDescription=if(image==null)"图片暂不可用" else "图片 ${entry.imageWidth} × ${entry.imageHeight}"
+                if(image==null)label.text="图片暂不可用" else if(longImage)positionLongImage()
+            }
         } else addView(TextView(context).apply {
             text = entry.text; textSize = if(compact) 15f else 16f
             setTextColor(foreground); includeFontPadding = false; setLineSpacing(dp(2).toFloat(),1f)

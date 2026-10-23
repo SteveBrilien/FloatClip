@@ -1,10 +1,10 @@
 # 文档入口
 
-当前原生开发线：**0.7.8 / build 25 候选**。公共签名更新仍为 0.7.1；构建成功、候选可下载与正式推送是不同状态。
+当前原生开发线：**0.7.9 / Windows build 28 / Android build 29 候选**。构建成功、候选可下载、GitHub Release 与公共签名更新是不同发布阶段。
 
 | 用途 | 当前资料 |
 | --- | --- |
-| 本轮修订与未验收项 | [build 25](CANDIDATE_078_BUILD25_2026-10-23.md) |
+| 本轮修订与未验收项 | [Windows build 28 / Android build 29](CANDIDATE_079_BUILD29_2026-10-24.md) |
 | Windows 唯一设计规范 | [Design System](design/FLOATCLIP_WINDOWS_DESIGN_SYSTEM.md) |
 | 设计改动记录 | [设计变更](design/CHANGELOG.md) |
 | 更新源、验签、发布步骤 | [原生更新](NATIVE_UPDATES_2026-10-23.md) |

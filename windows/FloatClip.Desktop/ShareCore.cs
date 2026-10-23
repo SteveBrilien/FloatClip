@@ -83,6 +83,7 @@ public sealed class Session : IDisposable
     sealed class Job { public required string Path,Name; public Offer? Offer; public bool Accepted,EndSent; }
     public Action<string,bool>? Text;
     public Action<Offer>? Offered;
+    public Action<Offer>? Rejected;
     public Action<string,long,long,bool>? Progress;
     public Action<Offer,string,bool>? File;
     public Action<string>? Notice;
@@ -112,9 +113,11 @@ public sealed class Session : IDisposable
         Guid id=Guid.NewGuid(); lock(state) { if(pending.Count>=16) throw new IOException("请等待前面的消息确认"); pending.Add(id,(Wire.Digest(data),text)); }
         try { Write(Wire.Text,id,data); } catch { Dispose(); throw; }
     }
-    public void SendFile(string path,Guid? requestId=null)
+    public void SendFile(string path,Guid? requestId=null)=>SendFile(path,Path.GetFileName(path),requestId);
+    public void SendFile(string path,string name)=>SendFile(path,name,null);
+    void SendFile(string path,string name,Guid? requestId)
     {
-        string name=Wire.SafeName(Path.GetFileName(path)); var info=new FileInfo(path);
+        name=Wire.SafeName(name); var info=new FileInfo(path);
         if(!info.Exists || info.Length>Wire.MaxFile || (info.Attributes&FileAttributes.ReparsePoint)!=0) throw new IOException("请选择 64 MiB 内的普通文件");
         var job=new Job{Path=path,Name=name}; lock(state) { if(outgoing!=null || incoming!=null) throw new IOException("请等待当前文件完成"); outgoing=job; }
         Task.Run(()=>{
@@ -211,7 +214,7 @@ public sealed class Session : IDisposable
                     if(job.Offer?.Id!=f.Id || job.Accepted) throw new IOException("意外文件决策");
                     if(f.Type==Wire.Reject) outgoing=null; else job.Accepted=true;
                 }
-                if(f.Type==Wire.Accept) Task.Run(()=>SendBody(job)); else {FileFailed?.Invoke("对方未接收文件");Notice?.Invoke("对方未接收文件");} break;
+                if(f.Type==Wire.Accept) Task.Run(()=>SendBody(job)); else {Rejected?.Invoke(job.Offer!);FileFailed?.Invoke("对方未接收文件");Notice?.Invoke("对方未接收文件");} break;
             }
             case Wire.Chunk: {
                 Pace(f.Data.Length-4);

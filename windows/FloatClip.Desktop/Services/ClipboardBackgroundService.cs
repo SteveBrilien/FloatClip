@@ -37,12 +37,43 @@ public static class ClipboardBackgroundService
     {
         foreach(Window window in Application.Current.Windows)if(window is LocalClipboardWindow||window.Owner!=null)Apply(window,preferences);
     }
+    static SolidColorBrush AlphaBrush(string key,double alpha)
+    {
+        var source=DesignTokens.Brush(key);var c=source.Color;
+        return new SolidColorBrush(Color.FromArgb((byte)Math.Round(255*Math.Clamp(alpha,0,1)),c.R,c.G,c.B));
+    }
+    static void ApplySurfacePolicy(string mode,double opacity,bool materialAvailable,bool transparentAvailable)
+    {
+        var resources=Application.Current.Resources;
+        double baseOpacity=Math.Clamp(opacity,.2,1);
+        bool translucent=mode=="transparent"&&transparentAvailable||mode=="acrylic"&&materialAvailable;
+        if(!translucent)
+        {
+            foreach(string key in new[]{"Background","Surface","Hover","Pressed","Selected","SelectedHover","DisabledSurface"})
+            {
+                var brush=DesignTokens.Brush(key);var c=brush.Color;
+                resources["FloatClip."+key]=new SolidColorBrush(Color.FromArgb(255,c.R,c.G,c.B));
+            }
+            return;
+        }
+        // Text/icon resources are deliberately untouched. Dense surfaces remain readable,
+        // but no longer form an opaque sheet over the application backdrop.
+        double surface=mode=="acrylic"?Math.Clamp(.34+baseOpacity*.48,.42,.90):Math.Clamp(.12+baseOpacity*.60,.24,.78);
+        resources["FloatClip.Surface"]=AlphaBrush("Surface",surface);
+        resources["FloatClip.Hover"]=AlphaBrush("Hover",Math.Min(1,surface+.08));
+        resources["FloatClip.Pressed"]=AlphaBrush("Pressed",Math.Min(1,surface+.14));
+        resources["FloatClip.Selected"]=AlphaBrush("Selected",Math.Min(1,surface+.06));
+        resources["FloatClip.SelectedHover"]=AlphaBrush("SelectedHover",Math.Min(1,surface+.12));
+        resources["FloatClip.DisabledSurface"]=AlphaBrush("DisabledSurface",Math.Min(1,surface+.04));
+        resources["FloatClip.Background"]=AlphaBrush("Background",mode=="acrylic"?0:baseOpacity);
+    }
     // Keep the old signature for callers compiled against build 25. The page no longer changes the mode.
     public static string Apply(Window window,DesignPreferences preferences,bool clipboard=true)
     {
         window.Opacity=1;
         var baseBrush=DesignTokens.Brush("Background");var handle=new WindowInteropHelper(window).Handle;
         string mode=preferences.ClipboardBackground;
+        double opacity=Math.Clamp(preferences.BackgroundOpacity,.2,1);
         if(handle==IntPtr.Zero){window.Background=baseBrush;return "";}
         var capability=MaterialPolicy.Evaluate(true);var chrome=WindowChrome.GetWindowChrome(window);
         bool useMaterial=mode=="acrylic"&&capability.Mica&&!window.AllowsTransparency;
@@ -53,9 +84,13 @@ public static class ClipboardBackgroundService
             if(useMaterial)WindowBackdrop.RemoveBackground(window);
         }
         bool transparent=mode=="transparent"&&window.AllowsTransparency&&capability.Dwm&&capability.Transparency&&!SystemParameters.HighContrast;
-        window.Background=useMaterial||transparent?new SolidColorBrush(Color.FromArgb((byte)Math.Round(255*Math.Clamp(preferences.BackgroundOpacity,.6,1)),baseBrush.Color.R,baseBrush.Color.G,baseBrush.Color.B)):baseBrush;
+        ApplySurfacePolicy(mode,opacity,useMaterial,transparent);
+        if(useMaterial)window.Background=Brushes.Transparent;
+        else if(transparent)window.Background=AlphaBrush("Background",opacity);
+        else window.Background=DesignTokens.Brush("Background");
         if(mode=="transparent"&&!window.AllowsTransparency||mode!="transparent"&&window.AllowsTransparency)return "背景类型将在重新打开应用后生效";
         if(mode=="acrylic"&&!useMaterial||mode=="transparent"&&!transparent)return "系统透明效果不可用，当前使用纯色背景";
         return "";
     }
+
 }

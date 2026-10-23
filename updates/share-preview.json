@@ -1,9 +1,9 @@
 {
   "schema": 1,
   "channel": "share-preview",
-  "version": "0.7.1",
-  "notes": "0.7.1 测试版：修复 Android 复制远端条目后被重复收录为本机内容；正文垂直居中，设备来源收为角落图标；实时搜索、左滑置顶/删除与撤销、按压反馈、24px 图标与深浅色。Android/Windows 直接进入本机剪贴板，本机及原生局域网无需网页登录。iPad/跨网入口保留认证与原生数据桥。Windows 支持托盘与 Win+Shift+V。沿用当前 Share 包名和签名，可覆盖升级；原版独立应用仍可保留。后台持续同步、自动重连及 Android11 全天候收录尚未完成真机验收。",
-  "releaseTrain": "2026.10.20-clipboard-candidate",
+  "version": "0.7.9",
+  "notes": "0.7.9：图片同步和蓝牙文件目录；Android 图片仅双栏、固定右下角导入、外观分节及心跳刷新不再重建图片卡片；Windows 全应用透明/磨砂、Emoji和分类编辑。Windows build28 原生198项检查、Android build29 69项单测通过。手机与电脑真实蓝牙/LAN往返和其他物理DPI仍待验收。",
+  "releaseTrain": "2026.10.24-native-079",
   "designRevision": "2026.10-clipboard-3",
   "web": {
     "version": "0.7.1",
@@ -13,21 +13,21 @@
     "nativeInterop": true
   },
   "android": {
-    "version": "0.7.1",
-    "build": 14,
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-77ecbc0dd714447cb32a1650e906149b/FloatClip-0.7.1.apk?exp=0&sig=d4c785bf81f495a57bdfc0409f30e5138546b35b55b080da36db1b17b8f8a9f4",
-    "sha256": "7001a3368aedc3b969af6f40ebc35390c61031b8ec817c10444fa9c40ce5ea72",
-    "bytes": 3078476,
+    "version": "0.7.9",
+    "build": 29,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-224345e96e7d4b8d8931f06c87368b17/FloatClip-Android-0.7.9-build29.apk?exp=0&sig=1251d6720cc17bb4c819f475eb7d1bc5c71c28520d820b00c36fbb46865920bf",
+    "sha256": "5fe342a487a108a6a6f4d14617aa1f9155dec684f1dc799dd46cfb35aaecf59c",
+    "bytes": 3758815,
     "status": "available",
     "package": "com.floatclip.probe",
     "signerSha256": "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c"
   },
   "windows": {
-    "version": "0.7.1",
-    "build": 14,
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-4b76a3ee65394f4391bec21e73fa7b19/FloatClip-Windows-0.7.1.zip?exp=0&sig=67ac6e7d636ab6e09834b2be6fa6bf7191eebf93826f2a024c8124583ada35af",
-    "sha256": "4652c3003cfd3d4e641b78140c56088b50c6b4c2222b66f56327d25877a80300",
-    "bytes": 69688590,
+    "version": "0.7.9",
+    "build": 28,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-c4006f1b65374d529ce97e83d21e6438/FloatClip-Windows-0.7.9-build28.zip?exp=0&sig=87d2f3928623c6826c0380c927adcad6506aba9c66c3221b7fb7c62158a8f80a",
+    "sha256": "f6dd3aafb89252a9b2029780329282bf036bf6375b7421891604398399d80a98",
+    "bytes": 78881727,
     "status": "available"
   }
 }

@@ -12,8 +12,8 @@ import javax.net.ssl.HttpsURLConnection
 
 /** One authenticated public manifest for both native clients; no account or clipboard data is sent. */
 internal object ShareUpdates {
-    const val BUILD = 23
-    const val VERSION = "0.7.8"
+    const val BUILD = 29
+    const val VERSION = "0.7.9"
     const val FEED = "https://clip.wmy-cloud.cn/release.json"
     const val FALLBACK_FEED = "https://raw.githubusercontent.com/SteveBrilien/FloatClip/main/updates/native-updates.json"
     const val DEV_FEED = FEED

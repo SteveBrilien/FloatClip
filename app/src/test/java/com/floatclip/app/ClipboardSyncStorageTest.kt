@@ -3,6 +3,7 @@ package com.floatclip.app
 import android.content.Context
 import com.floatclip.app.clipboard.ClipStore
 import com.floatclip.app.clipboard.ClipboardSources
+import com.floatclip.app.model.ClipEntry
 import com.floatclip.app.security.VaultCipher
 import com.floatclip.app.sync.SyncPreferences
 import com.floatclip.app.sync.SyncPolicy
@@ -119,8 +120,23 @@ class ClipboardSyncStorageTest {
         val id=UUID.fromString("44444444-5555-6666-7777-888888888888")
         val peer=TrustedPeerStore.Peer(TrustedPeerStore.hash(token),token,id,"ADMINISTRATOR","windows","8C:49:B6:23:30:34")
         val tabs=ClipboardSources.tabs(emptyList(),listOf(peer))
-        assertEquals(listOf("全部","本机","ADMINISTRATOR"),tabs.map{it.name})
+        assertEquals(listOf("全部","图片","本机","ADMINISTRATOR"),tabs.map{it.name})
         assertEquals(id.toString(),tabs.last().id)
+    }
+
+    @Test fun imageSharingAndImageScopeAreExplicitPreferences() {
+        val ctx=context()
+        val prefs=SyncPreferences(ctx)
+        assertFalse(prefs.imageSharing())
+        val before=prefs.policy()
+        prefs.saveImageSharing(true)
+        assertTrue(SyncPreferences(ctx).imageSharing())
+        assertNotEquals(before.sendGeneration,prefs.policy().sendGeneration)
+        val image=ClipEntry(10,"图片",kind="image",sourceDeviceId="remote",sourceDeviceName="电脑",sourcePlatform="windows")
+        val text=ClipEntry(9,"文字",kind="text",sourceDeviceId="remote",sourceDeviceName="电脑",sourcePlatform="windows")
+        assertTrue(com.floatclip.app.clipboard.ClipboardQuery.matches(image,"",ClipboardSources.IMAGE_SCOPE))
+        assertFalse(com.floatclip.app.clipboard.ClipboardQuery.matches(text,"",ClipboardSources.IMAGE_SCOPE))
+        prefs.saveImageSharing(false)
     }
 
     @Test fun syncKeepAliveIsIndependentFromAutomaticReconnect() {

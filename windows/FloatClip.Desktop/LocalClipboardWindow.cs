@@ -356,7 +356,7 @@ public sealed partial class LocalClipboardWindow:Window
         var backgroundHint=MutedLabel("",(Thickness)Application.Current.FindResource("FloatClip.Margin.Top4"));
         backgroundChoice.SelectionChanged+=(_,_)=>Guard(()=>{designPreferences.ClipboardBackground=backgroundChoice.SelectedIndex switch{1=>"acrylic",2=>"transparent",_=>"solid"};designPreferences.Save(prefsRoot);backgroundHint.Text=ApplyClipboardBackground();});
         panel.Children.Add(SettingRow("应用背景","适用于剪贴板、文件、设备、设置及辅助窗口",backgroundChoice));panel.Children.Add(backgroundHint);
-        panel.Children.Add(SliderSetting("背景不透明度","文字和卡片保持清晰",60,100,designPreferences.BackgroundOpacity*100,v=>{designPreferences.BackgroundOpacity=v/100;designPreferences.Save(prefsRoot);ApplyClipboardBackground();},"BackgroundOpacity"));
+        panel.Children.Add(SliderSetting("背景与表面透明度","文字和图标保持完全不透明；卡片与列表随背景一起透出材质",20,100,designPreferences.BackgroundOpacity*100,v=>{designPreferences.BackgroundOpacity=v/100;designPreferences.Save(prefsRoot);ApplyClipboardBackground();},"BackgroundOpacity"));
         Option("设备特征色",sourceColors,v=>sourceColors=v);Option("彩色卡片背景",translucent,v=>translucent=v);
         panel.Children.Add(MutedLabel("分类特征色",(Thickness)Application.Current.FindResource("FloatClip.Margin.Section")));
         categorySettingsModel=new CategorySettingsViewModel(categories,()=>Guard(()=>Refresh()));panel.Children.Add(new CategorySettingsView{DataContext=categorySettingsModel});

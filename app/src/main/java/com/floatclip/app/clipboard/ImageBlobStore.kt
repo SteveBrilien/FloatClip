@@ -17,7 +17,7 @@ internal class ImageBlobStore(private val directory:File,private val cipher:Vaul
         require(ByteBuffer.wrap(png,8,4).int==13 && String(png,12,4,Charsets.US_ASCII)=="IHDR") { "PNG 图片头无效" }
         val width=ByteBuffer.wrap(png,16,4).int
         val height=ByteBuffer.wrap(png,20,4).int
-        require(width in 1..16384 && height in 1..16384 && width.toLong()*height<=MAX_PIXELS) { "图片尺寸超过 1600 万像素" }
+        require(width in 1..16384 && height in 1..16384 && width.toLong()*height<=MAX_PIXELS) { "图片尺寸超过 6400 万像素" }
         require(png.copyOfRange(png.size-12,png.size).contentEquals(IEND)) { "PNG 图片不完整" }
         var offset=8;var data=false
         while(offset<png.size) {
@@ -68,7 +68,7 @@ internal class ImageBlobStore(private val directory:File,private val cipher:Vaul
         const val MAX_IMAGE_BYTES=8*1024*1024
         const val MAX_ACTIVE_BYTES=32*1024*1024
         const val MAX_STORED_BYTES=64L*1024*1024
-        const val MAX_PIXELS=16_000_000L
+        const val MAX_PIXELS=64_000_000L
         private val SIGNATURE=byteArrayOf(137.toByte(),80,78,71,13,10,26,10)
         private val IEND=byteArrayOf(0,0,0,0,73,69,78,68,174.toByte(),66,96,130.toByte())
     }

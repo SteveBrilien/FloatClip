@@ -199,7 +199,7 @@ static class Program
             window.Activate();window.FocusSearch();Pump();Check(search.IsKeyboardFocusWithin&&Field<Type>(window,"currentPage")==typeof(ClipboardPage),"returning to clipboard restores searchable content");
             Check(search.MinHeight<=34&&Descendants(window).OfType<Button>().Where(b=>b.Tag as string=="icon").All(b=>b.Width<=32),"search and title controls use compact desktop sizes");
             Call(window,"FullText",textId,row["text"]!.GetValue<string>());Pump();var full=window.OwnedWindows.Cast<Window>().Single(w=>w.Title=="剪贴板全文");
-            var rich=(Emoji.Wpf.RichTextBox)full.Content;rich.SelectAll();string fullValue=rich.Selection.Text;
+            var rich=Descendants(full).OfType<Emoji.Wpf.RichTextBox>().Single();rich.SelectAll();string fullValue=rich.Selection.Text;
             Check(fullValue==row["text"]!.GetValue<string>(),"emoji copy selection preserves exact original Unicode");
             // A native TextRange serializes EmojiInline as an object placeholder; the
             // production Copy command explicitly uses Emoji.Wpf.TextSelection.Text.
@@ -209,7 +209,7 @@ static class Program
             Check(rich.Selection.Text=="👨‍👩‍👧‍👦","partial selection copies a family ZWJ sequence without object placeholders");rich.SelectAll();
             const string multiline="\n第一行 👍🏽\n\nsecond 👨‍👩‍👧‍👦 🇨🇳\r\n末尾\n";
             Call(window,"FullText","multiline-copy",multiline);Pump();var multilineWindow=window.OwnedWindows.Cast<Window>().Single(w=>w.Title=="剪贴板全文"&&!ReferenceEquals(w,full));
-            var multilineBox=(Emoji.Wpf.RichTextBox)multilineWindow.Content;multilineBox.SelectAll();
+            var multilineBox=Descendants(multilineWindow).OfType<Emoji.Wpf.RichTextBox>().Single();multilineBox.SelectAll();
             Check(multilineBox.Selection.Text==multiline,"emoji copy preserves blank lines, CRLF and trailing newline");multilineWindow.Close();
             var emojiSample=new Emoji.Wpf.TextBlock{FontSize=64,Text="😀 👍🏽 👨‍👩‍👧‍👦 🇨🇳",Margin=new(16),TextWrapping=TextWrapping.Wrap};
             var emojiWindow=new Window{Owner=window,ShowInTaskbar=false,Width=800,Height=220,Background=Brushes.White,Foreground=Brushes.Black,Content=emojiSample};emojiWindow.Show();Pump();Snapshot(emojiWindow,"emoji-64dip");

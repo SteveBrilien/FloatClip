@@ -159,6 +159,48 @@ public sealed class ClipboardVault
         }
     }
 
+    public JsonObject? FindImage(string imageRef)=>Locked(()=>{
+        string normalized=NormalizeImageRef(imageRef);
+        return Load()["entries"]!.AsArray().OfType<JsonObject>()
+            .FirstOrDefault(c=>Kind(c)=="image"&&string.Equals(c["imageRef"]?.GetValue<string>(),normalized,StringComparison.OrdinalIgnoreCase))?.DeepClone() as JsonObject;
+    });
+
+    public JsonObject ReceiveSharedImage(Guid eventId,FloatClip.Share.SyncDevice source,byte[] pngBytes,int width,int height,long createdAt)
+    {
+        if(eventId==Guid.Empty)throw new IOException("图片事件无效");ValidatePng(pngBytes,width,height);
+        string hash=Convert.ToHexString(SHA256.HashData(pngBytes)).ToLowerInvariant(),key=eventId.ToString();
+        var sourceJson=new JsonObject{["id"]=source.Id.ToString(),["name"]=source.Name,["platform"]=source.Platform};
+        for(int retry=0;;retry++)
+        {
+            var snapshot=Load();var entries=snapshot["entries"]!.AsArray();
+            var exact=entries.OfType<JsonObject>().FirstOrDefault(c=>c["id"]?.GetValue<string>()==key);
+            if(exact!=null)
+            {
+                if(Kind(exact)!="image"||exact["imageSha256"]?.GetValue<string>()!=hash)throw new IOException("图片事件编号冲突");
+                return snapshot;
+            }
+            var previous=entries.OfType<JsonObject>().FirstOrDefault(c=>Kind(c)=="image"&&c["imageSha256"]?.GetValue<string>()==hash&&c["source"]?["id"]?.GetValue<string>()==source.Id.ToString());
+            JsonObject row;string imageRef;bool fresh=previous==null;
+            if(previous!=null){row=(JsonObject)previous.DeepClone();imageRef=row["imageRef"]!.GetValue<string>();entries.Remove(previous);}
+            else
+            {
+                if(entries.Count>=500)
+                {
+                    var removable=entries.OfType<JsonObject>().Where(c=>!IsPinned(c)&&!IsLocked(c)).OrderBy(c=>c["updatedAt"]!.GetValue<long>()).FirstOrDefault()??throw new IOException("固定和置顶记录已满");
+                    entries.Remove(removable);
+                }
+                imageRef=Guid.NewGuid().ToString("N");row=new JsonObject{["kind"]="image",["text"]="图片",["pinned"]=false,["locked"]=false,["category"]="未分类"};
+            }
+            WriteImageBlob(imageRef,pngBytes);long now=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            row["id"]=key;row["imageRef"]=imageRef;row["imageSha256"]=hash;row["imageBytes"]=(long)pngBytes.Length;
+            row["imageWidth"]=(long)width;row["imageHeight"]=(long)height;row["mimeType"]="image/png";
+            row["createdAt"]=previous?["createdAt"]?.GetValue<long>()??createdAt;row["updatedAt"]=now;row["source"]=sourceJson.DeepClone();entries.Add(row);
+            try{return Commit(snapshot["revision"]!.GetValue<string>(),entries);}
+            catch(IOException e)when(e.Message=="VAULT_CONFLICT"&&retry<3){if(fresh)DeleteImageBlob(imageRef);}
+            catch{if(fresh)DeleteImageBlob(imageRef);throw;}
+        }
+    }
+
     public byte[] ReadImage(JsonObject entry)
     {
         if(Kind(entry)!="image")throw new IOException("这条记录不是图片");

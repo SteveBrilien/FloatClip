@@ -21,10 +21,11 @@ static class ProductFixChecks
     sealed class Devices:IClipboardDeviceService
     {
         public event Action? Changed;
-        public DevicePanelState State=new(true,true,true,true,true,"等待已授权设备自动连接",false,new[]{new DevicePeerState("fixture","我的手机 😀",true,true,"已授权，等待自动连接")});
+        public DevicePanelState State=new(true,true,true,true,true,false,"等待已授权设备自动连接",false,new[]{new DevicePeerState("fixture","我的手机 😀",true,true,"已授权，等待自动连接")});
         public int Writes;
         public DevicePanelState Read()=>State;
         public void Configure(bool enabled,bool send,bool receive,bool apply,bool automatic){Writes++;State=State with{Enabled=enabled,Send=send,Receive=receive,Apply=apply,Automatic=automatic};Changed?.Invoke();}
+        public void SetImageSharing(bool enabled){Writes++;State=State with{Images=enabled};Changed?.Invoke();}
         public void SetPeerEnabled(string key,bool enabled){Writes++;State=State with{Peers=State.Peers.Select(p=>p with{Enabled=enabled}).ToArray()};Changed?.Invoke();}
         public void Forget(string key){}
         public void ResetPairing(){}
@@ -66,10 +67,10 @@ static class ProductFixChecks
         var service=new Devices();using var view=new ClipboardSharingView(service);var window=new Window{Title="FloatClip · 隔离设备页",Content=view,Width=740,Height=420,ShowInTaskbar=false};window.SetResourceReference(Window.BackgroundProperty,"FloatClip.Background");window.SetResourceReference(Window.ForegroundProperty,"FloatClip.TextPrimary");window.Show();pump(0);
         var vm=(DevicePanelViewModel)view.DataContext;var peers=(ItemsControl)view.FindName("PeerList");var container=peers.ItemContainerGenerator.ContainerFromIndex(0);var model=vm.Peers.Single();var scroll=(ScrollViewer)view.FindName("PageScroll");
         var optionRows=Tree(view).OfType<Border>().Where(b=>b.Style==Application.Current.FindResource("FloatClip.Setting.OptionRow")).ToArray();
-        check(optionRows.Length==5&&optionRows.All(row=>Tree(row).OfType<Wpf.Ui.Controls.ToggleSwitch>().All(toggle=>toggle.ActualHeight<=row.ActualHeight-row.Padding.Top-row.Padding.Bottom-row.BorderThickness.Top-row.BorderThickness.Bottom)),"compact option rows contain the full switch hit area without clipping");
+        check(optionRows.Length==6&&optionRows.All(row=>Tree(row).OfType<Wpf.Ui.Controls.ToggleSwitch>().All(toggle=>toggle.ActualHeight<=row.ActualHeight-row.Padding.Top-row.Padding.Bottom-row.BorderThickness.Top-row.BorderThickness.Bottom)),"compact option rows contain the full switch hit area without clipping");
         scroll.ScrollToVerticalOffset(100);pump(0);double offset=scroll.VerticalOffset,height=scroll.ExtentHeight;
-        vm.Send=false;vm.Receive=false;vm.Apply=false;vm.Automatic=false;pump(0);
-        check(service.Writes==4&&!service.State.Send&&!service.State.Receive&&!service.State.Apply&&!service.State.Automatic,"four toggle bindings persist exact options without duplicate writes");
+        vm.Send=false;vm.Images=true;vm.Receive=false;vm.Apply=false;vm.Automatic=false;pump(0);
+        check(service.Writes==5&&!service.State.Send&&service.State.Images&&!service.State.Receive&&!service.State.Apply&&!service.State.Automatic,"five toggle bindings persist exact text/image options without duplicate writes");
         check(ReferenceEquals(container,peers.ItemContainerGenerator.ContainerFromIndex(0))&&ReferenceEquals(model,vm.Peers.Single()),"sync changes preserve device row and view-model instances");
         check(Math.Abs(scroll.VerticalOffset-offset)<1&&Math.Abs(scroll.ExtentHeight-height)<1,"sync option changes preserve scroll position and layout height");
         vm.Peers[0].Enabled=false;pump(0);check(!service.State.Peers[0].Enabled&&ReferenceEquals(container,peers.ItemContainerGenerator.ContainerFromIndex(0)),"per-device toggle keeps its existing row");

@@ -24,6 +24,8 @@ class OverlayPreferences(context: Context) {
     fun overlayEnabled(): Boolean = prefs.getBoolean(KEY_OVERLAY_ENABLED, false)
     fun twoColumnClipboard(): Boolean = prefs.getBoolean("clipboard_two_columns", false)
     fun saveTwoColumnClipboard(value: Boolean) { prefs.edit().putBoolean("clipboard_two_columns", value).apply() }
+    fun mergeRemoteImages(): Boolean = prefs.getBoolean("clipboard_merge_remote_images", true)
+    fun saveMergeRemoteImages(value: Boolean) { prefs.edit().putBoolean("clipboard_merge_remote_images", value).apply() }
     fun sourceColors(): Boolean = prefs.getBoolean("source_colors", true)
     fun translucentCards(): Boolean = prefs.getBoolean("translucent_cards", true)
     fun saveSourceColors(value: Boolean) { prefs.edit().putBoolean("source_colors",value).apply() }
@@ -141,6 +143,8 @@ class OverlayPreferences(context: Context) {
             .remove(KEY_THEME_MODE)
             .remove("source_colors")
             .remove("translucent_cards")
+            .remove("clipboard_two_columns")
+            .remove("clipboard_merge_remote_images")
             .apply()
     }
 

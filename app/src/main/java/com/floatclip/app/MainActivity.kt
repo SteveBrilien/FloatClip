@@ -23,6 +23,7 @@ import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -76,6 +77,11 @@ open class MainActivity : Activity() {
     private var historyCategory: String = ALL_CATEGORY
     private var sourceFilter = ""
     private var historyList: LinearLayout? = null
+    private var viewport: FrameLayout? = null
+    private var imageImportButton: View? = null
+    private var renderedHistoryTarget: LinearLayout? = null
+    private var renderedHistoryEntries: List<ClipEntry>? = null
+    private var renderedHistoryOptions: List<Any>? = null
     private var undoEntries: List<ClipEntry> = emptyList()
     private val undoOwner="main:"+java.util.UUID.randomUUID()
     private var lastImageCapture=""
@@ -175,7 +181,11 @@ open class MainActivity : Activity() {
             lastImageCapture=event
             ClipboardImages.captureAsync(applicationContext,clip,clipStore) { result ->
                 result.onSuccess { entry ->
-                    if(entry!=null) { if(!isDestroyed&&currentPage==PAGE_CLIPBOARD)refreshHistory();notifyHistoryChanged() }
+                    if(entry!=null) {
+                        SyncRuntime.userCopiedImage(applicationContext,entry)
+                        if(!isDestroyed&&currentPage==PAGE_CLIPBOARD)refreshHistory()
+                        notifyHistoryChanged()
+                    }
                 }.onFailure {
                     lastImageCapture=""
                     if(!isDestroyed)Toast.makeText(this,it.message ?: "图片未收录，请在前台重试",Toast.LENGTH_LONG).show()
@@ -227,10 +237,11 @@ open class MainActivity : Activity() {
         colors = resolveAppColors()
         applySystemBars()
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        val root = FrameLayout(this).apply {
             setBackgroundColor(colors.pageBackground)
         }
+        viewport=root
+        imageImportButton=null
         val scroll = ScrollView(this).apply {
             setBackgroundColor(colors.pageBackground)
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -243,7 +254,7 @@ open class MainActivity : Activity() {
             content,
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
         )
-        root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(scroll, FrameLayout.LayoutParams(-1,-1))
         root.isFocusableInTouchMode=true
         setContentView(root)
 
@@ -459,28 +470,24 @@ open class MainActivity : Activity() {
             }
             override fun afterTextChanged(s:Editable?)=Unit
         })
-        val filterScroll=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false }
+        val filterScroll=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false; overScrollMode=View.OVER_SCROLL_NEVER }
         val filters=LinearLayout(this).apply { id=R.id.clipboard_sources; gravity=Gravity.CENTER_VERTICAL; setPadding(0,dp(8),0,dp(8)) }
-        filters.addView(headerIcon(R.drawable.ic_image,"添加图片或截图") {
-            startActivity(Intent(this,com.floatclip.app.clipboard.ImageImportActivity::class.java))
-        },LinearLayout.LayoutParams(dp(48),dp(48)))
-        filters.addView(headerIcon(R.drawable.ic_grid,"剪贴板布局") {
-            FloatDialog.choices(this,"剪贴板布局",listOf("居中单栏","左右双栏"),if(overlayPreferences.twoColumnClipboard())1 else 0) {
-                overlayPreferences.saveTwoColumnClipboard(it==1);refreshHistory();notifyOverlayAppearanceChanged()
-            }
-        },LinearLayout.LayoutParams(dp(48),dp(48)))
         val sources=ClipboardSources.tabs(this,clipStore.entries())
         if(sourceFilter !in sources.map { it.id })sourceFilter=""
+        var selectedSourceView:View?=null
         sources.forEach { source ->
             val key=source.id;val name=source.name
-            filters.addView(textView(name,14f,false,if(sourceFilter==key) colors.accent else colors.secondaryText).apply {
+            val tab=textView(name,14f,false,if(sourceFilter==key) colors.accent else colors.secondaryText).apply {
                 gravity=Gravity.CENTER; setPadding(dp(13),0,dp(13),0); minimumHeight=dp(44)
                 background=roundedBackground(if(sourceFilter==key) colors.actionBackground else Color.TRANSPARENT,11f)
                 isSelected=sourceFilter==key; contentDescription="来源：$name"
                 setOnClickListener { sourceFilter=key; historyCategory=ALL_CATEGORY; render() }
-            },LinearLayout.LayoutParams(-2,dp(44)).apply { marginEnd=dp(4) })
+            }
+            if(sourceFilter==key)selectedSourceView=tab
+            filters.addView(tab,LinearLayout.LayoutParams(-2,dp(44)).apply { marginEnd=dp(4) })
         }
         filterScroll.addView(filters);content.addView(filterScroll)
+        selectedSourceView?.let { selected -> filterScroll.post { revealSourceTab(filterScroll,selected) } }
         undoBar=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL; visibility=View.GONE }
         content.addView(undoBar)
         historyList=LinearLayout(this).apply { id=R.id.clipboard_list; orientation=LinearLayout.VERTICAL }
@@ -488,11 +495,66 @@ open class MainActivity : Activity() {
         refreshHistory(); showUndo()
     }
 
+    private fun revealSourceTab(scroll:HorizontalScrollView, selected:View) {
+        if(scroll.width<=0)return
+        val visibleLeft=scroll.scrollX
+        val visibleRight=visibleLeft+scroll.width
+        when {
+            selected.left>=visibleLeft && selected.right<=visibleRight -> Unit
+            selected.right>visibleRight -> {
+                val centered=(selected.left+selected.width/2-scroll.width/2)
+                    .coerceIn(0,(scroll.getChildAt(0)?.width?.minus(scroll.width) ?: 0).coerceAtLeast(0))
+                scroll.smoothScrollTo(centered,0)
+            }
+            else -> scroll.smoothScrollTo((selected.left-dp(8)).coerceAtLeast(0),0)
+        }
+    }
+
+    private fun updateImageImportAction() {
+        val visible=currentPage==PAGE_CLIPBOARD&&!categoryManagement&&sourceFilter==ClipboardSources.IMAGE_SCOPE
+        val root=viewport?:return
+        val button=imageImportButton?:TextView(this).apply {
+            id=R.id.clipboard_image_import
+            text="+"
+            textSize=28f
+            gravity=Gravity.CENTER
+            contentDescription="导入图片"
+            setTextColor(colors.accentTextOnFill)
+            background=roundedBackground(colors.accent,28f)
+            elevation=dp(3).toFloat()
+            setOnClickListener { startActivity(Intent(this@MainActivity,com.floatclip.app.clipboard.ImageImportActivity::class.java)) }
+        }.also {
+            imageImportButton=it
+            root.addView(it,FrameLayout.LayoutParams(dp(54),dp(54),Gravity.END or Gravity.BOTTOM).apply{
+                marginEnd=dp(18);bottomMargin=dp(24)
+            })
+        }
+        button.visibility=if(visible)View.VISIBLE else View.GONE
+        content.setPadding(dp(18),dp(6),dp(18),dp(if(visible)100 else 24))
+    }
+
     private fun refreshHistory() {
         val target=historyList ?: return
-        target.removeAllViews()
-        val visibleHistory=clipStore.entries().filter { ClipboardQuery.matches(it,searchQuery,sourceFilter) }
+        updateImageImportAction()
+        val mergeRemoteImages=overlayPreferences.mergeRemoteImages()
+        val visibleHistory=clipStore.entries()
+            .filter { ClipboardQuery.matches(it,searchQuery,sourceFilter) }
+            .filter {
+                when {
+                    mergeRemoteImages -> true
+                    it.kind!="image" -> true
+                    sourceFilter==ClipboardSources.IMAGE_SCOPE -> it.sourceDeviceId=="local"
+                    sourceFilter.isEmpty() -> it.sourceDeviceId=="local"
+                    else -> true
+                }
+            }
             .filter { historyCategory==ALL_CATEGORY || it.category==historyCategory }.take(100)
+        val options=listOf(sourceFilter,searchQuery,historyCategory,mergeRemoteImages,overlayPreferences.twoColumnClipboard())
+        // Connection heartbeats do not change clipboard content. Keep card instances and
+        // decoded images instead of briefly clearing them on every state broadcast.
+        if(renderedHistoryTarget===target&&renderedHistoryEntries==visibleHistory&&renderedHistoryOptions==options)return
+        renderedHistoryTarget=target;renderedHistoryEntries=visibleHistory;renderedHistoryOptions=options
+        com.floatclip.app.ui.ClipboardLayout.clear(target)
         if (visibleHistory.isEmpty()) {
             target.addView(textView(if(searchQuery.isEmpty()) "这里还没有记录" else "没有匹配的记录",15f,false,colors.secondaryText).apply { gravity=Gravity.CENTER; setPadding(0,dp(28),0,dp(20)) })
             if(searchQuery.isEmpty() && sourceFilter.isEmpty()) target.addView(compactTextAction("收录当前剪贴板") { captureCurrentClipboard();refreshHistory() })
@@ -629,6 +691,7 @@ open class MainActivity : Activity() {
             toggle("清理最近任务后保持共享服务",prefs.keepAlive()){prefs.saveKeepAlive(!prefs.keepAlive())}
             toggle("ADB 后台采集增强",prefs.backgroundCapture()){prefs.saveBackgroundCapture(!prefs.backgroundCapture())}
             toggle("发送新复制的文字",prefs.sending()){prefs.save(sending=!prefs.sending())}
+            toggle("同步图片",prefs.imageSharing()){prefs.saveImageSharing(!prefs.imageSharing())}
             toggle("接收文字到历史",prefs.receiving()){prefs.save(receiving=!prefs.receiving())}
             toggle("接收后写入系统剪贴板",prefs.applying()){prefs.save(applying=!prefs.applying())}
         })
@@ -664,11 +727,26 @@ open class MainActivity : Activity() {
             }
         })
 
+        sectionTitle("图片")
         addCard(card().apply {
-            addView(settingRow("剪贴板布局","主界面与悬浮剪贴板共用",if(overlayPreferences.twoColumnClipboard()) "左右双栏" else "居中单栏") {
-                FloatDialog.choices(this@MainActivity,"剪贴板布局",listOf("居中单栏","左右双栏"),if(overlayPreferences.twoColumnClipboard())1 else 0) {
-                    overlayPreferences.saveTwoColumnClipboard(it==1);notifyOverlayAppearanceChanged();render()
-                }
+            addView(segmentedSetting(
+                "图片排列",
+                listOf(0 to "单列",1 to "双列"),
+                if(overlayPreferences.twoColumnClipboard())1 else 0,
+            ) { value ->
+                overlayPreferences.saveTwoColumnClipboard(value==1)
+                notifyOverlayAppearanceChanged()
+                render()
+            })
+            addView(divider())
+            addView(segmentedSetting(
+                "多端图片",
+                listOf(0 to "按设备",1 to "集中显示"),
+                if(overlayPreferences.mergeRemoteImages())1 else 0,
+            ) { value ->
+                overlayPreferences.saveMergeRemoteImages(value==1)
+                notifyOverlayAppearanceChanged()
+                render()
             })
         })
         sectionTitle("悬浮球")

@@ -23,6 +23,7 @@ public final class ShareSession implements AutoCloseable {
         default void sync(ShareWire.Frame frame) throws Exception { throw new IOException("Sync adapter unavailable"); }
         default void attached(ShareSession session) { }
         default void catalog(byte[] data) throws Exception { throw new IOException("File catalog unavailable"); }
+        default void rejected(Offer offer) { }
         default void fileFailed(String message) { }
     }
     private final InputStream input; private final OutputStream output; private final Closeable connection;
@@ -219,7 +220,7 @@ public final class ShareSession implements AutoCloseable {
                 if(job==null || job.offer==null || !job.offer.id.equals(f.id) || job.accepted) throw new IOException("Unexpected decision");
                 if(f.type==REJECT) outgoing=null; else job.accepted=true;
             }
-            if(f.type==ACCEPT) fileWorker.execute(() -> sendBody(job)); else { events.notice("对方未接收文件"); events.fileFailed("对方未接收文件"); }
+            if(f.type==ACCEPT) fileWorker.execute(() -> sendBody(job)); else { events.rejected(job.offer);events.notice("对方未接收文件"); events.fileFailed("对方未接收文件"); }
         } else if(f.type==CHUNK) {
             pace(f.data.length-4);
             synchronized(state) {

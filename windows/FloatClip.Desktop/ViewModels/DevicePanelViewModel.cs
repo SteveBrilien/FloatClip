@@ -25,7 +25,7 @@ public sealed class DevicePeerViewModel:ObservableObject
 public sealed class DevicePanelViewModel:ObservableObject,IDisposable
 {
     readonly IClipboardDeviceService service;readonly Action<Action> dispatch;readonly Func<string,string,bool> confirm;readonly CancellationTokenSource lifetime=new();
-    CancellationTokenSource? operation;bool enabled,send,receive,apply,automatic,updating,busy,corrupt,closed;int connectionMode,queued;string status="",pairingStatus="";
+    CancellationTokenSource? operation;bool enabled,send,receive,apply,automatic,images,updating,busy,corrupt,closed;int connectionMode,queued;string status="",pairingStatus="";
     LanNetwork? selectedNetwork;
     public ObservableCollection<DevicePeerViewModel> Peers{get;}=new();
     public ObservableCollection<LanNetwork> Networks{get;}=new();
@@ -35,6 +35,7 @@ public sealed class DevicePanelViewModel:ObservableObject,IDisposable
     public bool Receive{get=>receive;set{if(SetProperty(ref receive,value))Configure();}}
     public bool Apply{get=>apply;set{if(SetProperty(ref apply,value))Configure();}}
     public bool Automatic{get=>automatic;set{if(SetProperty(ref automatic,value))Configure();}}
+    public bool Images{get=>images;set{if(SetProperty(ref images,value)&&!updating)Run(()=>service.SetImageSharing(value));}}
     public bool Busy{get=>busy;private set{if(SetProperty(ref busy,value)){OnPropertyChanged(nameof(CanConnect));CancelCommand.NotifyCanExecuteChanged();}}}
     public bool CanConnect=>!Busy;
     public bool Corrupt{get=>corrupt;private set=>SetProperty(ref corrupt,value);}
@@ -72,7 +73,7 @@ public sealed class DevicePanelViewModel:ObservableObject,IDisposable
         if(closed)return;updating=true;
         try
         {
-            var state=service.Read();Enabled=state.Enabled;Send=state.Send;Receive=state.Receive;Apply=state.Apply;Automatic=state.Automatic;Corrupt=state.Corrupt;Status=state.Status;
+            var state=service.Read();Enabled=state.Enabled;Send=state.Send;Receive=state.Receive;Apply=state.Apply;Automatic=state.Automatic;Images=state.Images;Corrupt=state.Corrupt;Status=state.Status;
             foreach(var old in Peers.Where(p=>!state.Peers.Any(s=>s.Key==p.Key)).ToArray())Peers.Remove(old);
             foreach(var peer in state.Peers)
             {

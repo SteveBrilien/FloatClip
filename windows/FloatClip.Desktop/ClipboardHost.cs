@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Input;
@@ -135,12 +136,15 @@ public sealed class ClipboardHost:IDisposable
             {Sync?.Copied("",true);lastSequence=sequence;return;}
             if(Clipboard.ContainsImage()||Clipboard.ContainsData(ClipboardImages.PngFormat)||Clipboard.ContainsData(DataFormats.GetDataFormat(17).Name)||Clipboard.ContainsData(DataFormats.Dib))
             {
-                Sync?.Copied("",true);
-                if(Capture)
+                var image=ClipboardImages.Read(Clipboard.GetDataObject());
+                if(image!=null&&(Capture||Sync?.ImageSharing==true))
                 {
-                    var image=ClipboardImages.Read(Clipboard.GetDataObject());
-                    if(image!=null)Vault.AddImage(image.Value.Png,image.Value.Width,image.Value.Height);
+                    var snapshot=Vault.AddImage(image.Value.Png,image.Value.Width,image.Value.Height);
+                    string hash=Convert.ToHexString(SHA256.HashData(image.Value.Png)).ToLowerInvariant(),own=Vault.Device()["id"]!.GetValue<string>();
+                    var row=snapshot["entries"]!.AsArray().OfType<JsonObject>().FirstOrDefault(c=>ClipboardVault.Kind(c)=="image"&&c["imageSha256"]?.GetValue<string>()==hash&&c["source"]?["id"]?.GetValue<string>()==own);
+                    if(row!=null)Sync?.CopiedImage(row);else Sync?.Copied("",true);
                 }
+                else Sync?.Copied("",true);
                 lastSequence=sequence;
                 NotifyChanged();return;
             }
@@ -179,7 +183,16 @@ public sealed class ClipboardHost:IDisposable
     public void CopyImageByUser(byte[] pngBytes)
     {
         if(systemIntegration){ClipboardWrites.WriteImage(pngBytes);lastSequence=GetClipboardSequenceNumber();}
-        Sync?.Copied("",true);NotifyChanged();
+        try
+        {
+            using var stream=new MemoryStream(pngBytes);var decoder=BitmapDecoder.Create(stream,BitmapCreateOptions.PreservePixelFormat,BitmapCacheOption.OnLoad);
+            var frame=decoder.Frames[0];var snapshot=Vault.AddImage(pngBytes,frame.PixelWidth,frame.PixelHeight);
+            string hash=Convert.ToHexString(SHA256.HashData(pngBytes)).ToLowerInvariant(),own=Vault.Device()["id"]!.GetValue<string>();
+            var row=snapshot["entries"]!.AsArray().OfType<JsonObject>().FirstOrDefault(c=>ClipboardVault.Kind(c)=="image"&&c["imageSha256"]?.GetValue<string>()==hash&&c["source"]?["id"]?.GetValue<string>()==own);
+            if(row!=null)Sync?.CopiedImage(row);else Sync?.Copied("",true);
+        }
+        catch{Sync?.Copied("",true);}
+        NotifyChanged();
     }
     public void ShowPopup(bool activate=true)
     {

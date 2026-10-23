@@ -42,6 +42,16 @@ static class Program
         File.WriteAllText(Blob(row),"damaged-image");images.AddImage(png,1,1,source);row=Row(images);
         Check(images.ReadImage(row).AsSpan().SequenceEqual(png),"copy repairs damaged image blob");
         string baseline=images.Load()["revision"]!.GetValue<string>();
+        var sharedVault=new ClipboardVault(Path.Combine(root,"SharedImageTest"),protect,unprotect);
+        var remoteDevice=new SyncDevice(Guid.NewGuid(),"远端手机","android");var remoteEvent=Guid.NewGuid();
+        sharedVault.ReceiveSharedImage(remoteEvent,remoteDevice,png,1,1,1234);
+        var shared=sharedVault.Load()["entries"]!.AsArray().OfType<JsonObject>().Single();
+        Check(shared["id"]!.GetValue<string>()==remoteEvent.ToString()&&shared["source"]!["id"]!.GetValue<string>()==remoteDevice.Id.ToString(),"shared image preserves remote event and source identity");
+        Check(sharedVault.ReadImage(shared).AsSpan().SequenceEqual(png),"shared image bytes survive encrypted vault write");
+        shared["pinned"]=true;shared["locked"]=true;shared["category"]="远端图片";var sharedSnapshot=sharedVault.Load();var sharedRow=sharedSnapshot["entries"]!.AsArray().OfType<JsonObject>().Single();sharedRow["pinned"]=true;sharedRow["locked"]=true;sharedRow["category"]="远端图片";sharedVault.Commit(sharedSnapshot["revision"]!.GetValue<string>(),sharedSnapshot["entries"]!.AsArray());
+        sharedVault.ReceiveSharedImage(Guid.NewGuid(),remoteDevice,png,1,1,2234);var sharedAgain=sharedVault.Load()["entries"]!.AsArray().OfType<JsonObject>().Single();
+        Check(ClipboardVault.IsPinned(sharedAgain)&&ClipboardVault.IsLocked(sharedAgain)&&sharedAgain["category"]!.GetValue<string>()=="远端图片","repeated remote image preserves protection and organization");
+        Throws(()=>sharedVault.ReceiveSharedImage(Guid.NewGuid(),remoteDevice,png,2,1,2234),"shared image forged dimensions accepted");
         Throws(()=>images.AddImage(png,2,1,source),"forged image dimensions accepted");
         Throws(()=>images.AddImage(png[..8],1,1,source),"truncated PNG accepted");
         var corrupt=(byte[])png.Clone();corrupt[43]^=1;Throws(()=>images.AddImage(corrupt,1,1,source),"corrupt PNG accepted");

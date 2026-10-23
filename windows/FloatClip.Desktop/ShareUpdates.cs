@@ -12,8 +12,8 @@ namespace FloatClip.Share;
 public sealed record UpdateRelease(int Build,string Version,string Notes,string Url,string Sha256="",long Bytes=0);
 public static class ShareUpdates
 {
-    public const int Build=26;
-    public const string Version="0.7.8",Feed="https://clip.wmy-cloud.cn/release.json";
+    public const int Build=28;
+    public const string Version="0.7.9",Feed="https://clip.wmy-cloud.cn/release.json";
     public const string FallbackFeed="https://raw.githubusercontent.com/SteveBrilien/FloatClip/main/updates/native-updates.json";
     sealed class SourceUnavailable(string message,Exception? inner=null):IOException(message,inner);
     public static async Task<UpdateRelease> Check(CancellationToken cancellation=default)

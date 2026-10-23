@@ -38,6 +38,10 @@ args.output.write_text(json.dumps({'nativeUpdates':tokens},indent=2)+'\n',encodi
 web_metadata=root/'web/public/release.json'
 if web_metadata.exists():
     web=json.loads(web_metadata.read_text(encoding='utf-8'));web['nativeUpdates']=tokens
+    # Keep native download buttons in sync with the signed train; retain the Web version.
+    for platform in ('android','windows'):
+        web.setdefault('versions',{})[platform]=release[platform]['version']
+        web.setdefault('downloads',{})[platform]=copy.deepcopy(release[platform])
     web_metadata.write_text(json.dumps(web,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 (root/'windows/FloatClip.Desktop/UpdateTrust.cs').write_text('namespace FloatClip.Share;\ninternal static class UpdateTrust\n{\n    internal const string KeyId="'+kid+'";\n    internal const string PublicKey="""\n'+public+'""";\n}\n',encoding='utf-8')
 der=key.public_key().public_bytes(serialization.Encoding.DER,serialization.PublicFormat.SubjectPublicKeyInfo)

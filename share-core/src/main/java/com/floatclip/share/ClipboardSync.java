@@ -55,7 +55,10 @@ public final class ClipboardSync {
     public synchronized boolean sending(){return state.send;}
     public synchronized boolean receiving(){return state.receive;}
     public synchronized boolean applying(){return state.apply;}
-    public static final class PeerView {public final String key;public final Device device;public final boolean enabled;PeerView(String key,Peer p){this.key=key;device=p.device;enabled=p.enabled;}}
+    public static final class PeerView {
+        public final String key;public final Device device;public final boolean enabled,send,receive;
+        PeerView(String key,Peer p){this.key=key;device=p.device;enabled=p.enabled;send=p.send;receive=p.receive;}
+    }
     public synchronized List<PeerView> peerViews(){List<PeerView> views=new ArrayList<>();for(Map.Entry<String,Peer> p:state.peers.entrySet())if(p.getValue().device!=null)views.add(new PeerView(p.getKey(),p.getValue()));return views;}
     public synchronized Set<String> peerKeys(){return new HashSet<>(state.peers.keySet());}
     public synchronized int remembered(){return state.peers.size();}

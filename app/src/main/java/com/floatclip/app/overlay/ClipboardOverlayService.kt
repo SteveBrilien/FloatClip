@@ -78,8 +78,13 @@ class ClipboardOverlayService : Service() {
     private var panelPinButton: ImageView? = null
     private var entryActionLayer: View? = null
     private var listContainer: LinearLayout? = null
+    private var imageImportButton: View? = null
+    private var undoContainer: LinearLayout? = null
+    private var entriesContainer: LinearLayout? = null
     private var categoryBar: LinearLayout? = null
     private var sourceBar: LinearLayout? = null
+    private var categoryScrollView: HorizontalScrollView? = null
+    private var sourceScrollView: HorizontalScrollView? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
     private var panelParams: WindowManager.LayoutParams? = null
     private var panelPinnedMode = false
@@ -282,6 +287,8 @@ class ClipboardOverlayService : Service() {
         panelPinButton = null
         entryActionLayer = null
         listContainer = null
+        undoContainer = null
+        entriesContainer = null
         panelCollapsing = false
         showBubble()
         if (foregroundStarted) getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, createNotification())
@@ -302,8 +309,12 @@ class ClipboardOverlayService : Service() {
             panelPinButton = null
             entryActionLayer = null
             listContainer = null
+            undoContainer = null
+            entriesContainer = null
             categoryBar = null
             sourceBar = null
+            categoryScrollView = null
+            sourceScrollView = null
             panelCollapsing = false
         }
         handler.removeCallbacks(edgeHideRunnable)
@@ -597,7 +608,7 @@ class ClipboardOverlayService : Service() {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             setPadding(dp(2), dp(2), dp(2), dp(5))
-        }
+        }.also { sourceScrollView=it }
         sourceBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -612,6 +623,11 @@ class ClipboardOverlayService : Service() {
         listContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(1), 0, dp(4))
+        }.also { outer ->
+            undoContainer=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+            entriesContainer=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+            outer.addView(undoContainer,LinearLayout.LayoutParams(-1,-2))
+            outer.addView(entriesContainer,LinearLayout.LayoutParams(-1,-2))
         }
         scroll.addView(
             listContainer,
@@ -623,7 +639,7 @@ class ClipboardOverlayService : Service() {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             setPadding(dp(2), dp(5), dp(2), 0)
-        }
+        }.also { categoryScrollView=it }
         categoryBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -845,25 +861,49 @@ class ClipboardOverlayService : Service() {
     private fun notifyHistoryChanged() {
         sendBroadcast(Intent(com.floatclip.app.sync.ClipboardSyncService.HISTORY_CHANGED).setPackage(packageName),"$packageName.permission.INTERNAL")
     }
+
+    private fun revealTab(scroll:HorizontalScrollView?, selected:View?) {
+        if(scroll==null||selected==null)return
+        scroll.post {
+            if(scroll.width<=0)return@post
+            val left=scroll.scrollX
+            val right=left+scroll.width
+            when {
+                selected.left>=left+dp(4)&&selected.right<=right-dp(4) -> Unit
+                selected.right>right-dp(4) -> {
+                    val childWidth=(scroll.getChildAt(0)?.width ?: 0)
+                    val target=(selected.left+selected.width/2-scroll.width/2)
+                        .coerceIn(0,(childWidth-scroll.width).coerceAtLeast(0))
+                    scroll.smoothScrollTo(target,0)
+                }
+                else -> scroll.smoothScrollTo((selected.left-dp(8)).coerceAtLeast(0),0)
+            }
+        }
+    }
+
     private fun renderEntries() {
         if (!panelOpen || panelCollapsing) return
-        val container = listContainer ?: return
+        val undo=undoContainer ?: return
+        val target=entriesContainer ?: return
         val palette = themeProvider.palette()
-        container.removeAllViews()
-        appendUndo(container)
+        undo.removeAllViews()
+        appendUndo(undo)
         val allItems = store.entries()
-        val sourceItems = if(activeSource.isEmpty()) allItems else allItems.filter { it.sourceDeviceId == activeSource }
-        val items = if (activeCategory == ALL_CATEGORY) {
-            sourceItems
-        } else {
-            sourceItems.filter { it.category == activeCategory }
+        val sourceItems = when {
+            activeSource.isEmpty() -> allItems
+            activeSource==ClipboardSources.IMAGE_SCOPE -> allItems.filter {
+                it.kind=="image" && (overlayPreferences.mergeRemoteImages() || it.sourceDeviceId=="local")
+            }
+            else -> allItems.filter { it.sourceDeviceId == activeSource }
         }
+        val items = if (activeCategory == ALL_CATEGORY) sourceItems else sourceItems.filter { it.category == activeCategory }
         if (items.isEmpty()) {
+            com.floatclip.app.ui.ClipboardLayout.clear(target)
             val sourceName=ClipboardSources.tabs(this,allItems).firstOrNull{it.id==activeSource}?.name
-            container.addView(TextView(this).apply {
+            target.addView(TextView(this).apply {
                 text = when {
                     allItems.isEmpty() -> getString(R.string.empty_history_hint)
-                    activeSource.isNotEmpty() -> "${sourceName ?: "此设备"}还没有同步内容"
+                    activeSource.isNotEmpty() -> (sourceName ?: "此设备")+"还没有同步内容"
                     else -> "这个分类还没有内容"
                 }
                 textSize = 14f
@@ -871,9 +911,43 @@ class ClipboardOverlayService : Service() {
                 setTextColor(palette.secondaryText)
                 setPadding(dp(10), dp(28), dp(10), dp(28))
             })
-            return
+        } else {
+            com.floatclip.app.ui.ClipboardLayout.renderAnimated(
+                target,
+                items,
+                overlayPreferences.twoColumnClipboard(),
+                ::createClipRow,
+                overlayPreferences.transitionDurationMs().toLong().coerceIn(140L,320L),
+            )
         }
-        com.floatclip.app.ui.ClipboardLayout.render(container, items, overlayPreferences.twoColumnClipboard(), ::createClipRow)
+        updateOverlayImageImportAction()
+    }
+
+    private fun updateOverlayImageImportAction() {
+        val panel=panelView?:return
+        val palette=themeProvider.palette()
+        val visible=activeSource==ClipboardSources.IMAGE_SCOPE
+        val existing=imageImportButton
+        val button=if(existing?.parent===panel)existing else TextView(this).apply {
+            text="+"
+            textSize=26f
+            gravity=Gravity.CENTER
+            contentDescription="导入图片"
+            setTextColor(Color.WHITE)
+            background=circleBackground(accentColor(palette),palette)
+            elevation=dp(3).toFloat()
+            setOnClickListener {
+                startActivity(Intent(this@ClipboardOverlayService,com.floatclip.app.clipboard.ImageImportActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+        }.also {
+            imageImportButton=it
+            panel.addView(it,FrameLayout.LayoutParams(dp(50),dp(50),Gravity.END or Gravity.BOTTOM).apply {
+                marginEnd=dp(16);bottomMargin=dp(58)
+            })
+        }
+        button.visibility=if(visible)View.VISIBLE else View.GONE
+        entriesContainer?.setPadding(0,0,0,if(visible)dp(66) else 0)
     }
 
     private fun renderSourceBar() {
@@ -882,9 +956,10 @@ class ClipboardOverlayService : Service() {
         val tabs=ClipboardSources.tabs(this,store.entries())
         if(activeSource !in tabs.map { it.id })activeSource=""
         bar.removeAllViews()
+        var selectedView:View?=null
         tabs.forEachIndexed { index,source ->
             val selected=source.id==activeSource
-            bar.addView(TextView(this).apply {
+            val tab=TextView(this).apply {
                 text=source.name
                 textSize=13f
                 gravity=Gravity.CENTER
@@ -902,10 +977,13 @@ class ClipboardOverlayService : Service() {
                         renderSourceBar();renderCategoryBar();renderEntries()
                     }
                 }
-            },LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,dp(36)).apply{
+            }
+            if(selected)selectedView=tab
+            bar.addView(tab,LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,dp(36)).apply{
                 if(index>0)marginStart=dp(6)
             })
         }
+        revealTab(sourceScrollView,selectedView)
     }
 
     private fun renderCategoryBar() {
@@ -914,10 +992,10 @@ class ClipboardOverlayService : Service() {
         bar.removeAllViews()
         val categories = listOf(ALL_CATEGORY) + categoryStore.categories()
         if (activeCategory !in categories) activeCategory = ALL_CATEGORY
+        var selectedView:View?=null
         categories.distinct().forEachIndexed { index, category ->
             val selected = category == activeCategory
-            bar.addView(
-                TextView(this).apply {
+            val tab=TextView(this).apply {
                     text = category
                     textSize = 12f
                     gravity = Gravity.CENTER
@@ -935,12 +1013,16 @@ class ClipboardOverlayService : Service() {
                             renderEntries()
                         }
                     }
-                },
+                }
+            if(selected)selectedView=tab
+            bar.addView(
+                tab,
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34)).apply {
                     if (index > 0) marginStart = dp(6)
                 },
             )
         }
+        revealTab(categoryScrollView,selectedView)
     }
 
     private fun createClipRow(entry: ClipEntry): View {
@@ -1115,37 +1197,41 @@ class ClipboardOverlayService : Service() {
     }
 
     private fun showImagePreview(entry:ClipEntry) {
-        val panel=panelView ?: return
-        val bitmap=ClipboardImages.thumbnail(store,entry,8192)
-        if(bitmap==null) { Toast.makeText(this,"图片暂不可用，请保留本机数据",Toast.LENGTH_LONG).show();return }
-        dismissEntryActionLayer(animated=false)
-        val palette=themeProvider.palette()
-        val layer=LinearLayout(this).apply {
-            orientation=LinearLayout.VERTICAL;isClickable=true
-            background=roundedBackground(palette.panelBackground,16f)
-            setPadding(dp(10),dp(6),dp(10),dp(8))
-        }
-        val header=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL }
-        header.addView(TextView(this).apply {
-            text="图片 ${entry.imageWidth} × ${entry.imageHeight}";textSize=14f;setTextColor(palette.primaryText)
-        },LinearLayout.LayoutParams(0,dp(44),1f))
-        header.addView(iconButton(R.drawable.ic_close,"关闭图片预览",palette.secondaryText) { dismissEntryActionLayer() },LinearLayout.LayoutParams(dp(44),dp(44)))
-        layer.addView(header)
-        layer.addView(com.floatclip.app.ui.ZoomImageView(this).apply {
-            setImageBitmap(bitmap)
-        },LinearLayout.LayoutParams(-1,0,1f))
-        layer.addView(TextView(this).apply {
-            text="复制图片";textSize=15f;gravity=Gravity.CENTER;minimumHeight=dp(48);setTextColor(accentColor(palette))
-            background=roundedBackground(withAlpha(accentColor(palette),if(palette.isDark)45 else 24),12f)
-            setOnClickListener {
-                runCatching { ClipboardImages.copy(this@ClipboardOverlayService,store,entry) }
-                    .onSuccess { Toast.makeText(this@ClipboardOverlayService,"已复制图片",Toast.LENGTH_SHORT).show() }
-                    .onFailure { Toast.makeText(this@ClipboardOverlayService,it.message ?: "复制未完成",Toast.LENGTH_LONG).show() }
+        val expectedPanel=panelView ?: return
+        Toast.makeText(this,"正在打开图片…",Toast.LENGTH_SHORT).show()
+        ClipboardImages.thumbnailAsync(store,entry,4096) { bitmap ->
+            val panel=panelView
+            if(bitmap==null||panel==null||panel!==expectedPanel||!panelOpen||panelCollapsing) {
+                if(bitmap==null)Toast.makeText(this,"图片暂不可用，请保留本机数据",Toast.LENGTH_LONG).show()
+                return@thumbnailAsync
             }
-        })
-        panel.dragEnabled=false
-        panel.addView(layer,FrameLayout.LayoutParams(-1,-1))
-        entryActionLayer=layer
+            dismissEntryActionLayer(animated=false)
+            val palette=themeProvider.palette()
+            val layer=LinearLayout(this).apply {
+                orientation=LinearLayout.VERTICAL;isClickable=true
+                background=roundedBackground(palette.panelBackground,16f)
+                setPadding(dp(10),dp(6),dp(10),dp(8))
+            }
+            val header=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL }
+            header.addView(TextView(this).apply {
+                text="图片 ${entry.imageWidth} × ${entry.imageHeight}";textSize=14f;setTextColor(palette.primaryText)
+            },LinearLayout.LayoutParams(0,dp(44),1f))
+            header.addView(iconButton(R.drawable.ic_close,"关闭图片预览",palette.secondaryText) { dismissEntryActionLayer() },LinearLayout.LayoutParams(dp(44),dp(44)))
+            layer.addView(header)
+            layer.addView(com.floatclip.app.ui.ZoomImageView(this).apply { setImageBitmap(bitmap) },LinearLayout.LayoutParams(-1,0,1f))
+            layer.addView(TextView(this).apply {
+                text="复制图片";textSize=15f;gravity=Gravity.CENTER;minimumHeight=dp(48);setTextColor(accentColor(palette))
+                background=roundedBackground(withAlpha(accentColor(palette),if(palette.isDark)45 else 24),12f)
+                setOnClickListener {
+                    runCatching { ClipboardImages.copy(this@ClipboardOverlayService,store,entry) }
+                        .onSuccess { Toast.makeText(this@ClipboardOverlayService,"已复制图片",Toast.LENGTH_SHORT).show() }
+                        .onFailure { Toast.makeText(this@ClipboardOverlayService,it.message ?: "复制未完成",Toast.LENGTH_LONG).show() }
+                }
+            })
+            panel.dragEnabled=false
+            panel.addView(layer,FrameLayout.LayoutParams(-1,-1))
+            entryActionLayer=layer
+        }
     }
 
     private fun dismissEntryActionLayer(animated: Boolean = true) {
@@ -1187,6 +1273,7 @@ class ClipboardOverlayService : Service() {
             ClipboardImages.captureAsync(applicationContext,imageClip,store) { result ->
                 result.onSuccess { entry ->
                     if(entry!=null) {
+                        com.floatclip.app.sync.SyncRuntime.userCopiedImage(applicationContext,entry)
                         if(panelOpen&&!panelCollapsing){renderCategoryBar();renderEntries()}
                         notifyHistoryChanged()
                         if(showFeedback)Toast.makeText(this,"已收录图片",Toast.LENGTH_SHORT).show()

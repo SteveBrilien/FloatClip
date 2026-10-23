@@ -8,6 +8,51 @@ public sealed record SyncDevice(Guid Id,string Name,string Platform);
 public sealed record SyncEntry(Guid Id,SyncDevice Source,long Clock,long CreatedAt,string Text);
 public sealed record SyncHello(SyncDevice Device,Guid Epoch,bool Send,bool Receive);
 
+public sealed record ClipboardImageMeta(Guid Id,long CreatedAt,int Width,int Height);
+public static class ClipboardImageTransfer
+{
+    public const long MaximumBytes=8L*1024*1024;
+    public const int MaximumEdge=16384;
+    public const long MaximumPixels=64000000L;
+    static readonly System.Text.RegularExpressions.Regex NamePattern=new(
+        @"^floatclip-clip-v1_([0-9a-f]{32})_([0-9]{1,16})_([0-9]{1,5})x([0-9]{1,5})\.png$",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    static void Validate(Guid id,long createdAt,int width,int height)
+    {
+        if(id==Guid.Empty||createdAt<0||width<1||height<1||width>MaximumEdge||height>MaximumEdge||(long)width*height>MaximumPixels)
+            throw new IOException("剪贴板图片元数据无效");
+    }
+    public static string Name(Guid id,long createdAt,int width,int height)
+    {
+        Validate(id,createdAt,width,height);
+        return $"floatclip-clip-v1_{id:N}_{createdAt}_{width}x{height}.png";
+    }
+    public static ClipboardImageMeta Parse(string name)
+    {
+        var match=NamePattern.Match(name??"");if(!match.Success)throw new IOException("不是剪贴板图片传输");
+        if(!Guid.TryParseExact(match.Groups[1].Value,"N",out var id)||
+           !long.TryParse(match.Groups[2].Value,out long createdAt)||
+           !int.TryParse(match.Groups[3].Value,out int width)||
+           !int.TryParse(match.Groups[4].Value,out int height))throw new IOException("剪贴板图片元数据无效");
+        Validate(id,createdAt,width,height);return new(id,createdAt,width,height);
+    }
+    public static void ValidatePng(byte[] bytes,ClipboardImageMeta meta)
+    {
+        if(bytes==null||bytes.Length<33||bytes.LongLength>MaximumBytes)throw new IOException("剪贴板图片大小无效");
+        ReadOnlySpan<byte> signature=stackalloc byte[]{137,80,78,71,13,10,26,10};
+        if(!bytes.AsSpan(0,8).SequenceEqual(signature))throw new IOException("剪贴板图片不是 PNG");
+        static int Big(byte[] b,int o)=>checked((int)(((uint)b[o]<<24)|((uint)b[o+1]<<16)|((uint)b[o+2]<<8)|b[o+3]));
+        if(Big(bytes,8)!=13||bytes[12]!='I'||bytes[13]!='H'||bytes[14]!='D'||bytes[15]!='R')throw new IOException("PNG 头无效");
+        int width=Big(bytes,16),height=Big(bytes,20);Validate(meta.Id,meta.CreatedAt,width,height);
+        if(width!=meta.Width||height!=meta.Height)throw new IOException("剪贴板图片尺寸已变化");
+    }
+    public static bool TryParse(string name,out ClipboardImageMeta? meta)
+    {
+        try{meta=Parse(name);return true;}catch{meta=null;return false;}
+    }
+}
+
 /** Versioned binary payloads shared with Android, within the existing authenticated TLS framing. */
 public static class SyncProtocol
 {

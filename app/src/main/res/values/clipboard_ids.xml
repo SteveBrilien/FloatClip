@@ -7,4 +7,6 @@
     <item name="clipboard_sources" type="id"/>
     <item name="clipboard_clear" type="id"/>
     <item name="clipboard_undo" type="id"/>
+    <item name="clipboard_layout_group_tag" type="id"/>
+    <item name="clipboard_image_import" type="id"/>
 </resources>

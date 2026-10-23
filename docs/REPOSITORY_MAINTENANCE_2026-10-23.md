@@ -5,8 +5,8 @@
 ## 文件整理
 
 - GitHub API 已核对 v0.4.0、v0.5.0–v0.5.5 的 Releases 均保留各自 APK，附件大小与仓库旧包匹配。移除当前目录中 0.4.0–0.5.4 的六个重复 APK 和校验文件；旧 tag/提交仍含原件。普通提交删除不等于清除 Git 历史或缩小既有克隆。
-- `dist/release.env` 仍引用 0.5.5；因此保留 0.5.5 APK、摘要及旧版发布流程，明确标作历史兼容，避免破坏 `[sync-release]`。
-- 新增 Windows WPF CI，与现有 Android CI 同仓维护；CI 安装包仅作构建证据，不自动替代持有原签名的 Android 更新包。
+- build 27 起移除 `dist/` 中最后一份 0.5.5 APK、摘要与 `release.env`。tag Release 现在从 `updates/share-preview.json` 读取已冻结双端候选，重新校验 SHA-256/大小后发布 Android APK + Windows ZIP，不在 Git 中保存安装包。
+- Windows WPF CI 与 Android CI 同仓维护；CI 自建 debug keystore 只作构建证据，正式 Android Release 必须复用现有稳定签名身份。
 - `nearby-probe` 仍是 app 的源码/资源依赖，不能按名字当作废弃试验目录删除。`share-core`、`windows`、`updates`、`web` 仍有使用者。
 - 不删除发布记录、tag 或分支，不重写历史，不把本机记录、配对数据、签名私钥和凭据放进 Git。
 

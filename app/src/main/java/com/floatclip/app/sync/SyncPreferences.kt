@@ -18,6 +18,12 @@ class SyncPreferences(context: Context) {
             .putString("send_generation",UUID.randomUUID().toString()).commit()){"无法保存后台采集开关"}
     }
     fun sending()=prefs.getBoolean("send",true)
+    fun imageSharing()=prefs.getBoolean("share_images",false)
+    fun saveImageSharing(value:Boolean)=synchronized(prefs) {
+        check(prefs.edit().putBoolean("share_images",value)
+            .putString("send_generation",UUID.randomUUID().toString())
+            .putString("receive_generation",UUID.randomUUID().toString()).commit()){"无法保存图片共享开关"}
+    }
     fun receiving()=prefs.getBoolean("receive",true)
     fun applying()=prefs.getBoolean("apply",true)
     fun policy(): Policy = synchronized(prefs) {

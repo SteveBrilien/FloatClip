@@ -9,6 +9,7 @@ import com.floatclip.app.sync.TrustedPeerStore
  * A trusted device remains visible even before it has delivered its first clip.
  */
 object ClipboardSources {
+    const val IMAGE_SCOPE = "__images__"
     data class Source(val id: String, val name: String, val platform: String)
 
     fun tabs(context: Context, entries: List<ClipEntry>): List<Source> =
@@ -17,6 +18,7 @@ object ClipboardSources {
     internal fun tabs(entries: List<ClipEntry>, peers: List<TrustedPeerStore.Peer>): List<Source> {
         val result = linkedMapOf(
             "" to Source("", "全部", "all"),
+            IMAGE_SCOPE to Source(IMAGE_SCOPE, "图片", "image"),
             "local" to Source("local", "本机", "android"),
         )
         peers.forEach { peer ->

@@ -84,7 +84,7 @@ public sealed class BluetoothSyncTransport:IDisposable
             if(!canAttach(secure.RelationKey))return;
             ulong? address=await AddressOf(socket);
             if(address is >0)pairs.RememberBluetooth(secure.RelationKey,address.Value);
-            var session=new Session(secure.Stream,()=>socket.Dispose(),cache,true);
+            var session=new Session(secure.Stream,()=>socket.Dispose(),cache,true,true);
             attach(secure.RelationKey,session,"bluetooth");
             handedOff=true;sockets.TryRemove(socket,out _);
             _=CloseAfter(session);
@@ -258,7 +258,7 @@ public sealed class BluetoothSyncTransport:IDisposable
                     var secure=await Task.Run(()=>TransportCrypto.Connect(raw,token),deadline.Token);
                     if(secure.RelationKey!=key||!canAttach(key))continue;
                     pairs.RememberBluetooth(key,device.BluetoothAddress);
-                    var session=new Session(secure.Stream,()=>socket.Dispose(),cache,true);
+                    var session=new Session(secure.Stream,()=>socket.Dispose(),cache,true,true);
                     attach(key,session,"bluetooth");handedOff=true;sockets.TryRemove(socket,out _);
                     _=CloseAfter(session);return true;
                 }
@@ -291,7 +291,7 @@ public sealed class BluetoothSyncTransport:IDisposable
 
     static async Task CloseAfter(Session session)
     {
-        try{await Task.Delay(TimeSpan.FromSeconds(12));}catch{}finally{session.Dispose();}
+        try{await Task.Delay(TimeSpan.FromSeconds(180));}catch{}finally{session.Dispose();}
     }
 
     static string Friendly(Exception e)=>e is IOException?e.Message:e.GetType().Name;

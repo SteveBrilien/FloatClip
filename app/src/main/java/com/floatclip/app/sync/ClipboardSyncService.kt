@@ -21,17 +21,20 @@ import com.floatclip.app.R
 import com.floatclip.app.files.FileRuntime
 import com.floatclip.app.UnifiedActivity
 import com.floatclip.app.clipboard.ClipStore
+import com.floatclip.app.model.ClipEntry
 import com.floatclip.app.clipboard.ClipboardWrites
 import com.floatclip.app.clipboard.DeviceIdentity
 import com.floatclip.app.prefs.OverlayPreferences
 import com.floatclip.probe.BluetoothPairHost
 import com.floatclip.probe.LanSyncHost
 import com.floatclip.share.ClipboardSync
+import com.floatclip.share.ClipboardImageTransfer
 import com.floatclip.share.ShareSession
 import com.floatclip.share.ShareWire
 import java.io.File
 import java.net.Inet4Address
 import java.net.NetworkInterface
+import java.security.MessageDigest
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -50,6 +53,10 @@ class ClipboardSyncService: Service() {
     private lateinit var prefs: SyncPreferences
     private lateinit var engine: ClipboardSync
     private lateinit var library: ClipStore
+    private lateinit var imageStorage: ClipboardImageSyncStorage
+    private var pendingImage: ClipboardImageSyncStorage.Pending?=null
+    private var imageStorageHealthy=true
+    private val imageSending=ConcurrentHashMap<String,UUID>()
     private lateinit var clipboard: ClipboardManager
     private lateinit var networkManager: ConnectivityManager
     @Volatile private var paused=false
@@ -64,7 +71,7 @@ class ClipboardSyncService: Service() {
     private var bluetooth: BluetoothSyncTransport?=null
     private var bluetoothPairing: BluetoothPairHost?=null
     private val trustListener=android.content.SharedPreferences.OnSharedPreferenceChangeListener { _,_ -> if(!closing)actor.execute {
-        if(::engine.isInitialized) { for(key in engine.peerKeys())if(!authorized(key)){links.remove(key)?.close();engine.forget(key)} };refreshUi()
+        if(::engine.isInitialized) { for(key in engine.peerKeys())if(!authorized(key)){links.remove(key)?.close();engine.forget(key);dropImagePeer(key)} };refreshUi()
     }}
     private fun authorized(key: String)=trust.getBoolean("peer-"+key,false)
     private var pairRequest: Consumer<Boolean>?=null
@@ -133,9 +140,15 @@ class ClipboardSyncService: Service() {
         startForeground(NOTIFICATION,notification())
         SyncRuntime.attach(this)
         library=ClipStore(this)
+        imageStorage=ClipboardImageSyncStorage(this)
         networkManager=getSystemService(ConnectivityManager::class.java)
         actor.execute {
             runCatching {
+                pendingImage=runCatching{imageStorage.load()}.getOrElse{
+                    imageStorageHealthy=false
+                    setStatus("图片同步状态暂时无法读取，文字共享仍可使用")
+                    null
+                }
                 val local=DeviceIdentity.json(this)
                 engine=ClipboardSync(ClipboardSync.Device(UUID.fromString(local.getString("id")),local.getString("name"),"android"),EncryptedSyncStorage(this),object:ClipboardSync.Events {
                     override fun send(peer: String,frame: ShareWire.Frame){links[peer]?.send(frame)}
@@ -154,17 +167,19 @@ class ClipboardSyncService: Service() {
                 // store supplements legacy hash-only grants and is pruned when trust is revoked.
                 val authorizedKeys=trust.all.keys.filter{it.startsWith("peer-")&&trust.getBoolean(it,false)}.map{it.removePrefix("peer-")}.toSet()
                 credentials.retain(authorizedKeys)
-                for(key in engine.peerKeys())if(!authorized(key))engine.forget(key)
+                for(key in engine.peerKeys())if(!authorized(key)){engine.forget(key);dropImagePeer(key)}
                 configureEngine();setStatus("等待已授权设备 · Android 11 后台读取受系统限制")
                 refreshBluetooth()
                 actor.scheduleWithFixedDelay({
                     if(!closing&&!paused&&::engine.isInitialized)runCatching {
                         configureEngine()
                         val now=System.currentTimeMillis()
-                        for(key in links.keys)engine.retry(key,now)
+                        for(key in links.keys){engine.retry(key,now);trySendImage(key)}
                         refreshHosts();refreshBluetooth()
-                        val outbox=engine.pendingPeers(now);pendingOutgoingCount=outbox.size
-                        val pending=outbox.filterNot{links.containsKey(it)}.toSet()
+                        val outbox=engine.pendingPeers(now)
+                        val imagePeers=currentImagePeers(now)
+                        pendingOutgoingCount=(outbox+imagePeers).size
+                        val pending=(outbox+imagePeers).filterNot{links.containsKey(it)}.toSet()
                         if(pending.isNotEmpty())bluetooth?.nudge(pending)
                     }.onFailure{setStatus("待发送内容未保存，请检查本机存储")}
                 },5,5,TimeUnit.SECONDS)
@@ -188,7 +203,9 @@ class ClipboardSyncService: Service() {
         return if (prefs.keepAlive()) START_STICKY else START_NOT_STICKY
     }
     private fun configureEngine(){
-        paused=!SyncPolicy.apply(prefs,engine).enabled
+        val applied=SyncPolicy.apply(prefs,engine)
+        paused=!applied.enabled
+        if((!applied.enabled||!applied.sending||!prefs.imageSharing())&&pendingImage!=null)clearPendingImage()
         if(closing||paused||!prefs.backgroundCapture()) {
             backgroundCapture?.close();backgroundCapture=null
         } else if(backgroundCapture==null) {
@@ -202,11 +219,137 @@ class ClipboardSyncService: Service() {
         if(closing||paused||!prefs.enabled())return
         actor.execute {
             if(!closing&&!paused&&::engine.isInitialized&&event!=lastCapture&&prefs.enabled()) {
-                runCatching {configureEngine();refreshBluetooth();val p=prefs.policy();val mayShare=!excluded&&SyncPolicy.mayShare(p,shareGeneration);if(!excluded&&recordHistory)library.addText(text);engine.copied(text,System.currentTimeMillis(),!mayShare);pendingOutgoingCount=engine.pendingPeers(System.currentTimeMillis()).size;lastCapture=event;if(!excluded&&recordHistory)historyChanged();if(mayShare)bluetooth?.nudge()}
-                    .onFailure{setStatus("当前内容未同步，请检查存储或文字长度")}
+                runCatching {
+                    configureEngine();refreshBluetooth();val p=prefs.policy();val mayShare=!excluded&&SyncPolicy.mayShare(p,shareGeneration)
+                    if(!excluded&&recordHistory)library.addText(text)
+                    clearPendingImage(abortInFlight=true)
+                    engine.copied(text,System.currentTimeMillis(),!mayShare)
+                    pendingOutgoingCount=engine.pendingPeers(System.currentTimeMillis()).size
+                    lastCapture=event
+                    if(!excluded&&recordHistory)historyChanged()
+                    if(mayShare)bluetooth?.nudge()
+                }.onFailure{setStatus("当前内容未同步，请检查存储或文字长度")}
             }
         }
     }
+    fun copiedImage(entry:ClipEntry) {
+        if(closing||paused||!prefs.enabled()||!prefs.imageSharing()||entry.kind!="image"||entry.sourceDeviceId!="local")return
+        actor.execute {
+            if(closing||paused||!::engine.isInitialized||!prefs.enabled()||!prefs.imageSharing())return@execute
+            runCatching {
+                configureEngine();refreshBluetooth()
+                val policy=prefs.policy()
+                if(!policy.sending)return@runCatching
+                clearPendingImage(abortInFlight=true)
+                // A local image is the newest clipboard event. Invalidate any older text outbox
+                // before transferring the image bytes, preserving latest-value ordering.
+                engine.copied("",System.currentTimeMillis(),true)
+                // Keep the admitted session alive; queued stale text is rejected by engine.maySend.
+                if(!imageStorageHealthy)return@runCatching
+                val peers=engine.peerViews().filter{it.enabled&&it.receive&&authorized(it.key)}.map{it.key}.toSet()
+                if(peers.isEmpty())return@runCatching
+                val bytes=library.readImage(entry)
+                ClipboardImageTransfer.validatePng(bytes,ClipboardImageTransfer.Meta(
+                    UUID.randomUUID(),entry.createdAt,entry.imageWidth,entry.imageHeight
+                ))
+                val pending=ClipboardImageSyncStorage.Pending(
+                    UUID.randomUUID(),entry.imageRef,entry.imageSha256,entry.imageWidth,entry.imageHeight,
+                    entry.createdAt,System.currentTimeMillis(),peers
+                )
+                persistPendingImage(pending);imageSending.clear()
+                pendingOutgoingCount=(engine.pendingPeers(System.currentTimeMillis())+peers).size
+                for(key in peers)trySendImage(key)
+                if(prefs.reconnect())bluetooth?.nudge(peers)
+                SignalLocalReconnect()
+            }.onFailure{setStatus("图片已保存在本机，但跨设备同步尚未完成")}
+        }
+    }
+    private fun SignalLocalReconnect(){refreshHosts();refreshBluetooth()}
+    private fun persistPendingImage(value:ClipboardImageSyncStorage.Pending?) {
+        check(imageStorageHealthy){"图片同步状态不可写"}
+        imageStorage.save(value);pendingImage=value
+    }
+    private fun closeLinksForOrdering(keys:Collection<String>) {
+        for(key in keys.toSet()) {
+            val link=links.remove(key)?:continue
+            connectionTokens.remove(key);imageSending.remove(key)
+            FileRuntime.get(this).disconnected(key,link.session)
+            runCatching{link.close()};runCatching{engine.disconnected(key)}
+        }
+    }
+    private fun clearPendingImage(abortInFlight:Boolean=true) {
+        val inFlight=imageSending.keys.toList()
+        if(pendingImage!=null) {
+            check(imageStorageHealthy){"图片同步状态不可写"}
+            imageStorage.save(null);pendingImage=null
+        }
+        imageSending.clear()
+        if(abortInFlight&&inFlight.isNotEmpty())closeLinksForOrdering(inFlight)
+    }
+    private fun currentImagePeers(now:Long):Set<String> {
+        val pending=pendingImage?:return emptySet()
+        val age=now-pending.queuedAt
+        if(age<0||age>ClipboardSync.RETRY_TTL){clearPendingImage();return emptySet()}
+        return pending.peers
+    }
+    private fun dropImagePeer(key:String) {
+        val inFlight=imageSending.remove(key)!=null
+        val pending=pendingImage
+        if(pending!=null&&key in pending.peers) {
+            val peers=pending.peers-key
+            runCatching{persistPendingImage(if(peers.isEmpty())null else pending.copy(peers=peers))}
+                .onFailure{imageStorageHealthy=false;setStatus("图片同步状态未保存，暂停图片重试")}
+        }
+        if(inFlight)closeLinksForOrdering(listOf(key))
+    }
+    private fun imageTemp(id:UUID,key:String)=File(File(cacheDir,"sync-files").apply{mkdirs()},"clipboard-"+id.toString().replace("-","")+"-"+key.take(12)+".png")
+    private fun trySendImage(key:String) {
+        if(closing||paused||!prefs.enabled()||!prefs.sending()||!prefs.imageSharing()||!imageStorageHealthy||imageSending.containsKey(key))return
+        val link=links[key]?:return
+        val pending=pendingImage?:return
+        if(key !in currentImagePeers(System.currentTimeMillis()))return
+        val peer=engine.peerViews().firstOrNull{it.key==key}
+        if(peer==null||!peer.enabled||!peer.receive||!authorized(key)){dropImagePeer(key);return}
+        val path=imageTemp(pending.id,key)
+        runCatching {
+            val entry=library.findImage(pending.imageRef)?:error("待发送图片已删除")
+            val bytes=library.readImage(entry)
+            val expected=pending.sha256.chunked(2).map{it.toInt(16).toByte()}.toByteArray()
+            check(MessageDigest.isEqual(MessageDigest.getInstance("SHA-256").digest(bytes),expected)){"待发送图片已变化"}
+            ClipboardImageTransfer.validatePng(bytes,ClipboardImageTransfer.Meta(pending.id,pending.createdAt,pending.width,pending.height))
+            path.writeBytes(bytes)
+            check(imageSending.putIfAbsent(key,pending.id)==null)
+            link.session.sendFile(path,ClipboardImageTransfer.name(pending.id,pending.createdAt,pending.width,pending.height))
+        }.onFailure{imageSending.remove(key);runCatching{path.delete()}}
+    }
+    private fun finishImagePeer(key:String,id:UUID,delivered:Boolean) {
+        imageSending.remove(key);runCatching{imageTemp(id,key).delete()}
+        if(!delivered)return
+        val pending=pendingImage?:return
+        if(pending.id!=id||key !in pending.peers)return
+        val peers=pending.peers-key
+        runCatching{persistPendingImage(if(peers.isEmpty())null else pending.copy(peers=peers))}
+            .onFailure{imageStorageHealthy=false;setStatus("图片同步状态未保存，暂停图片重试")}
+    }
+    private fun mayReceiveImage(key:String,offer:ShareWire.Offer,meta:ClipboardImageTransfer.Meta):Boolean {
+        if(offer.size !in 45L..ClipboardImageTransfer.MAX_BYTES)return false
+        val peer=engine.peerViews().firstOrNull{it.key==key}?:return false
+        return !closing&&!paused&&prefs.enabled()&&prefs.receiving()&&prefs.imageSharing()&&peer.enabled&&peer.send&&authorized(key)
+    }
+    private fun receiveImage(key:String,offer:ShareWire.Offer,file:File) {
+        try {
+            val meta=ClipboardImageTransfer.parse(offer.name)
+            check(mayReceiveImage(key,offer,meta)){"未授权接收剪贴板图片"}
+            val bytes=file.readBytes()
+            check(bytes.size.toLong()==offer.size&&MessageDigest.isEqual(MessageDigest.getInstance("SHA-256").digest(bytes),offer.hash)){"图片传输校验失败"}
+            ClipboardImageTransfer.validatePng(bytes,meta)
+            val peer=engine.peerViews().firstOrNull{it.key==key}?:error("设备身份缺失")
+            engine.invalidateApplications()
+            library.receiveSharedImage(meta.id,peer.device,bytes,meta.width,meta.height,meta.createdAt)
+            historyChanged();setStatus("已收到 "+peer.device.name+" 的剪贴板图片")
+        } finally {runCatching{file.delete()}}
+    }
+
     fun answerPairing(answer: Boolean){pairRequest?.accept(answer);pairRequest=null}
     fun refreshUi(){SyncRuntime.changed()}
     fun pauseImmediately(){
@@ -285,18 +428,31 @@ class ClipboardSyncService: Service() {
                 if(frame.type==ClipboardSync.HELLO) {
                     engine.peerViews().firstOrNull{it.key==peer}?.let{credentials.rememberDevice(peer,it.device)}
                     FileRuntime.get(this@ClipboardSyncService).publish()
+                    trySendImage(peer)
                 }
             }.onFailure{links.remove(peer)?.close();setStatus("设备授权或同步校验失败，请重新核对")}}}
             override fun text(id: UUID,value: String,outgoing: Boolean)=Unit
             override fun catalog(data:ByteArray){if(!closing)actor.execute{if(connectionTokens[peer]==token)runCatching{FileRuntime.get(this@ClipboardSyncService).catalog(peer,data)}.onFailure{links[peer]?.close();setStatus("文件清单校验失败，可重新连接后重试")}}}
-            override fun offered(offer: ShareWire.Offer){if(connectionTokens[peer]!=token)return;if(FileRuntime.get(this@ClipboardSyncService).offered(peer,offer))return;main.post{if(SyncRuntime.hasObserver())SyncRuntime.offer(peer,offer) else links[peer]?.session?.reject(offer.id)}}
+            override fun offered(offer: ShareWire.Offer){
+                if(connectionTokens[peer]!=token)return
+                val image=ClipboardImageTransfer.tryParse(offer.name)
+                if(image!=null){actor.execute{if(connectionTokens[peer]!=token)return@execute;runCatching{if(mayReceiveImage(peer,offer,image))links[peer]?.session?.accept(offer.id) else links[peer]?.session?.reject(offer.id)}.onFailure{links[peer]?.close()}};return}
+                if(FileRuntime.get(this@ClipboardSyncService).offered(peer,offer))return
+                main.post{if(SyncRuntime.hasObserver())SyncRuntime.offer(peer,offer) else links[peer]?.session?.reject(offer.id)}
+            }
+            override fun rejected(offer:ShareWire.Offer){ClipboardImageTransfer.tryParse(offer.name)?.let{meta->actor.execute{if(connectionTokens[peer]!=token)return@execute;finishImagePeer(peer,meta.id,false);dropImagePeer(peer)}}}
             override fun progress(id: UUID,name: String,done: Long,total: Long,outgoing: Boolean){if(connectionTokens[peer]!=token)return;FileRuntime.get(this@ClipboardSyncService).progress(peer,id,done,total,outgoing);main.post{SyncRuntime.progress(name,done,total,outgoing)}}
-            override fun file(offer: ShareWire.Offer,file: File,outgoing: Boolean){if(connectionTokens[peer]!=token)return;FileRuntime.get(this@ClipboardSyncService).received(peer,offer,file,outgoing);main.post{SyncRuntime.file(offer,file,outgoing)}}
+            override fun file(offer: ShareWire.Offer,file: File,outgoing: Boolean){
+                if(connectionTokens[peer]!=token)return
+                val image=ClipboardImageTransfer.tryParse(offer.name)
+                if(image!=null){actor.execute{if(connectionTokens[peer]!=token){if(!outgoing)runCatching{file.delete()};return@execute};runCatching{if(outgoing)finishImagePeer(peer,image.id,true) else receiveImage(peer,offer,file)}.onFailure{setStatus("剪贴板图片校验或保存失败")}};return}
+                FileRuntime.get(this@ClipboardSyncService).received(peer,offer,file,outgoing);main.post{SyncRuntime.file(offer,file,outgoing)}
+            }
             override fun fileFailed(message:String){if(connectionTokens[peer]==token)FileRuntime.get(this@ClipboardSyncService).failed(peer,message)}
             override fun notice(message: String){setStatus(message)}
             override fun closed(){if(!closing)actor.execute {
                 val link=links[peer]
-                if(link!=null&&connectionTokens[peer]==token&&link.session.isClosed){FileRuntime.get(this@ClipboardSyncService).disconnected(peer,link.session);links.remove(peer,link);link.close();engine.disconnected(peer);setStatus(if(links.isEmpty())"等待设备自动重连" else "${links.size} 台设备已连接")}
+                if(link!=null&&connectionTokens[peer]==token&&link.session.isClosed){imageSending.remove(peer);FileRuntime.get(this@ClipboardSyncService).disconnected(peer,link.session);links.remove(peer,link);link.close();engine.disconnected(peer);setStatus(if(links.isEmpty())"等待设备自动重连" else "${links.size} 台设备已连接")}
             }}
         }
     }
@@ -326,7 +482,7 @@ class ClipboardSyncService: Service() {
         else if(links.isEmpty())setStatus(if(System.currentTimeMillis()<pairingUntil)"允许添加设备，90 秒内有效" else "等待已授权设备自动连接")
     }
     fun peers(): List<ClipboardSync.PeerView> = if(::engine.isInitialized)engine.peerViews() else emptyList()
-    fun peerEnabled(key: String,on: Boolean){if(!closing)actor.execute{runCatching{engine.peerEnabled(key,on);if(!on)links[key]?.close()}.onFailure{setStatus("设备共享开关未保存")};main.post{refreshUi()}}}
+    fun peerEnabled(key: String,on: Boolean){if(!closing)actor.execute{runCatching{engine.peerEnabled(key,on);if(!on){dropImagePeer(key);links[key]?.close()}else trySendImage(key)}.onFailure{setStatus("设备共享开关未保存")};main.post{refreshUi()}}}
     fun session(peer: String)=links[peer]?.session
     private fun setStatus(value: String){status=value;main.post{if(!closing){getSystemService(NotificationManager::class.java).notify(NOTIFICATION,notification());SyncRuntime.changed()}}}
     private fun historyChanged(){sendBroadcast(Intent(HISTORY_CHANGED).setPackage(packageName),"$packageName.permission.INTERNAL")}

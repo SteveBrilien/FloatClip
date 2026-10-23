@@ -100,7 +100,7 @@ class BluetoothSyncTransport(
     private fun attach(key:String,socket:BluetoothSocket,secure:TransportCrypto.SecureStreams):Boolean{
         if(closed||!authorized(key)||!canAttach(key))return false
         val delegate=messages(key)
-        val session=ShareSession(secure.input,secure.output,Closeable{sockets.remove(socket);socket.close()},cache,delegate,true)
+        val session=ShareSession(secure.input,secure.output,Closeable{sockets.remove(socket);socket.close()},cache,delegate,true,true)
         if(closed||!authorized(key)||!canAttach(key)){session.close();return false}
         delegate.attached(session)
         session.start()
@@ -120,6 +120,6 @@ class BluetoothSyncTransport(
     }
 
     companion object{
-        private const val SHORT_SESSION_SECONDS=12L
+        private const val SHORT_SESSION_SECONDS=180L
     }
 }

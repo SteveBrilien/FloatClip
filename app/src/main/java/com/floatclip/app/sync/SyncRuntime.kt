@@ -53,6 +53,10 @@ object SyncRuntime {
         current()?.copied(text,"user:"+java.util.UUID.randomUUID(),
             shareGeneration=policy.sendGeneration.takeIf{policy.sending},recordHistory=false)
     }
+    fun userCopiedImage(context:Context,entry:com.floatclip.app.model.ClipEntry) {
+        val prefs=SyncPreferences(context)
+        if(prefs.enabled()&&prefs.imageSharing())current()?.copiedImage(entry)
+    }
     fun unsupportedCopied(context:Context) {
         if(SyncPreferences(context).enabled())current()?.copied("","unsupported:"+java.util.UUID.randomUUID(),true)
     }

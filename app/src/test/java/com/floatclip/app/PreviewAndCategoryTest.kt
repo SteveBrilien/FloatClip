@@ -59,12 +59,43 @@ class PreviewAndCategoryTest {
         assertTrue(FilePreviewContent.zip(zip).contains("目录/内容 😀.txt"));assertFalse(File(context.cacheDir,"目录").exists())
         assertEquals(FilePreviewContent.Kind.UNSUPPORTED,FilePreviewContent.kind("sample.apk"));assertEquals(FilePreviewContent.Kind.PDF,FilePreviewContent.kind("中文.PDF"))
     }
-    @Test fun mixedLayoutKeepsReadingOrderAndSharesSavedPreference() {
+    @Test fun imageColumnsKeepTextFullWidthAndShareSavedPreference() {
         val prefs=OverlayPreferences(context);assertFalse(prefs.twoColumnClipboard());prefs.saveTwoColumnClipboard(true);assertTrue(OverlayPreferences(context).twoColumnClipboard())
-        val entries=listOf(ClipEntry(3,"图",kind="image"),ClipEntry(2,"文字"),ClipEntry(1,"第二张图",kind="image"))
+        val entries=listOf(
+            ClipEntry(4,"图一",kind="image"),ClipEntry(3,"图二",kind="image"),
+            ClipEntry(2,"文字"),ClipEntry(1,"第三张图",kind="image"),
+        )
         val target=LinearLayout(context);ClipboardLayout.render(target,entries,true){View(context).apply{tag=it.id}}
         fun tags(view:View):List<Long> = listOfNotNull(view.tag as? Long)+if(view is ViewGroup)(0 until view.childCount).flatMap{tags(view.getChildAt(it))} else emptyList()
-        assertEquals(listOf(3L,2L,1L),tags(target));prefs.saveTwoColumnClipboard(false)
+        assertEquals(listOf(4L,3L,2L,1L),tags(target))
+        assertEquals(3,target.childCount)
+        val imagePair=target.getChildAt(0) as LinearLayout
+        assertEquals(2,imagePair.childCount)
+        assertEquals(4L,imagePair.getChildAt(0).tag)
+        assertEquals(3L,imagePair.getChildAt(1).tag)
+        assertEquals(2L,target.getChildAt(1).tag)
+        val trailingImageRow=target.getChildAt(2) as LinearLayout
+        assertEquals(2,trailingImageRow.childCount)
+        assertEquals(1L,trailingImageRow.getChildAt(0).tag)
+        prefs.saveTwoColumnClipboard(false)
+    }
+    @Test fun clearingDuringFilterAnimationCannotRestoreStaleRowsOrDropImportFooter() {
+        val target=LinearLayout(context)
+        val a=ClipEntry(91,"first");val b=ClipEntry(92,"second")
+        ClipboardLayout.render(target,listOf(a,b),false){View(context).apply{tag=it.id}}
+        ClipboardLayout.renderAnimated(target,listOf(b),false,{View(context).apply{tag=it.id}},190L)
+        ClipboardLayout.clear(target)
+        val empty=View(context).apply{tag="empty"};target.addView(empty)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
+        assertEquals(1,target.childCount);assertSame(empty,target.getChildAt(0))
+        ClipboardLayout.clear(target)
+        val footer=View(context).apply{tag="import"}
+        ClipboardLayout.renderAnimated(target,listOf(a),false,{View(context).apply{tag=it.id}},190L,onRendered={target.addView(footer)})
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
+        assertEquals(2,target.childCount);assertSame(footer,target.getChildAt(1))
+        ClipboardLayout.renderAnimated(target,listOf(a,b),false,{View(context).apply{tag=it.id}},190L,onRendered={target.addView(footer)})
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
+        assertEquals(3,target.childCount);assertSame(footer,target.getChildAt(2))
     }
     @Test fun longImageStartsAtReadableWidthAndDragStaysInsideImage() {
         val view=ZoomImageView(context);view.setImageBitmap(Bitmap.createBitmap(200,1600,Bitmap.Config.ARGB_8888));view.layout(0,0,400,400)

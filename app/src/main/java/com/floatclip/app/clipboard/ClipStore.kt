@@ -79,6 +79,63 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
         // until it is neither the current clipboard nor a history/undo reference and is pruned.
         images.read(reference)
     }
+    fun findImage(reference:String):ClipEntry? = synchronized(LOCK) {
+        entries().firstOrNull { it.kind=="image" && it.imageRef==reference }
+    }
+    fun receiveSharedImage(
+        eventId:java.util.UUID,
+        source:com.floatclip.share.ClipboardSync.Device,
+        png:ByteArray,
+        width:Int,
+        height:Int,
+        createdAt:Long,
+    ):ClipEntry = synchronized(LOCK) {
+        require(eventId!=java.util.UUID(0,0)) { "图片事件无效" }
+        val info=images.validate(png)
+        require(info.width==width && info.height==height) { "图片尺寸校验失败" }
+        val key=eventId.toString()
+        val current=entries().toMutableList()
+        current.firstOrNull { it.key==key }?.let {
+            require(it.kind=="image" && it.imageSha256==info.sha256) { "图片事件编号冲突" }
+            return@synchronized it
+        }
+        val previous=current.firstOrNull {
+            it.kind=="image" && it.imageSha256==info.sha256 && it.sourceDeviceId==source.id.toString()
+        }
+        if(previous!=null)current.remove(previous)
+        if(current.size>=MAX_ITEMS) {
+            val oldest=current.filterNot { it.pinned||it.locked }.minByOrNull { it.updatedAt }
+                ?: error("固定和置顶记录已满")
+            current.remove(oldest)
+        }
+        val activeImageBytes=current.filter { it.kind=="image" }.sumOf { it.imageBytes.toLong() }
+        require(activeImageBytes+png.size<=ImageBlobStore.MAX_ACTIVE_BYTES) { "图片总量超过 32 MiB，请先整理普通记录" }
+        val reference=previous?.imageRef?.takeIf { it.isNotBlank() } ?: java.util.UUID.randomUUID().toString().replace("-","")
+        val wasNew=previous==null
+        images.write(png,reference)
+        val now=System.currentTimeMillis()
+        val row=ClipEntry(
+            id=previous?.id ?: maxOf(now,(current.maxOfOrNull { it.id }?:0L)+1),
+            text="图片",
+            pinned=previous?.pinned?:false,
+            locked=previous?.locked?:false,
+            category=previous?.category?:CategoryStore.DEFAULT_CATEGORY,
+            createdAt=previous?.createdAt?:createdAt,
+            key=key,
+            updatedAt=now,
+            sourceDeviceId=source.id.toString(),
+            sourceDeviceName=source.name,
+            sourcePlatform=source.platform,
+            kind="image",
+            imageRef=reference,
+            imageSha256=info.sha256,
+            imageBytes=info.bytes,
+            imageWidth=info.width,
+            imageHeight=info.height,
+        )
+        try { persist(listOf(row)+current);row }
+        catch(t:Throwable) { if(wasNew)images.delete(reference);throw t }
+    }
     fun retainUndoImages(owner:String,items:List<ClipEntry>) = synchronized(LOCK) {
         if(items.isEmpty()) undoImageReferences.remove(owner)
         else {

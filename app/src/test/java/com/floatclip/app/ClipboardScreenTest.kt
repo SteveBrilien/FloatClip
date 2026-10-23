@@ -63,6 +63,38 @@ class ClipboardScreenTest {
         assertEquals("测试 Search",activity.findViewById<EditText>(R.id.clipboard_search).text.toString())
         controller.pause().stop().destroy()
     }
+    @Test fun stateHeartbeatKeepsCardsAndImportButtonOutsideScrollingList() {
+        val controller=Robolectric.buildActivity(UnifiedActivity::class.java).setup()
+        val activity=controller.get()
+        try {
+            val codec=object:VaultCipher {
+                override fun encrypt(plain:ByteArray)=plain
+                override fun decrypt(payload:ByteArray)=payload
+            }
+            java.io.File(activity.filesDir,"floatclip_vault.bin").delete()
+            val store=ClipStore(activity,codec)
+            val bitmap=android.graphics.Bitmap.createBitmap(2,2,android.graphics.Bitmap.Config.ARGB_8888)
+            val output=java.io.ByteArrayOutputStream()
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);bitmap.recycle()
+            store.addImage(output.toByteArray())
+            MainActivity::class.java.getDeclaredField("clipStore").apply{isAccessible=true}.set(activity,store)
+            MainActivity::class.java.getDeclaredField("sourceFilter").apply{isAccessible=true}.set(activity,com.floatclip.app.clipboard.ClipboardSources.IMAGE_SCOPE)
+            MainActivity::class.java.getDeclaredMethod("render").apply{isAccessible=true}.invoke(activity)
+            val list=activity.findViewById<android.widget.LinearLayout>(R.id.clipboard_list)
+            val card=list.getChildAt(0)
+            val receiver=MainActivity::class.java.getDeclaredField("sharedHistoryChanged").apply{isAccessible=true}.get(activity) as android.content.BroadcastReceiver
+            repeat(4){receiver.onReceive(activity,android.content.Intent(com.floatclip.app.sync.SyncRuntime.STATE_CHANGED))}
+            assertSame("a connection heartbeat must not recreate the image card",card,list.getChildAt(0))
+            val button=activity.findViewById<View>(R.id.clipboard_image_import)
+            assertEquals(View.VISIBLE,button.visibility)
+            assertTrue(button.parent is android.widget.FrameLayout)
+            assertNotSame(list,button.parent)
+            val params=button.layoutParams as android.widget.FrameLayout.LayoutParams
+            assertEquals(android.view.Gravity.BOTTOM or android.view.Gravity.END,params.gravity)
+            assertTrue(params.bottomMargin>0)
+            assertEquals(1,list.childCount)
+        } finally {controller.pause().stop().destroy()}
+    }
     @Test fun searchCombinesTrimmedTextCategoryAndSourceWithoutChangingSourceFilter() {
         val entry=ClipEntry(1,"Mixed URL 中文",category="研究",sourceDeviceId="pc-1",sourceDeviceName="实验室电脑")
         assertTrue(ClipboardQuery.matches(entry,"  mixed url  ","pc-1"))

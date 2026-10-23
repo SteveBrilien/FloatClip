@@ -23,7 +23,7 @@ docs/ui/ 下七份交互 HTML 是模拟数据设计参考，不是真实网络�
 
 保留 WPF + XAML / .NET 10 / WPF UI；保留 Android vault、包名、原升级签名、配对与同步协议。
 公共更新仍为 0.7.1；build 26 也只是候选。
-当前自动验证：Windows Release/Checks 交叉编译 0 warning / 0 error，LibraryChecks 82、Share core 120、UpdateChecks 44；Android 66 项单测全绿，lint 0 error / 0 warning。
+当前自动验证：Windows Release/Checks 交叉编译 0 warning / 0 error，LibraryChecks 82、Share core 120、UpdateChecks 44；Android 66 项单测全绿，lint 0 error / 17 warning（与 build 25 基线一致）。
 Windows build26 ZIP SHA256：ae7848532fc16828fa21b2f3361a6f7aa0cc274123293ab6a48e70c2b74e0a99
 Android build26 APK SHA256：68930fd41c25b5518a14b1eb8f2fc880a3369429ad3b40939345f01d15934f6d
 不要覆盖 build 25 / build 26 制品，后续应用改动使用更高 build。

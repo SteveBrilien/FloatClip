@@ -4,7 +4,7 @@
 
 在 build 25 上完成上一轮未闭环的六项交互：Windows 背景模式扩展到整个应用与辅助窗口；两端分类补齐重命名/删除、颜色和统一图标；Android 图片与文字混排、单栏/双栏共用偏好；图片单击大图和长图缩放拖动；Android 文件页改为真实应用内只读预览；LAN HELLO 后主动发布文件目录。版本内部 build 升为 26，公共更新仍保持 0.7.1。
 
-Windows Release / Checks 交叉编译 0 warning / 0 error，LibraryChecks 82、Share core 120、UpdateChecks 44 通过；Android 66 项单测全绿，lint 0 error / 0 warning，APK 签名身份与 zipalign 校验通过。ADB 仍是 `127.0.0.1:25557 offline`，Windows 真机 WPF/DWM/DPI 也未恢复，因此不把自动检查写成真机验收。完整边界和制品哈希见 [build 26 候选](../CANDIDATE_078_BUILD26_2026-10-23.md)。
+Windows Release / Checks 交叉编译 0 warning / 0 error，LibraryChecks 82、Share core 120、UpdateChecks 44 通过；Android 66 项单测全绿，lint 0 error / 17 warning（与 build 25 基线一致），APK 签名身份与 zipalign 校验通过。ADB 仍是 `127.0.0.1:25557 offline`，Windows 真机 WPF/DWM/DPI 也未恢复，因此不把自动检查写成真机验收。完整边界和制品哈希见 [build 26 候选](../CANDIDATE_078_BUILD26_2026-10-23.md)。
 
 ## 2026-10-23：0.7.8 / build 25 分类、反馈与跨端文件修订
 

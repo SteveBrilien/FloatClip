@@ -27,7 +27,7 @@
 
 - `testDebugUnitTest`：66 tests / 0 failures / 0 errors / 0 skipped。
 - 新增 4 项回归覆盖：分类重命名/删除保留内容和保护状态；实际文本/ZIP 有界预览；图片+文字混排和共享布局偏好；长图初始缩放与拖动边界。
-- `lintDebug`：`No issues found.`，0 error / 0 warning。
+- `lintDebug`：0 error / 17 warning；与 build 25 的历史 warning 数一致，本轮新增的触摸可访问性 warning 已消除。
 - `assembleDebug` 成功；APK `versionCode=26`、`versionName=0.7.8`。
 - APK signer SHA-256：`0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c`，与既有 Android 升级身份一致。
 - `zipalign -c -P 16 -v 4` 通过。

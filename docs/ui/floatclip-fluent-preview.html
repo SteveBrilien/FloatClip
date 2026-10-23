@@ -1,0 +1,174 @@
+<div id="floatclip-fluent" class="viz-carousel viz-dotted-background" aria-label="FloatClip 左侧导航交互预览" data-previous-label="上一个布局" data-next-label="下一个布局">
+  <section data-variant="紧凑侧栏" aria-label="紧凑侧栏"><div class="ff-stage" data-layout="compact"></div></section>
+  <section data-variant="展开侧栏" aria-label="展开侧栏" hidden><div class="ff-stage" data-layout="expanded"></div></section>
+</div>
+<style>
+#floatclip-fluent [hidden]{display:none!important}
+#floatclip-fluent .ff-stage{display:flex;justify-content:center;align-items:flex-start;padding:16px 8px 40px;min-height:820px;box-sizing:border-box}
+#floatclip-fluent .ff-app{--ff-bg:light-dark(#f5f6f8,#181b20);--ff-card:light-dark(#fff,#24282f);--ff-text:light-dark(#20252e,#eef1f6);--ff-muted:light-dark(#697586,#a3adbc);--ff-line:light-dark(#e4e8ee,#3a424e);--ff-tint:light-dark(#eaf1fd,#293a52);--ff-accent:light-dark(#366ac7,#91bbff);--ff-danger:light-dark(#b44952,#f5a6b1);--ff-size:14px;--ff-gap:8px;display:grid;grid-template-columns:48px minmax(0,1fr);grid-template-rows:38px minmax(640px,auto);width:520px;max-width:100%;color:var(--ff-text);background:var(--ff-bg);border:1px solid var(--ff-line);border-radius:10px;box-shadow:0 16px 42px light-dark(#25314b18,#0004);font:14px/1.5 "Segoe UI Variable","Segoe UI","Microsoft YaHei UI","Microsoft YaHei","PingFang SC",sans-serif;box-sizing:border-box;overflow:clip;position:relative}
+#floatclip-fluent .ff-app[data-theme=tokyo-night]{--ff-bg:#1a1b26;--ff-card:#24283b;--ff-text:#c0caf5;--ff-muted:#9aa5ce;--ff-line:#414868;--ff-tint:#283457;--ff-accent:#7aa2f7;--ff-danger:#f7768e}
+#floatclip-fluent .ff-app *{box-sizing:border-box}
+#floatclip-fluent button,#floatclip-fluent input,#floatclip-fluent select{font:inherit}
+#floatclip-fluent button{color:inherit;background:transparent;border:0;border-radius:5px;padding:6px 10px;min-height:30px}
+#floatclip-fluent button:hover{background:var(--ff-tint)}
+#floatclip-fluent button:disabled{opacity:.45;cursor:default}
+#floatclip-fluent .ff-primary{color:var(--ff-accent);background:var(--ff-tint)}
+#floatclip-fluent .ff-danger{color:var(--ff-danger)}
+#floatclip-fluent .ff-icon{width:30px;height:30px;padding:6px;display:grid;place-items:center;flex:none}
+#floatclip-fluent svg{width:17px;height:17px;flex:none}
+#floatclip-fluent .ff-chrome{grid-column:1/-1;display:flex;gap:8px;align-items:center;padding:3px 8px;font-size:12px}
+#floatclip-fluent .ff-brand{width:21px;height:21px;border-radius:6px;display:grid;place-items:center;color:var(--ff-card);background:var(--ff-accent)}
+#floatclip-fluent .ff-brand svg{width:14px;height:14px}
+#floatclip-fluent .ff-chrome-actions{margin-left:auto;display:flex;gap:2px}
+#floatclip-fluent nav{display:flex;flex-direction:column;gap:3px;padding:4px 5px 9px;border-right:1px solid var(--ff-line)}
+#floatclip-fluent nav button{position:relative;display:flex;align-items:center;gap:10px;min-width:0;padding:9px 10px;min-height:38px;text-align:left;white-space:nowrap;color:var(--ff-muted)}
+#floatclip-fluent nav button[aria-current=page]{color:var(--ff-text);background:var(--ff-card)}
+#floatclip-fluent nav button[aria-current=page]::before{content:"";width:3px;height:16px;position:absolute;left:0;border-radius:2px;background:var(--ff-accent)}
+#floatclip-fluent .ff-nav-label{display:none;font-size:13px}
+#floatclip-fluent .ff-nav-space{flex:1;min-height:40px}
+#floatclip-fluent .ff-app.ff-open{grid-template-columns:148px minmax(0,1fr);width:760px}
+#floatclip-fluent .ff-open .ff-nav-label{display:inline}
+#floatclip-fluent main{min-width:0;position:relative;padding:12px 14px 14px;display:flex;flex-direction:column}
+#floatclip-fluent h2{font-size:21px;font-weight:500;line-height:1.35;margin:0 0 14px}
+#floatclip-fluent h3{font-size:15px;font-weight:500;margin:14px 0 9px}
+#floatclip-fluent p{margin:6px 0 12px;color:var(--ff-muted);font-size:12px}
+#floatclip-fluent .ff-search{height:34px;display:flex;align-items:center;gap:8px;padding:0 8px;color:var(--ff-muted);background:var(--ff-card);border-radius:6px;border-bottom:1px solid var(--ff-line)}
+#floatclip-fluent .ff-search svg{width:15px;height:15px}
+#floatclip-fluent .ff-search input{font-size:13px;min-width:0;width:100%;border:0;background:transparent;color:var(--ff-text);padding:6px 0}
+#floatclip-fluent .ff-search button{width:24px;height:26px;min-height:26px;padding:3px}
+#floatclip-fluent .ff-filters{display:flex;align-items:center;flex-wrap:wrap;gap:3px;margin:9px 0 10px}
+#floatclip-fluent .ff-filters button{font-size:12px;padding:4px 8px;min-height:28px;color:var(--ff-muted)}
+#floatclip-fluent .ff-filters button[aria-pressed=true]{background:var(--ff-tint);color:var(--ff-accent)}
+#floatclip-fluent .ff-filters .ff-clear{margin-left:auto}
+#floatclip-fluent .ff-list{display:grid;gap:var(--ff-gap)}
+#floatclip-fluent .ff-row{position:relative;overflow:clip;background:var(--ff-tint);border-radius:7px;touch-action:pan-y}
+#floatclip-fluent .ff-card{position:relative;padding:11px 14px 13px;min-height:88px;background:var(--ff-card);border-radius:7px;transition:transform .15s ease}
+#floatclip-fluent .ff-meta{font-size:11px;color:var(--ff-muted);display:flex;align-items:center;gap:6px;margin-bottom:14px;padding-right:20px}
+#floatclip-fluent .ff-meta svg{width:12px;height:12px}
+#floatclip-fluent .ff-row{--ff-source:var(--ff-accent)}
+#floatclip-fluent .ff-app[data-colors=true] .ff-row[data-device=phone]{--ff-source:light-dark(#14755f,#83d9be)}
+#floatclip-fluent .ff-source-dot{width:5px;height:5px;border-radius:50%;background:var(--ff-source);flex:none}
+#floatclip-fluent .ff-app[data-tinted=true] .ff-card{background:color-mix(in srgb,var(--ff-card) 90%,var(--ff-source))}
+#floatclip-fluent .ff-copytext{font-size:var(--ff-size);white-space:pre-wrap;padding-right:10px;overflow-wrap:anywhere}
+#floatclip-fluent .ff-more{position:absolute;right:6px;top:5px;width:26px;height:26px;min-height:26px;padding:4px}
+#floatclip-fluent .ff-picture{height:128px;border-radius:5px;display:flex;align-items:center;justify-content:space-between;padding:16px 25px;margin:0 -3px 9px;overflow:clip;background:linear-gradient(125deg,var(--ff-tint),var(--ff-card));border:1px solid var(--ff-line);color:var(--ff-accent)}
+#floatclip-fluent .ff-picture strong{font-size:25px;font-weight:500;line-height:1.3}
+#floatclip-fluent .ff-picture span{height:86px;width:86px;transform:rotate(-15deg);border-radius:22px;background:var(--ff-accent);opacity:.25}
+#floatclip-fluent .ff-picture-foot{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--ff-muted)}
+#floatclip-fluent .ff-picture-foot button{font-size:12px;padding:3px 8px;min-height:26px}
+#floatclip-fluent .ff-swipe{position:absolute;inset:0 auto 0 0;width:76px;display:flex;align-items:center;justify-content:center;visibility:hidden}
+#floatclip-fluent .ff-left-actions{position:absolute;inset:0 0 0 auto;width:140px;display:flex;align-items:center;justify-content:center;visibility:hidden}
+#floatclip-fluent [data-swipe=right] .ff-card{transform:translateX(76px)}
+#floatclip-fluent [data-swipe=right] .ff-swipe,#floatclip-fluent [data-swipe=left] .ff-left-actions{visibility:visible}
+#floatclip-fluent [data-swipe=left] .ff-card{transform:translateX(-140px)}
+#floatclip-fluent .ff-menu{position:absolute;right:8px;top:31px;z-index:4;width:136px;background:var(--ff-card);border:1px solid var(--ff-line);border-radius:6px;box-shadow:0 6px 18px #0003;padding:4px}
+#floatclip-fluent .ff-menu button{display:block;width:100%;text-align:left;font-size:12px}
+#floatclip-fluent .ff-footer{margin-top:auto;padding-top:18px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;font-size:11px;color:var(--ff-muted)}
+#floatclip-fluent .ff-settings-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:15px;min-height:62px;padding:12px 14px;margin-bottom:4px;background:var(--ff-card);border:1px solid var(--ff-line);border-radius:7px}
+#floatclip-fluent .ff-settings-row small{display:block;font-size:11px;color:var(--ff-muted);margin-top:3px}
+#floatclip-fluent select{max-width:160px;background:var(--ff-card);color:var(--ff-text);border:1px solid var(--ff-line);border-radius:5px;padding:6px 8px;font-size:12px}
+#floatclip-fluent input[role=switch]{appearance:none;width:36px;height:20px;border:1px solid var(--ff-muted);background:transparent;border-radius:12px;position:relative;margin:0;flex:none}
+#floatclip-fluent input[role=switch]::after{content:"";position:absolute;width:12px;height:12px;left:3px;top:3px;background:var(--ff-muted);border-radius:50%;transition:transform .12s ease}
+#floatclip-fluent input[role=switch]:checked{background:var(--ff-accent);border-color:var(--ff-accent)}
+#floatclip-fluent input[role=switch]:checked::after{background:var(--ff-bg);transform:translateX(16px)}
+#floatclip-fluent .ff-slider{width:120px;display:grid;gap:5px}
+#floatclip-fluent .ff-slider output{text-align:right;font-size:12px;color:var(--ff-muted)}
+#floatclip-fluent input[type=range]{width:100%;margin:0;accent-color:var(--ff-accent)}
+#floatclip-fluent .ff-cardbox{padding:14px;border:1px solid var(--ff-line);border-radius:7px;background:var(--ff-card);margin:0 0 8px}
+#floatclip-fluent .ff-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+#floatclip-fluent .ff-cardbox strong{font-weight:500;font-size:14px}
+#floatclip-fluent .ff-cardbox p:last-child{margin-bottom:0}
+#floatclip-fluent .ff-progress{height:4px;background:var(--ff-tint);border-radius:4px;overflow:hidden;margin:12px 0 6px}
+#floatclip-fluent .ff-progress span{display:block;height:100%;background:var(--ff-accent);transition:width .25s linear}
+#floatclip-fluent .ff-dim{color:var(--ff-muted);font-size:12px}
+#floatclip-fluent .ff-notice{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;background:var(--ff-tint);border-radius:6px;margin:0 0 10px;color:var(--ff-accent);font-size:12px}
+#floatclip-fluent .ff-toast{position:absolute;left:57px;right:12px;bottom:12px;z-index:12;display:flex;align-items:center;gap:8px;justify-content:space-between;background:var(--ff-card);border:1px solid var(--ff-line);border-radius:7px;padding:10px 12px;box-shadow:0 5px 18px #0003;font-size:12px}
+#floatclip-fluent .ff-pane{position:absolute;left:8px;right:8px;top:48px;padding:16px;border:1px solid var(--ff-line);background:var(--ff-card);border-radius:8px;box-shadow:0 8px 24px #0004;z-index:7}
+#floatclip-fluent .ff-pane-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;font-size:16px}
+#floatclip-fluent .ff-pane .ff-picture{height:220px;margin:8px 0}
+#floatclip-fluent .ff-code{font-size:28px;letter-spacing:5px;color:var(--ff-accent);margin:12px 0}
+#floatclip-fluent .ff-empty{color:var(--ff-muted);text-align:center;padding:50px 10px;font-size:13px}
+@media(max-width:480px){#floatclip-fluent .ff-app.ff-open{grid-template-columns:48px minmax(0,1fr)}#floatclip-fluent .ff-open .ff-nav-label{display:none}#floatclip-fluent main{padding:10px}#floatclip-fluent .ff-settings-row{gap:8px;padding:10px;grid-template-columns:minmax(0,1fr) auto}#floatclip-fluent .ff-slider{width:92px}#floatclip-fluent .ff-settings-row select{max-width:120px}#floatclip-fluent .ff-stage{padding-left:2px;padding-right:2px;min-height:960px}#floatclip-fluent .ff-toast{left:54px;right:8px}}
+@media(prefers-reduced-motion:reduce){#floatclip-fluent *{transition:none!important}}
+</style>
+<script>
+(()=>{
+  const root=document.getElementById('floatclip-fluent');
+  const seed=[{id:'idea',text:'把灵感留住，下次一眼找到。 ✨',device:'本机',pin:true,lock:false,kind:'text',time:'16:20'},{id:'image',text:'今日灵感',device:'本机',pin:false,lock:false,kind:'image',time:'16:18'},{id:'emoji',text:'周末一起出发 😀 👍🏽 ✨',device:'我的手机',pin:false,lock:true,kind:'text',time:'16:15'},{id:'note',text:'会议安排：周五 15:00，带上新的设计稿。',device:'本机',pin:false,lock:false,kind:'text',time:'16:10'}];
+  const saved=window.openai?.widgetState?.privateContent||{};
+  const controllers=[];
+  root.querySelectorAll('.ff-stage').forEach(stage=>{
+    const state={page:'clipboard',theme:['system','light','dark','tokyo-night'].includes(saved.theme)?saved.theme:'tokyo-night',expanded:stage.dataset.layout==='expanded',font:14,spacing:8,width:stage.dataset.layout==='expanded'?760:520,capture:true,colors:true,tinted:false,automatic:true,items:seed.map(x=>({...x})),query:'',filter:'all',menu:'',pane:'',selected:'image',removed:[],toast:'',transport:'none',pairing:'',file:'设计资料.pdf',fileSize:2.4,filePhase:'idle',fileProgress:0,incoming:'offered',update:'ahead'};
+    stage.innerHTML='<div class="ff-app" aria-label="FloatClip Windows"><div class="ff-chrome"><span class="ff-brand"><i data-lucide="layers" aria-hidden="true"></i></span><span>FloatClip</span><div class="ff-chrome-actions"><button class="ff-icon cursor-interaction" data-action="pin-window" aria-label="固定面板"><i data-lucide="pin" aria-hidden="true"></i></button><button class="ff-icon cursor-interaction" data-action="hide" aria-label="收起"><i data-lucide="x" aria-hidden="true"></i></button></div></div><nav aria-label="主导航"><button data-action="expand" aria-label="展开导航" class="cursor-interaction"><i data-lucide="menu" aria-hidden="true"></i><span class="ff-nav-label">导航</span></button><button data-page="clipboard" aria-label="剪贴板" class="cursor-interaction"><i data-lucide="clipboard" aria-hidden="true"></i><span class="ff-nav-label">剪贴板</span></button><button data-page="devices" aria-label="我的设备" class="cursor-interaction"><i data-lucide="smartphone" aria-hidden="true"></i><span class="ff-nav-label">我的设备</span></button><button data-page="files" aria-label="文件传输" class="cursor-interaction"><i data-lucide="folder-up" aria-hidden="true"></i><span class="ff-nav-label">文件传输</span></button><span class="ff-nav-space"></span><button data-page="settings" aria-label="设置" class="cursor-interaction"><i data-lucide="settings-2" aria-hidden="true"></i><span class="ff-nav-label">设置</span></button><button data-page="updates" aria-label="版本与更新" class="cursor-interaction"><i data-lucide="download" aria-hidden="true"></i><span class="ff-nav-label">版本与更新</span></button></nav><main></main><div class="ff-toast" aria-live="polite" hidden></div><input type="file" aria-label="选择要演示的文件" hidden></div>';
+    const app=stage.querySelector('.ff-app'),main=app.querySelector('main'),toast=app.querySelector('.ff-toast'),picker=app.querySelector('input[type=file]');
+    app.querySelectorAll('nav button').forEach(b=>b.setAttribute('data-tooltip',b.getAttribute('aria-label')));
+    const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const icon=name=>'<i data-lucide="'+name+'" aria-hidden="true"></i>';
+    const button=(label,action,kind='')=>'<button class="cursor-interaction '+kind+'" data-action="'+action+'"'+(action==='close-pane'?' aria-label="返回剪贴板"':action==='dismiss-toast'?' aria-label="关闭通知"':'')+'>'+label+'</button>';
+    const picture=()=>'<div class="ff-picture" role="img" aria-label="今日灵感设计图片"><strong>今日<br>灵感</strong><span></span></div>';
+    const toggle=(title,detail,key)=>'<label class="ff-settings-row"><span>'+title+(detail?'<small>'+detail+'</small>':'')+'</span><input role="switch" type="checkbox" aria-label="'+title+'" data-setting="'+key+'" '+(state[key]?'checked':'')+'></label>';
+    const slider=(title,detail,key,min,max)=>'<label class="ff-settings-row"><span>'+title+'<small>'+detail+'</small></span><span class="ff-slider"><output>'+state[key]+'</output><input type="range" min="'+min+'" max="'+max+'" value="'+state[key]+'" data-setting="'+key+'" aria-label="'+title+'"></span></label>';
+    function persist(){window.openai?.setWidgetState?.({modelContent:{product:'FloatClip Windows',layout:state.expanded?'展开侧栏':'紧凑侧栏',appearance:state.theme,page:state.page},privateContent:{theme:state.theme}}).catch(()=>{});}
+    function style(){app.dataset.theme=state.theme;app.dataset.colors=String(state.colors);app.dataset.tinted=String(state.tinted);app.classList.toggle('ff-open',state.expanded);app.style.colorScheme=state.theme==='system'?'inherit':state.theme==='tokyo-night'?'dark':state.theme;app.style.setProperty('--ff-size',state.font+'px');app.style.setProperty('--ff-gap',state.spacing+'px');app.style.width=state.width+'px';}
+    function clipboard(){
+      const items=state.items.filter(x=>(state.filter!=='local'||x.device==='本机')&&(state.filter!=='image'||x.kind==='image')&&(x.text+' '+x.device+' '+(x.kind==='image'?'图片':'')+' '+(x.pin?'置顶':'')+' '+(x.lock?'固定 保护':'')).toLowerCase().includes(state.query.toLowerCase())).sort((a,b)=>Number(b.pin)-Number(a.pin));
+      return '<h2>剪贴板</h2><label class="ff-search">'+icon('search')+'<input type="search" aria-label="搜索剪贴板" placeholder="搜索剪贴板" value="'+escape(state.query)+'"><button data-action="clear-search" aria-label="清空搜索">'+icon('x')+'</button></label><div class="ff-filters">'+[['all','全部'],['local','本机'],['image','图片']].map(([key,label])=>'<button data-filter="'+key+'" aria-pressed="'+(state.filter===key)+'">'+label+'</button>').join('')+'<button class="ff-clear" data-action="clear">全部清除</button></div><div class="ff-list">'+(items.map(x=>'<article class="ff-row" data-device="'+(x.device==='本机'?'local':'phone')+'" data-id="'+x.id+'"><div class="ff-swipe">'+button(x.lock?'取消固定':'固定','lock')+'</div><div class="ff-left-actions">'+button(x.pin?'取消置顶':'置顶','pin')+button('删除','delete','ff-danger')+'</div><div class="ff-card cursor-interaction" data-card="'+x.id+'"><div class="ff-meta"><span class="ff-source-dot"></span>'+(x.pin?icon('pin'):'')+(x.lock?icon('lock-keyhole'):'')+escape(x.device)+' · '+x.time+'</div><button class="ff-more" data-action="more" aria-label="更多操作">'+icon('ellipsis')+'</button>'+(x.kind==='image'?picture()+'<div class="ff-picture-foot"><span>图片 · 1280 × 800</span>'+button('复制图片','copy','ff-primary')+'</div>':'<div class="ff-copytext">'+escape(x.text)+'</div>')+(state.menu===x.id?'<div class="ff-menu">'+button(x.kind==='image'?'查看图片':'查看全文','view')+button('复制','copy')+button(x.lock?'取消固定':'固定记录','lock')+button(x.pin?'取消置顶':'置顶','pin')+button('删除','delete','ff-danger')+'</div>':'')+'</div></article>').join('')||'<div class="ff-empty">没有匹配的记录</div>')+'</div><div class="ff-footer"><span>文字与图片保存在本机</span><span>Ctrl + Alt + V</span></div>';
+    }
+    function settings(){return '<h2>设置</h2><div class="ff-settings-row"><span>外观<small>保留原深色主题</small></span><select aria-label="外观" data-setting="theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option><option value="tokyo-night">东京夜色</option></select></div>'+toggle('展开导航文字','窄侧栏保留更多内容空间','expanded')+toggle('设备特征色','','colors')+toggle('彩色卡片背景','','tinted')+slider('文字大小','剪贴板正文','font',12,18)+slider('卡片间距','紧凑或宽松','spacing',4,18)+slider('面板宽度','按屏幕调整','width',420,760)+toggle('收录文字和图片','','capture');}
+    function devices(){let content='<h2>我的设备</h2>'+toggle('共享剪贴板','已授权设备之间同步文字','sharing')+'<div class="ff-cardbox"><strong>连接手机</strong><p>手机开启共享并允许添加设备，再选择连接方式。</p><div class="ff-actions">'+button('通过蓝牙添加','pair-bt','ff-primary')+button('通过局域网添加','pair-lan')+'</div><p>蓝牙需先完成系统配对；局域网需连接同一 Wi-Fi 或手机热点。</p></div>';
+      if(state.pairing)content+='<div class="ff-cardbox"><strong>核对两端识别码</strong><div class="ff-code">482 916</div><div class="ff-actions">'+button('相同，允许','pair-accept','ff-primary')+button('取消','pair-cancel')+'</div></div>';
+      else content+='<div class="ff-cardbox"><strong>我的手机</strong><p>'+({none:'等待添加设备',bluetooth:'已授权 · 蓝牙短连接',lan:'已授权 · 局域网连接'}[state.transport])+'</p><div class="ff-actions">'+button('传输文件','go-files')+'</div></div>';
+      return content+'<p>图片目前在各自设备保存与预览。Wi-Fi Direct 待后续接入。</p>';}
+    function files(){const connected=state.transport==='lan';return '<h2>文件传输</h2><div class="ff-notice"><span>'+ (connected?'我的手机 · 局域网':'连接同一 Wi-Fi 或手机热点后传文件')+'</span>'+button('设备','go-devices')+'</div><div class="ff-cardbox"><strong>发送文件</strong><p>'+escape(state.file)+' · '+state.fileSize.toFixed(1)+' MiB</p><div class="ff-dim">'+({idle:'单文件上限 64 MiB',waiting:'等待手机接收',sending:'正在发送 '+state.fileProgress+'%',done:'对方已接收并校验',canceled:'已停止传输'}[state.filePhase])+'</div>'+(['sending','done'].includes(state.filePhase)?'<div class="ff-progress"><span style="width:'+state.fileProgress+'%"></span></div>':'')+'<div class="ff-actions">'+(['waiting','sending'].includes(state.filePhase)?button('停止','cancel-file')+(state.filePhase==='waiting'?button('模拟手机接收','accept-send','ff-primary'):''):button('选择文件','choose-file')+button('发送','send-file','ff-primary'))+'</div></div><div class="ff-cardbox"><strong>来自我的手机</strong><p>截图.png · 1.2 MiB</p><div class="ff-dim">'+({offered:'等待你接收',received:'已接收并校验',declined:'已拒绝接收'}[state.incoming])+'</div><div class="ff-actions">'+(state.incoming==='offered'?button('接收','receive-file','ff-primary')+button('拒绝','decline-file'):state.incoming==='received'?button('另存为','save-file'):'')+'</div></div><p>Wi-Fi Direct：待实现</p>';}
+    function updates(){return '<h2>版本与更新</h2><p>当前候选 0.7.5 · build 20</p><div class="ff-cardbox"><strong>'+({ahead:'当前为预览版本',available:'发现演示版本 0.7.6',downloading:'正在下载 '+state.fileProgress+'%',ready:'已下载并通过校验',current:'演示更新完成'}[state.update])+'</strong><p>正式发布源仍为 0.7.1，当前候选不会降级。</p>'+(state.update==='downloading'?'<div class="ff-progress"><span style="width:'+state.fileProgress+'%"></span></div>':'')+'<div class="ff-actions">'+(state.update==='available'?button('下载更新','download','ff-primary')+button('稍后','later')+button('跳过此版本','skip'):state.update==='ready'?button('更新并重启','install','ff-primary'):button('检查更新','check','ff-primary'))+'</div></div>'+toggle('启动时检查更新','通知条提醒，可稍后处理','automatic');}
+    function render(){style();app.querySelectorAll('[data-page]').forEach(b=>b.setAttribute('aria-current',b.dataset.page===state.page?'page':'false'));main.innerHTML=({clipboard,settings,devices,files,updates}[state.page])();const theme=main.querySelector('select[data-setting=theme]');if(theme)theme.value=state.theme;
+      if(state.pane){const item=state.items.find(x=>x.id===state.selected);if(item)main.insertAdjacentHTML('beforeend','<section class="ff-pane" aria-label="内容预览"><div class="ff-pane-head"><span>'+(item.kind==='image'?'图片预览':'剪贴板全文')+'</span>'+button(icon('x'),'close-pane')+'</div>'+(item.kind==='image'?picture():'<div class="ff-copytext">'+escape(item.text)+'</div>')+'<div class="ff-actions">'+button('复制','copy-selected','ff-primary')+button('返回','close-pane')+'</div></section>');}
+      toast.hidden=!state.toast;toast.innerHTML='<span>'+escape(state.toast)+'</span>'+(state.removed.length?button('撤销','undo'):'')+button(icon('x'),'dismiss-toast');if(globalThis.lucide)lucide.createIcons({attrs:{width:17,height:17}});
+    }
+    main.addEventListener('contextmenu',e=>{const row=e.target.closest('.ff-row');if(row){e.preventDefault();state.menu=row.dataset.id;render();}});
+    let timer=null;function progress(kind){if(timer)clearInterval(timer);state.fileProgress=0;timer=setInterval(()=>{state.fileProgress=Math.min(100,state.fileProgress+10);if(state.fileProgress===100){clearInterval(timer);timer=null;if(kind==='file')state.filePhase='done';else state.update='ready';}render();},180);}
+    picker.addEventListener('change',()=>{const file=picker.files?.[0];if(!file)return;if(file.size>64*1024*1024){state.toast='此预览沿用当前协议的 64 MiB 上限';}else{state.file=file.name;state.fileSize=file.size/1024/1024;state.filePhase='idle';}render();});
+    app.addEventListener('input',e=>{if(e.target.type==='search'){const start=e.target.selectionStart;state.query=e.target.value;render();const search=main.querySelector('input[type=search]');search.focus();try{search.setSelectionRange(start,start);}catch{}}
+      if(e.target.type==='range'){state[e.target.dataset.setting]=Number(e.target.value);e.target.previousElementSibling.value=e.target.value;style();}});
+    app.addEventListener('change',e=>{const key=e.target.dataset.setting;if(!key||e.target.type==='range')return;state[key]=e.target.type==='checkbox'?e.target.checked:e.target.value;render();persist();});
+    app.addEventListener('click',e=>{const b=e.target.closest('button'),card=e.target.closest('[data-card]');if(!b){if(card){const item=state.items.find(x=>x.id===card.dataset.card);state.selected=item.id;if(item.kind==='image')state.pane='view';else state.toast='已复制文字（演示）';render();}return;}if(b.dataset.page){state.page=b.dataset.page;state.pane='';state.menu='';state.toast='';render();persist();return;}if(b.dataset.filter){state.filter=b.dataset.filter;render();return;}
+      const action=b.dataset.action,row=b.closest('.ff-row'),item=state.items.find(x=>x.id===row?.dataset.id);
+      if(action==='expand')state.expanded=!state.expanded;
+      else if(action==='pin-window'){const on=b.getAttribute('aria-pressed')==='true';b.setAttribute('aria-pressed',String(!on));state.toast=on?'已取消固定面板':'面板已固定';}
+      else if(action==='hide')state.toast='收起交互演示；客户端可用快捷键重新调出';
+      else if(action==='clear-search')state.query='';
+      else if(action==='more')state.menu=state.menu===item.id?'':item.id;
+      else if(action==='view'){state.selected=item.id;state.pane='view';state.menu='';}
+      else if(action==='close-pane')state.pane='';
+      else if(action==='copy'||action==='copy-selected'){state.toast='已复制（演示）';state.menu='';}
+      else if(action==='lock'&&item){item.lock=!item.lock;state.menu='';}
+      else if(action==='pin'&&item){item.pin=!item.pin;state.menu='';}
+      else if(action==='delete'&&item){state.removed=[item];state.items=state.items.filter(x=>x.id!==item.id);state.toast='记录已删除';state.menu='';}
+      else if(action==='clear'){state.removed=state.items.filter(x=>!x.pin&&!x.lock);state.items=state.items.filter(x=>x.pin||x.lock);state.toast='已清除 '+state.removed.length+' 条普通记录；固定和置顶已保留';}
+      else if(action==='undo'){state.items.push(...state.removed);state.removed=[];state.toast='已撤销';}
+      else if(action==='dismiss-toast')state.toast='';
+      else if(action==='pair-bt'||action==='pair-lan'){if(state.sharing)state.pairing=action==='pair-bt'?'bluetooth':'lan';else state.toast='请先开启上方的共享剪贴板';}
+      else if(action==='pair-accept'){state.transport=state.pairing;state.pairing='';state.sharing=true;state.toast='配对流程演示完成';}
+      else if(action==='pair-cancel')state.pairing='';
+      else if(action==='go-files')state.page='files';
+      else if(action==='go-devices')state.page='devices';
+      else if(action==='choose-file')picker.click();
+      else if(action==='send-file'){if(state.transport!=='lan')state.toast='请先到“我的设备”演示局域网配对';else state.filePhase='waiting';}
+      else if(action==='accept-send'){state.filePhase='sending';progress('file');}
+      else if(action==='cancel-file'){if(timer)clearInterval(timer);timer=null;state.filePhase='canceled';}
+      else if(action==='receive-file')state.incoming='received';
+      else if(action==='decline-file')state.incoming='declined';
+      else if(action==='save-file')state.toast='另存为交互演示，未写入实际文件';
+      else if(action==='check')state.update='available';
+      else if(action==='download'){state.update='downloading';progress('update');}
+      else if(action==='install'){state.update='current';state.toast='更新交互演示完成';}
+      else if(action==='later'||action==='skip'){state.update='ahead';state.page='clipboard';state.toast=action==='skip'?'已跳过演示版本':'稍后处理更新';}
+      render();persist();
+    });
+    let start=null,suppress=false;main.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;const row=e.target.closest('.ff-row');if(row)start={id:row.dataset.id,x:e.clientX,y:e.clientY};});main.addEventListener('pointerup',e=>{if(!start)return;const dx=e.clientX-start.x,dy=e.clientY-start.y;if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.3){const row=main.querySelector('[data-id="'+start.id+'"]');if(row)row.dataset.swipe=dx>0?'right':'left';suppress=true;setTimeout(()=>suppress=false,0);}start=null;});main.addEventListener('click',e=>{if(suppress){e.stopPropagation();e.preventDefault();}},true);
+    render();controllers.push({state,render});
+    if(globalThis.Tweak){const tweak=new Tweak({container:app,onChange:()=>{style();render();}});tweak.addSlider(state,'font',{label:'文字大小',min:12,max:18,unit:'px'});tweak.addSlider(state,'spacing',{label:'卡片间距',min:4,max:18,unit:'px'});}
+  });
+  window.addEventListener('openai:set_globals',event=>{const theme=event.detail?.globals?.widgetState?.privateContent?.theme;if(['system','light','dark','tokyo-night'].includes(theme))controllers.forEach(c=>{c.state.theme=theme;c.render();});});
+})();
+</script>

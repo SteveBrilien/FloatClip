@@ -1,0 +1,229 @@
+<div id="floatclip-files" class="viz-carousel viz-dotted-background" aria-label="FloatClip 文件卡片与预览" data-previous-label="上一端" data-next-label="下一端">
+  <section data-variant="电脑文件页" aria-label="电脑文件页"><div class="fx-stage" data-device="pc"></div></section>
+  <section data-variant="手机接收页" aria-label="手机接收页" hidden><div class="fx-stage" data-device="phone"></div></section>
+</div>
+<style>
+#floatclip-files [hidden]{display:none!important}
+#floatclip-files .fx-stage{display:flex;align-items:flex-start;justify-content:center;padding:16px 6px 38px;min-height:1000px;box-sizing:border-box}
+#floatclip-files .fx-app{--fx-bg:light-dark(#f4f6f9,#181b20);--fx-card:light-dark(#fff,#24282f);--fx-sent:light-dark(#eef4ff,#29364a);--fx-text:light-dark(#20252e,#eef1f6);--fx-muted:light-dark(#697586,#a3adbc);--fx-line:light-dark(#e1e6ee,#3a424e);--fx-tint:light-dark(#e9f0fd,#293a52);--fx-accent:light-dark(#366ac7,#91bbff);--fx-bubble-radius:9px;--fx-gap:17px;--fx-icon-size:48px;--fx-preview-paper:light-dark(#fff,#303643);--fx-preview-text:light-dark(#293142,#e5e9f1);--fx-preview-line:light-dark(#e3e8ef,#505a6e);--fx-danger:light-dark(#b0444d,#f0a1aa);width:700px;max-width:100%;position:relative;overflow:clip;color:var(--fx-text);background:var(--fx-bg);border:1px solid var(--fx-line);border-radius:11px;box-shadow:0 16px 42px light-dark(#23314a18,#0004);font:14px/1.5 "Segoe UI Variable","Segoe UI","Microsoft YaHei UI","Microsoft YaHei","PingFang SC",sans-serif;box-sizing:border-box;min-height:860px}
+#floatclip-files .fx-app[data-theme=tokyo-night]{--fx-bg:#1a1b26;--fx-card:#24283b;--fx-sent:#283457;--fx-text:#c0caf5;--fx-muted:#9aa5ce;--fx-line:#414868;--fx-tint:#283457;--fx-accent:#7aa2f7;--fx-preview-paper:#292e45;--fx-preview-text:#c0caf5;--fx-preview-line:#414868}
+#floatclip-files .fx-app *{box-sizing:border-box}
+#floatclip-files .fx-app[data-device=phone]{width:390px}
+#floatclip-files button,#floatclip-files input,#floatclip-files select{font:inherit}
+#floatclip-files button{color:inherit;background:transparent;border:0;border-radius:5px;padding:6px 10px;min-height:30px;max-width:100%}
+#floatclip-files button:hover{background:var(--fx-tint)}
+#floatclip-files button:disabled{opacity:.45;cursor:default}
+#floatclip-files svg{width:17px;height:17px;flex:none}
+#floatclip-files .fx-icon-button{display:grid;place-items:center;width:30px;height:30px;padding:6px;flex:none}
+#floatclip-files .fx-primary{background:var(--fx-tint);color:var(--fx-accent)}
+#floatclip-files .fx-danger{color:var(--fx-danger)}
+#floatclip-files .fx-chrome{height:37px;display:flex;align-items:center;gap:8px;padding:4px 12px;border-bottom:1px solid var(--fx-line);font-size:12px}
+#floatclip-files .fx-logo{display:grid;place-items:center;background:var(--fx-accent);color:var(--fx-bg);width:21px;height:21px;border-radius:5px}
+#floatclip-files .fx-logo svg{width:14px;height:14px}
+#floatclip-files .fx-chrome select{margin-left:auto;font-size:11px;max-width:105px;border:0;background:transparent;color:var(--fx-muted);padding:3px}
+#floatclip-files option{background:var(--fx-card);color:var(--fx-text)}
+#floatclip-files .fx-heading{padding:17px 22px 12px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--fx-line)}
+#floatclip-files .fx-heading h2{margin:0 0 3px;font-size:20px;font-weight:500;line-height:1.3}
+#floatclip-files .fx-heading p{margin:0;color:var(--fx-muted);font-size:12px}
+#floatclip-files .fx-connected{display:inline-block;width:6px;height:6px;border-radius:50%;background:light-dark(#218663,#83d9be);margin-right:5px}
+#floatclip-files .fx-heading .fx-send{margin-left:auto;white-space:nowrap;font-size:12px}
+#floatclip-files .fx-content{padding:16px 22px 24px}
+#floatclip-files .fx-legend{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;color:var(--fx-muted);font-size:11px;margin-bottom:18px}
+#floatclip-files .fx-legend span{display:flex;gap:6px;align-items:center}
+#floatclip-files .fx-key{width:13px;height:16px;border-radius:3px;background:var(--fx-accent)}
+#floatclip-files .fx-key.fx-key-missing{background:transparent;border:1px dashed var(--fx-muted)}
+#floatclip-files .fx-day{text-align:center;color:var(--fx-muted);font-size:11px;margin:0 0 18px}
+#floatclip-files .fx-message{display:flex;align-items:flex-start;gap:10px;margin-bottom:var(--fx-gap)}
+#floatclip-files .fx-message.fx-out{flex-direction:row-reverse}
+#floatclip-files .fx-avatar{height:28px;width:28px;display:grid;place-items:center;flex:none;border:1px solid var(--fx-line);border-radius:7px;background:var(--fx-card);color:var(--fx-muted);margin-top:22px}
+#floatclip-files .fx-avatar svg{width:15px;height:15px}
+#floatclip-files .fx-message-main{width:min(400px,calc(100% - 38px));min-width:0}
+#floatclip-files .fx-sender{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--fx-muted);margin:0 2px 5px;flex-wrap:wrap}
+#floatclip-files .fx-out .fx-sender{justify-content:flex-end}
+#floatclip-files .fx-file-card{position:relative;background:var(--fx-card);border:1px solid var(--fx-line);border-radius:var(--fx-bubble-radius);overflow:visible}
+#floatclip-files .fx-out .fx-file-card{background:var(--fx-sent)}
+#floatclip-files .fx-summary{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;padding:14px;text-align:left;border-radius:var(--fx-bubble-radius)}
+#floatclip-files .fx-summary:hover{background:transparent}
+#floatclip-files .fx-file-info{display:block;min-width:0;flex:1}
+#floatclip-files .fx-file-name{font-size:14px;font-weight:500;display:block;overflow-wrap:anywhere;margin-bottom:6px}
+#floatclip-files .fx-file-meta{display:block;color:var(--fx-muted);font-size:11px}
+#floatclip-files .fx-document-icon{--fx-file-color:light-dark(#586980,#8796af);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;flex:none;width:var(--fx-icon-size);height:calc(var(--fx-icon-size) * 1.16);border-radius:6px;background:var(--fx-file-color);color:#fff;border:1.5px solid transparent;position:relative;font-size:12px;font-weight:500;letter-spacing:.2px}
+#floatclip-files .fx-document-icon[data-type=pdf]{--fx-file-color:light-dark(#c64450,#ae4753)}
+#floatclip-files .fx-document-icon[data-type=docx]{--fx-file-color:light-dark(#2d67bd,#3568ad)}
+#floatclip-files .fx-document-icon[data-type=xlsx]{--fx-file-color:light-dark(#247c5d,#287558)}
+#floatclip-files .fx-document-icon[data-type=image]{--fx-file-color:light-dark(#8061b4,#795cac)}
+#floatclip-files .fx-document-icon[data-type=zip]{--fx-file-color:light-dark(#a56b22,#97601f)}
+#floatclip-files .fx-document-icon.fx-missing{background:transparent;border-color:var(--fx-file-color);border-style:dashed;color:var(--fx-file-color)}
+#floatclip-files .fx-document-icon.fx-missing[data-type=pdf]{color:light-dark(#b83e4a,#f19ba5);border-color:currentColor}
+#floatclip-files .fx-document-icon.fx-missing[data-type=docx]{color:light-dark(#2d67bd,#93baff);border-color:currentColor}
+#floatclip-files .fx-document-icon.fx-missing[data-type=xlsx]{color:light-dark(#247c5d,#91d8b6);border-color:currentColor}
+#floatclip-files .fx-document-icon svg{width:20px;height:20px}
+#floatclip-files .fx-file-state{padding:0 14px 10px;color:var(--fx-muted);font-size:11px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#floatclip-files .fx-file-state svg{width:12px;height:12px}
+#floatclip-files .fx-file-actions{display:flex;align-items:center;gap:2px;flex-wrap:wrap;padding:5px 7px;border-top:1px solid var(--fx-line)}
+#floatclip-files .fx-file-actions button{font-size:12px;padding:4px 7px;min-height:28px}
+#floatclip-files .fx-file-actions .fx-more{margin-left:auto;min-width:28px}
+#floatclip-files .fx-progress{height:3px;border-radius:2px;overflow:hidden;background:var(--fx-tint);margin:0 14px 10px}
+#floatclip-files .fx-progress span{display:block;height:100%;background:var(--fx-accent);transition:width .2s linear}
+#floatclip-files .fx-forward-note{font-size:11px;color:var(--fx-muted);margin:5px 2px 0}
+#floatclip-files .fx-menu{position:absolute;right:7px;bottom:36px;z-index:5;padding:4px;min-width:140px;border:1px solid var(--fx-line);border-radius:6px;background:var(--fx-card);box-shadow:0 6px 20px #0003}
+#floatclip-files .fx-menu button{display:block;text-align:left;width:100%}
+#floatclip-files .fx-composer{border-top:1px solid var(--fx-line);display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:13px 18px;color:var(--fx-muted);font-size:11px}
+#floatclip-files .fx-composer button{font-size:12px;display:flex;align-items:center;gap:6px}
+#floatclip-files .fx-composer span{margin-left:auto}
+#floatclip-files .fx-view-bar{display:flex;align-items:center;gap:8px;margin:0 0 14px}
+#floatclip-files .fx-view-bar strong{font-size:16px;font-weight:500;overflow-wrap:anywhere}
+#floatclip-files .fx-view-bar button{font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap}
+#floatclip-files .fx-preview-head{display:flex;gap:14px;align-items:center;margin-bottom:16px}
+#floatclip-files .fx-preview-head h3{font-size:15px;font-weight:500;margin:0 0 4px;overflow-wrap:anywhere}
+#floatclip-files .fx-preview-head p{font-size:12px;color:var(--fx-muted);margin:0}
+#floatclip-files .fx-view-actions{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:12px 0 16px}
+#floatclip-files .fx-view-actions button{font-size:12px}
+#floatclip-files .fx-content-preview{padding:22px 25px;min-height:260px;max-width:480px;margin:0 auto 16px;color:var(--fx-preview-text);background:var(--fx-preview-paper);border:1px solid var(--fx-preview-line);border-radius:4px;box-shadow:0 4px 12px #00000008}
+#floatclip-files .fx-content-preview h4{font-size:20px;font-weight:500;margin:10px 0 14px}
+#floatclip-files .fx-content-preview p{font-size:12px;line-height:1.8;margin:10px 0}
+#floatclip-files .fx-content-preview small{font-size:11px;color:var(--fx-muted)}
+#floatclip-files .fx-paper-rule{height:1px;background:var(--fx-preview-line);margin:15px 0}
+#floatclip-files .fx-content-preview table{font-size:12px;width:100%;border-collapse:collapse;table-layout:fixed;margin-top:16px}
+#floatclip-files .fx-content-preview th,#floatclip-files .fx-content-preview td{border:1px solid var(--fx-preview-line);padding:8px 5px;text-align:left;overflow-wrap:anywhere;font-weight:400}
+#floatclip-files .fx-content-preview th{background:var(--fx-tint)}
+#floatclip-files .fx-unavailable{min-height:260px;display:flex;flex-direction:column;gap:14px;align-items:center;justify-content:center;color:var(--fx-muted);font-size:12px;text-align:center;padding:20px;background:var(--fx-card);border:1px solid var(--fx-line);border-radius:7px;margin-bottom:16px}
+#floatclip-files .fx-properties{margin:0;padding:0;border-top:1px solid var(--fx-line)}
+#floatclip-files .fx-property{display:grid;grid-template-columns:88px minmax(0,1fr);gap:12px;padding:10px 0;border-bottom:1px solid var(--fx-line);font-size:12px}
+#floatclip-files .fx-property dt{color:var(--fx-muted)}
+#floatclip-files .fx-property dd{margin:0;overflow-wrap:anywhere}
+#floatclip-files .fx-form{display:grid;gap:8px;margin:16px 0}
+#floatclip-files .fx-form label{font-size:12px;color:var(--fx-muted)}
+#floatclip-files .fx-form input,#floatclip-files .fx-form select{width:100%;padding:9px 10px;border:1px solid var(--fx-line);border-radius:6px;background:var(--fx-card);color:var(--fx-text);min-width:0;font-size:13px}
+#floatclip-files .fx-note{font-size:12px;color:var(--fx-muted);padding:10px 12px;background:var(--fx-tint);border-radius:6px;margin:12px 0}
+#floatclip-files .fx-target{display:flex;align-items:center;gap:10px;position:relative;border:1px solid var(--fx-line);background:var(--fx-card);border-radius:7px;padding:13px;margin:6px 0;font-size:13px}
+#floatclip-files .fx-target input{accent-color:var(--fx-accent)}
+#floatclip-files .fx-target small{display:block;color:var(--fx-muted);font-size:11px;margin-top:2px}
+#floatclip-files .fx-target svg{color:var(--fx-muted)}
+#floatclip-files .fx-error{font-size:12px;color:var(--fx-danger);margin:10px 0}
+#floatclip-files .fx-toast{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 20px;padding:10px 12px;border:1px solid var(--fx-line);border-radius:6px;background:var(--fx-card);font-size:12px;color:var(--fx-text)}
+#floatclip-files .fx-toast button{min-height:24px;padding:3px;display:grid;place-items:center}
+#floatclip-files .fx-mobile-status{display:none}
+#floatclip-files [data-device=phone] .fx-mobile-status{display:flex;align-items:center;justify-content:space-between;font-size:11px;padding:8px 17px 3px;color:var(--fx-muted)}
+#floatclip-files [data-device=phone] .fx-chrome{display:none}
+#floatclip-files [data-device=phone] .fx-heading{padding:13px 14px;flex-wrap:wrap}
+#floatclip-files [data-device=phone] .fx-heading h2{font-size:18px}
+#floatclip-files [data-device=phone] .fx-content{padding:15px 12px 20px}
+#floatclip-files [data-device=phone] .fx-avatar{width:25px;height:25px}
+#floatclip-files [data-device=phone] .fx-message{gap:7px}
+#floatclip-files [data-device=phone] .fx-message-main{width:calc(100% - 32px)}
+#floatclip-files [data-device=phone] .fx-file-name{font-size:13px}
+#floatclip-files [data-device=phone] .fx-summary{gap:10px;padding:12px}
+#floatclip-files [data-device=phone] .fx-content-preview{padding:18px 14px}
+@media(max-width:480px){#floatclip-files .fx-stage{min-height:1120px;padding-left:2px;padding-right:2px}#floatclip-files .fx-heading{padding:13px 12px;gap:8px;flex-wrap:wrap}#floatclip-files .fx-content{padding:13px 10px 20px}#floatclip-files .fx-avatar{display:none}#floatclip-files .fx-message-main,#floatclip-files [data-device=phone] .fx-message-main{width:100%}#floatclip-files .fx-summary{gap:10px;padding:12px}#floatclip-files .fx-file-name{font-size:13px}#floatclip-files .fx-legend{gap:8px}#floatclip-files .fx-composer{padding:12px}#floatclip-files .fx-content-preview{padding:18px 12px}#floatclip-files .fx-property{grid-template-columns:72px minmax(0,1fr);gap:8px}#floatclip-files .fx-preview-head{gap:10px}}
+@media(pointer:coarse){#floatclip-files .fx-file-actions button,#floatclip-files .fx-view-actions button,#floatclip-files .fx-heading button{min-height:42px}#floatclip-files .fx-form input,#floatclip-files .fx-form select{font-size:16px}}
+@media(prefers-reduced-motion:reduce){#floatclip-files *{transition:none!important}}
+</style>
+<script>
+(()=>{
+  const root=document.getElementById('floatclip-files');
+  const devices={pc:'这台电脑',phone:'我的手机',work:'工作电脑'};
+  const files=[
+    {id:'pdf',name:'FloatClip 设计说明.pdf',kind:'pdf',bytes:2526848,origin:'phone',target:'pc',created:'2026-10-21 20:12',modified:'2026-10-22 14:08',sent:'2026-10-22 16:24',attribute:'只读文档',pages:12,cache:{phone:true,pc:false},received:{},saved:{},forwarded:[]},
+    {id:'word',name:'会议纪要与下一步安排.docx',kind:'docx',bytes:63841,origin:'pc',target:'phone',created:'2026-10-22 15:02',modified:'2026-10-22 16:26',sent:'2026-10-22 16:28',attribute:'可编辑文档',pages:3,cache:{phone:false,pc:true},received:{},saved:{},forwarded:[]},
+    {id:'excel',name:'项目进度与预算.xlsx',kind:'xlsx',bytes:184320,origin:'phone',target:'pc',created:'2026-10-20 10:32',modified:'2026-10-22 15:46',sent:'2026-10-22 16:31',attribute:'3 个工作表',pages:3,cache:{phone:true,pc:true},received:{pc:'2026-10-22 16:31'},saved:{},forwarded:[]}
+  ];
+  const types={pdf:{title:'PDF 文档',label:'PDF',icon:'file-text'},docx:{title:'Word 文档',label:'W',icon:'file-text'},xlsx:{title:'Excel 工作簿',label:'X',icon:'file-spreadsheet'},image:{title:'图片',label:'IMG',icon:'image'},zip:{title:'压缩文件',label:'ZIP',icon:'file-archive'},other:{title:'文件',label:'FILE',icon:'file'}};
+  const jobs=new Map(),controllers=[];
+  const saved=window.openai?.widgetState?.privateContent||{};
+  const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const icon=name=>'<i data-lucide="'+name+'" aria-hidden="true"></i>';
+  const stamp=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
+  const size=bytes=>bytes<1024?bytes+' B':bytes<1048576?(bytes/1024).toFixed(1)+' KiB':(bytes/1048576).toFixed(2)+' MiB';
+  const find=id=>files.find(f=>f.id===id);
+  const key=(file,device)=>file.id+':'+device;
+  function notify(){controllers.forEach(c=>c.render());}
+  function download(file,device,after){
+    if(file.cache[device]){if(after)after();return;}
+    const existing=jobs.get(key(file,device));if(existing?.phase==='downloading'){if(after)existing.after=after;return;}
+    const job={phase:'downloading',progress:0,after,timer:null};jobs.set(key(file,device),job);
+    job.timer=setInterval(()=>{job.progress=Math.min(100,job.progress+9);if(job.progress===100){clearInterval(job.timer);job.phase='done';file.cache[device]=true;file.received[device]=stamp();const finish=job.after;job.after=null;if(finish)finish();}notify();},240);notify();
+  }
+  function cancel(file,device){const job=jobs.get(key(file,device));if(job?.phase==='downloading'){clearInterval(job.timer);job.phase='canceled';job.after=null;}notify();}
+  root.querySelectorAll('.fx-stage').forEach((stage,index)=>{
+    const local=stage.dataset.device,peer=local==='pc'?'phone':'pc';
+    const state={view:'list',selected:'pdf',theme:['system','light','dark','tokyo-night'].includes(saved.filesTheme)?saved.filesTheme:'system',menu:'',toast:'',folder:local==='pc'?'下载 / FloatClip':'下载 / FloatClip',saveName:'',target:'work',error:'',radius:9,gap:17,iconSize:48,sharing:false};
+    stage.innerHTML='<div class="fx-app" data-device="'+local+'" aria-label="'+(local==='pc'?'FloatClip 电脑文件页':'FloatClip 手机文件页')+'"><div class="fx-mobile-status"><span>16:35</span><span>Wi-Fi · 86%</span></div><div class="fx-chrome"><span class="fx-logo">'+icon('layers')+'</span><span>FloatClip</span><select aria-label="外观"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option><option value="tokyo-night">东京夜色</option></select></div><header class="fx-heading"><div><h2>文件传输</h2><p><span class="fx-connected"></span>'+devices[peer]+' · 局域网已连接</p></div><button class="fx-primary fx-send cursor-interaction" data-action="choose">'+icon('paperclip')+' 发送文件</button></header><main class="fx-content"></main><div class="fx-toast" role="status" hidden></div><footer class="fx-composer"><button class="cursor-interaction" data-action="choose">'+icon('folder-up')+' 选择文件</button><span>单文件上限 64 MiB</span></footer><input type="file" aria-label="选择发送文件" hidden></div>';
+    const app=stage.querySelector('.fx-app'),main=app.querySelector('main'),toast=app.querySelector('.fx-toast'),picker=app.querySelector('input[type=file]');
+    const button=(label,action,id='',kind='')=>'<button class="cursor-interaction '+kind+'" data-action="'+action+'"'+(id?' data-id="'+id+'"':'')+'>'+label+'</button>';
+    function glyph(file,available){const type=types[file.kind]||types.other;return '<span class="fx-document-icon '+(available?'':'fx-missing')+'" data-type="'+file.kind+'" role="img" aria-label="'+type.title+'，'+(available?'本机已有':'尚未下载')+'">'+icon(type.icon)+'<span>'+type.label+'</span></span>';}
+    function status(file){
+      if(file.invited===false)return '本机原文件 · 尚未发送';
+      const job=jobs.get(key(file,local));if(job?.phase==='downloading')return '下载中 · '+job.progress+'%';
+      if(file.saved[local])return '已另存为 · '+file.saved[local].folder;
+      if(file.cache[local])return file.origin===local?(file.cache[peer]?'本机原文件 · 对方已接收':'本机原文件 · 待对方接收'):'已下载 · 校验通过';
+      return job?.phase==='canceled'?'下载已取消 · 可重新下载':'未下载 · 原文件在'+devices[file.origin];
+    }
+    function progress(file){const job=jobs.get(key(file,local));return job?.phase==='downloading'?'<div class="fx-progress" role="progressbar" aria-label="下载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+job.progress+'"><span style="width:'+job.progress+'%"></span></div>':'';}
+    function properties(file,brief=false){const type=types[file.kind]||types.other,rows=[['文件名',file.name],['类型',type.title],['大小',size(file.bytes)+'（'+file.bytes.toLocaleString('zh-CN')+' 字节）'],['属性',file.attribute],['来源',devices[file.origin]],['创建时间',file.created],['修改时间',file.modified],['发送时间',file.sent],['本机接收',file.origin===local?'本机原文件':file.received[local]||'尚未下载'],['保存位置',file.saved[local]?file.saved[local].folder+' / '+file.saved[local].name:file.cache[local]?(file.origin===local?'本机原位置':'FloatClip 接收缓存'):'本机无文件']];return '<dl class="fx-properties">'+rows.filter(([title])=>!brief||['属性','来源','修改时间','保存位置'].includes(title)).map(([title,value])=>'<div class="fx-property"><dt>'+title+'</dt><dd>'+escape(value)+'</dd></div>').join('')+'</dl>';}
+    function paper(file){
+      if(file.id.startsWith('local-'))return '<div class="fx-unavailable">'+glyph(file,true)+'<strong>'+escape(file.name)+'</strong><span>已读取文件信息；此预览不读取实际文件内容。</span></div>';
+      if(file.kind==='xlsx')return '<div class="fx-content-preview" aria-label="Excel 内容预览"><small>XLSX · 工作表：项目进度</small><h4>项目进度与预算</h4><table><thead><tr><th>事项</th><th>预算</th><th>状态</th></tr></thead><tbody><tr><td>界面整理</td><td>¥ 1,200</td><td>已完成</td></tr><tr><td>设备互通</td><td>¥ 800</td><td>进行中</td></tr><tr><td>文档交接</td><td>¥ 300</td><td>待确认</td></tr></tbody></table><p>工作表 1 / 3 · 内容示例</p></div>';
+      if(file.kind==='docx')return '<div class="fx-content-preview" aria-label="Word 内容预览"><small>WORD · 第 1 页 / 共 3 页</small><h4>会议纪要与下一步安排</h4><div class="fx-paper-rule"></div><p>一、界面与交互<br>缩小顶部控件，使用左侧导航，在同一窗口中切换内容。</p><p>二、文件收发<br>按当前设备区分文件状态，预览后可另存为或转发。</p><p>三、后续安排<br>完成实机验证后，再准备正式发布。</p><small>文档内容示例</small></div>';
+      if(file.kind==='pdf')return '<div class="fx-content-preview" aria-label="PDF 内容预览"><small>FLOATCLIP · 产品文档</small><h4>设计说明</h4><p>让文件和片段，在设备之间自然流动。</p><div class="fx-paper-rule"></div><p>文件以会话卡片呈现。文件名、类型和大小始终可见，下载状态与对方接收状态分别显示。</p><p>已下载文件可查看、另存为及转发；未下载文件保留文件信息和虚线图标。</p><small>第 1 页 / 共 12 页 · 内容示例</small></div>';
+      return '<div class="fx-unavailable">'+glyph(file,true)+'<strong>'+escape(file.name)+'</strong><span>此文件类型暂不提供内容预览</span></div>';
+    }
+    function header(file,title){return '<div class="fx-view-bar">'+button(icon('arrow-left')+' 返回文件','back')+'<strong>'+title+'</strong></div><div class="fx-preview-head">'+glyph(file,!!file.cache[local])+'<div><h3>'+escape(file.name)+'</h3><p>'+types[file.kind].title+' · '+size(file.bytes)+'</p></div></div>';}
+    function list(){return '<div class="fx-legend"><span>'+devices[local]+'上的文件</span><span><b class="fx-key"></b>本机已有 <b class="fx-key fx-key-missing"></b>未下载</span></div><div class="fx-day">2026 年 10 月 22 日</div>'+files.filter(file=>file.origin===local||file.target===local&&file.invited!==false).map(file=>{
+      const available=!!file.cache[local],outgoing=file.origin===local,job=jobs.get(key(file,local)),busy=job?.phase==='downloading';
+      const controls=busy?button('取消下载','cancel',file.id):available?button('预览','preview',file.id,'fx-primary')+button('另存为','save',file.id):button('下载','download',file.id,'fx-primary');
+      return '<article class="fx-message '+(outgoing?'fx-out':'')+'" data-file="'+file.id+'"><div class="fx-avatar">'+icon(outgoing?(local==='pc'?'monitor':'smartphone'):(peer==='pc'?'monitor':'smartphone'))+'</div><div class="fx-message-main"><div class="fx-sender"><span>'+(outgoing?'我 → '+devices[file.target]:devices[file.origin])+'</span><time datetime="'+file.sent.replace(' ','T')+'">'+file.sent.slice(11)+'</time></div><div class="fx-file-card"><button class="fx-summary cursor-interaction" data-action="preview" data-id="'+file.id+'" aria-label="查看 '+escape(file.name)+'"><span class="fx-file-info"><span class="fx-file-name">'+escape(file.name)+'</span><span class="fx-file-meta">'+(types[file.kind]||types.other).title+' · '+size(file.bytes)+(file.kind==='pdf'?' · '+file.pages+' 页':'')+'</span></span>'+glyph(file,available)+'</button><div class="fx-file-state">'+icon(available?'check':'download')+'<span>'+escape(status(file))+'</span></div>'+progress(file)+'<div class="fx-file-actions">'+controls+button('转发','forward',file.id)+'<button class="fx-more cursor-interaction" data-action="more" data-id="'+file.id+'" aria-label="更多文件操作">'+icon('ellipsis')+'</button></div>'+(state.menu===file.id?'<div class="fx-menu">'+button('文件属性','properties',file.id)+button(available?'另存为':'下载并另存为','save',file.id)+button('转发到设备','forward',file.id)+button('通过其他应用分享','share',file.id)+'</div>':'')+'</div>'+(file.forwarded.length?'<div class="fx-forward-note">已转发至 '+file.forwarded.map(id=>devices[id]).join('、')+'</div>':'')+'</div></article>';
+    }).join('');}
+    function view(){
+      const file=find(state.selected);if(state.view==='list')return list();if(!file)return '';
+      if(state.view==='properties')return header(file,'文件属性')+properties(file);
+      if(state.view==='preview')return header(file,'文件预览')+'<div class="fx-view-actions">'+button('另存为','save',file.id,'fx-primary')+button('转发','forward',file.id)+button('属性','properties',file.id)+'</div>'+(file.cache[local]?paper(file):'<div class="fx-unavailable">'+glyph(file,false)+'<span>'+escape(status(file))+'</span>'+progress(file)+(jobs.get(key(file,local))?.phase==='downloading'?button('取消下载','cancel',file.id):button('下载后预览','download',file.id,'fx-primary'))+'</div>')+properties(file,true);
+      if(state.view==='save'){
+        const busy=jobs.get(key(file,local))?.phase==='downloading';
+        return header(file,'另存为')+(!file.cache[local]?'<div class="fx-note">先下载到'+devices[local]+'，再保存到所选位置。</div>':'')+'<div class="fx-form"><label for="fx-folder-'+index+'">保存位置</label><select id="fx-folder-'+index+'" aria-label="保存位置" data-field="folder" '+(busy?'disabled':'')+'>'+['下载 / FloatClip',local==='pc'?'桌面':'文档','文档 / FloatClip'].map(folder=>'<option '+(state.folder===folder?'selected':'')+'>'+folder+'</option>').join('')+'</select><label for="fx-name-'+index+'">文件名</label><input id="fx-name-'+index+'" aria-label="另存为文件名" data-field="saveName" value="'+escape(state.saveName)+'" '+(busy?'disabled':'')+'></div>'+progress(file)+(state.error?'<p class="fx-error" role="alert">'+escape(state.error)+'</p>':'')+'<div class="fx-view-actions"><button class="fx-primary cursor-interaction" data-action="save-confirm" '+(busy?'disabled':'')+'>'+(busy?'正在下载…':file.cache[local]?'保存':'下载并保存')+'</button>'+button('返回','back')+'</div>';
+      }
+      if(state.view==='forward'){
+        const busy=jobs.get(key(file,local))?.phase==='downloading'||state.sharing;
+        return header(file,'转发文件')+(!file.cache[local]?'<div class="fx-note">将先下载到'+devices[local]+'，再转发给目标设备。</div>':'')+'<p class="fx-note">转发到已配对设备</p>'+Object.keys(devices).filter(id=>id!==local).map(id=>'<label class="fx-target"><input type="radio" name="fx-target-'+index+'" value="'+id+'" data-field="target" '+(state.target===id?'checked':'')+' '+(busy?'disabled':'')+'>'+icon(id==='phone'?'smartphone':'monitor')+'<span>'+devices[id]+'<small>已配对 · 局域网可用</small></span></label>').join('')+progress(file)+'<div class="fx-view-actions"><button class="fx-primary cursor-interaction" data-action="forward-confirm" '+(busy?'disabled':'')+'>'+(state.sharing?'正在转发…':busy?'正在下载…':file.cache[local]?'转发':'下载并转发')+'</button>'+button('其他应用分享','share',file.id)+'</div>';
+      }
+      if(state.view==='share')return header(file,'通过其他应用分享')+(!file.cache[local]?'<div class="fx-note">下载完成后，可打开系统分享菜单。</div>':'')+'<div class="fx-view-actions">'+button('微信','share-app',file.id)+button('邮件','share-app',file.id)+button('更多应用','share-app',file.id)+'</div>';
+      if(state.view==='send')return header(file,'发送文件')+'<p class="fx-note">发送到 '+devices[peer]+'。对方确认接收后开始传输。</p><div class="fx-view-actions">'+button('发送','send-confirm',file.id,'fx-primary')+button('取消','back')+'</div>'+properties(file);
+      return '';
+    }
+    function persist(){const file=find(state.selected);window.openai?.setWidgetState?.({modelContent:{product:'FloatClip 文件页',platform:local==='pc'?'电脑':'手机',theme:state.theme,view:state.view,fileType:file?.kind||null,downloaded:file?!!file.cache[local]:null},privateContent:{filesTheme:state.theme}}).catch(()=>{});}
+    function render(){
+      const active=app.contains(document.activeElement)?document.activeElement:null,field=active?.dataset.field,fieldValue=active?.value,selection=field==='saveName'?[active.selectionStart,active.selectionEnd]:null;
+      app.dataset.theme=state.theme;app.style.colorScheme=state.theme==='system'?'inherit':state.theme==='tokyo-night'?'dark':state.theme;app.style.setProperty('--fx-bubble-radius',state.radius+'px');app.style.setProperty('--fx-gap',state.gap+'px');app.style.setProperty('--fx-icon-size',state.iconSize+'px');
+      app.querySelector('select[aria-label="外观"]').value=state.theme;main.innerHTML=view();
+      toast.hidden=!state.toast;toast.innerHTML='<span>'+escape(state.toast)+'</span><button data-action="dismiss" aria-label="关闭通知">'+icon('x')+'</button>';
+      if(globalThis.lucide)lucide.createIcons({attrs:{width:17,height:17}});
+      if(field){const input=main.querySelector('[data-field="'+field+'"]'+(field==='target'?'[value="'+fieldValue+'"]':''));if(input&&!input.disabled){input.focus({preventScroll:true});if(selection)input.setSelectionRange(selection[0],selection[1]);}}
+    }
+    function open(file,view){state.selected=file.id;state.view=view;state.menu='';state.error='';state.toast='';if(view==='save')state.saveName=file.saved[local]?.name||file.name;render();persist();}
+    function save(file){const name=state.saveName.trim();if(!name||/[\\/:*?"<>|]/.test(name)||/[. ]$/.test(name)){state.error='请使用有效的文件名，避免斜杠或末尾空格。';render();return;}const folder=state.folder;download(file,local,()=>{file.saved[local]={folder,name,time:stamp()};state.view='list';state.toast='已另存为 '+folder+' / '+name+'（演示）';persist();});notify();}
+    function forward(file){const target=state.target;download(file,local,()=>{state.sharing=true;render();setTimeout(()=>{file.cache[target]=true;file.received[target]=stamp();if(!file.forwarded.includes(target))file.forwarded.push(target);state.sharing=false;if(state.selected===file.id&&state.view==='forward')state.view='list';state.toast='已转发至'+devices[target]+'（演示）';notify();persist();},700);});}
+    app.addEventListener('change',e=>{if(e.target.matches('select[aria-label="外观"]')){state.theme=e.target.value;render();persist();}const field=e.target.dataset.field;if(field){state[field]=e.target.value;}});
+    app.addEventListener('input',e=>{if(e.target.dataset.field)state[e.target.dataset.field]=e.target.value;});
+    app.addEventListener('click',e=>{
+      const b=e.target.closest('button');if(!b)return;const action=b.dataset.action,file=find(b.dataset.id||state.selected);
+      if(action==='choose'){picker.click();return;}
+      if(action==='dismiss'){state.toast='';render();return;}
+      if(action==='back'){state.view='list';state.menu='';state.error='';state.toast='';render();persist();return;}
+      if(!file)return;
+      if(action==='preview'||action==='properties'||action==='save'||action==='forward'||action==='share'){open(file,action);return;}
+      if(action==='more'){state.menu=state.menu===file.id?'':file.id;state.selected=file.id;render();return;}
+      if(action==='download'){state.selected=file.id;download(file,local,()=>{state.toast='已下载并校验 '+file.name+'（演示）';persist();});return;}
+      if(action==='cancel'){cancel(file,local);state.toast='下载已取消，原文件仍在'+devices[file.origin];render();return;}
+      if(action==='save-confirm'){save(file);return;}
+      if(action==='forward-confirm'){forward(file);return;}
+      if(action==='share-app'){const label=b.textContent;download(file,local,()=>{state.toast='打开'+label+'分享菜单的交互演示，尚未发送';state.view='list';notify();});return;}
+      if(action==='send-confirm'){file.invited=true;file.sent=stamp();state.view='list';state.toast='已发送文件邀请，等待'+devices[peer]+'接收（演示）';notify();persist();}
+    });
+    main.addEventListener('contextmenu',e=>{const card=e.target.closest('[data-file]');if(card){e.preventDefault();state.menu=card.dataset.file;state.selected=card.dataset.file;render();}});
+    picker.addEventListener('change',()=>{const selected=picker.files?.[0];if(!selected)return;if(selected.size>64*1024*1024){state.toast='当前单文件上限为 64 MiB';render();return;}const ext=selected.name.split('.').pop().toLowerCase();const kind=ext==='pdf'?'pdf':['doc','docx'].includes(ext)?'docx':['xls','xlsx','csv'].includes(ext)?'xlsx':['png','jpg','jpeg','webp'].includes(ext)?'image':['zip','7z','rar'].includes(ext)?'zip':'other';const now=stamp();const file={id:'local-'+Date.now()+'-'+index,name:selected.name,kind,bytes:selected.size,origin:local,target:peer,created:'未知',modified:new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Shanghai',dateStyle:'short',timeStyle:'short'}).format(new Date(selected.lastModified)),sent:now,attribute:'普通文件',invited:false,pages:1,cache:{[local]:true},received:{},saved:{},forwarded:[]};files.push(file);open(file,'send');});
+    render();controllers.push({state,render});
+    if(globalThis.Tweak){const tweak=new Tweak({container:app,onChange:render});tweak.addSlider(state,'radius',{label:'文件卡片圆角',min:5,max:13,step:1,unit:'px'});tweak.addSlider(state,'iconSize',{label:'文件图标大小',min:40,max:60,step:2,unit:'px'});tweak.addSlider(state,'gap',{label:'消息间距',min:10,max:24,step:2,unit:'px'});}
+  });
+  window.addEventListener('openai:set_globals',event=>{const theme=event.detail?.globals?.widgetState?.privateContent?.filesTheme;if(['system','light','dark','tokyo-night'].includes(theme))controllers.forEach(c=>{c.state.theme=theme;c.render();});});
+})();
+</script>

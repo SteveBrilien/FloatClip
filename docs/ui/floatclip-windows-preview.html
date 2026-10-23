@@ -1,0 +1,145 @@
+<div id="floatclip-review" class="viz-carousel viz-dotted-background" aria-label="FloatClip Windows 交互预览" data-previous-label="上一个方案" data-next-label="下一个方案">
+  <section data-variant="轻量悬浮" aria-label="轻量悬浮方案"><div class="fc-stage" data-layout="compact"></div></section>
+  <section data-variant="展开查看" aria-label="展开查看方案" hidden><div class="fc-stage" data-layout="expanded"></div></section>
+</div>
+<style>
+#floatclip-review [hidden]{display:none!important}
+#floatclip-review .fc-stage{min-height:740px;display:flex;justify-content:center;align-items:flex-start;padding:18px 8px 36px;box-sizing:border-box}
+#floatclip-review .fc-app{--fc-bg:light-dark(#f5f6f8,#181b20);--fc-surface:light-dark(#fff,#24282f);--fc-text:light-dark(#20252e,#eef1f6);--fc-muted:light-dark(#697586,#a3adbc);--fc-line:light-dark(#e4e8ee,#3a424e);--fc-tint:light-dark(#eaf1fd,#293a52);--fc-accent:light-dark(#366ac7,#91bbff);--fc-danger:light-dark(#b44952,#f5a6b1);font:14px/1.5 "Segoe UI","Microsoft YaHei UI",sans-serif;width:440px;max-width:100%;min-height:660px;position:relative;color:var(--fc-text);background:var(--fc-bg);border:1px solid var(--fc-line);border-radius:16px;box-shadow:0 18px 52px light-dark(#17233118,#0005);padding:16px;box-sizing:border-box;overflow:clip}
+#floatclip-review .fc-app *{box-sizing:border-box}
+#floatclip-review .fc-app[data-appearance="tokyo-night"]{--fc-bg:#1a1b26;--fc-surface:#24283b;--fc-text:#c0caf5;--fc-muted:#9aa5ce;--fc-line:#414868;--fc-tint:#283457;--fc-accent:#7aa2f7;--fc-danger:#f7768e}
+#floatclip-review .fc-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;min-height:34px;padding-right:116px}
+#floatclip-review .fc-logo{width:28px;height:28px;background:var(--fc-accent);border-radius:8px;display:grid;place-items:center;color:var(--fc-surface)}
+#floatclip-review .fc-title{font-size:19px;font-weight:600;white-space:nowrap}
+#floatclip-review .fc-tools{position:absolute;right:16px;top:16px;display:flex;gap:4px}
+#floatclip-review button{font:inherit;color:inherit;background:transparent;border:0;border-radius:7px;padding:7px 10px;min-height:32px}
+#floatclip-review button:hover{background:var(--fc-tint)}
+#floatclip-review .fc-icon{display:grid;place-items:center;width:32px;height:32px;padding:6px;color:var(--fc-muted)}
+#floatclip-review .fc-icon svg{width:18px;height:18px}
+#floatclip-review .fc-search{display:flex;gap:10px;align-items:center;background:var(--fc-surface);border:1px solid var(--fc-line);border-radius:10px;padding:0 12px;color:var(--fc-muted)}
+#floatclip-review .fc-search svg{width:18px;height:18px;flex:none}
+#floatclip-review input[type=search]{font:inherit;font-size:15px;min-width:0;width:100%;background:transparent;border:0;color:var(--fc-text);padding:11px 0;outline-offset:3px}
+#floatclip-review .fc-filters{display:flex;gap:4px;align-items:center;margin:12px 0}
+#floatclip-review .fc-filters button{font-size:13px;color:var(--fc-muted)}
+#floatclip-review .fc-filters button[aria-pressed=true],#floatclip-review .fc-primary{background:var(--fc-tint);color:var(--fc-accent)}
+#floatclip-review .fc-clear{margin-left:auto;white-space:nowrap}
+#floatclip-review .fc-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--fc-tint);border-radius:9px;padding:10px 12px;margin:0 0 12px;font-size:12px;color:var(--fc-accent)}
+#floatclip-review .fc-banner button{white-space:nowrap;font-size:12px}
+#floatclip-review .fc-list{display:grid;gap:10px}
+#floatclip-review .fc-row{position:relative;overflow:clip;border-radius:11px;touch-action:pan-y;background:var(--fc-tint)}
+#floatclip-review .fc-card{position:relative;background:var(--fc-surface);border:1px solid transparent;border-radius:11px;padding:11px 14px 13px;transition:transform .16s ease;min-height:102px}
+#floatclip-review .fc-row[data-swipe=protect] .fc-card{transform:translateX(78px)}
+#floatclip-review .fc-row[data-swipe=more] .fc-card{transform:translateX(-150px)}
+#floatclip-review .fc-swipe{position:absolute;inset:0 auto 0 0;width:78px;display:flex;align-items:center;justify-content:center;visibility:hidden}
+#floatclip-review .fc-row[data-swipe=protect] .fc-swipe{visibility:visible}
+#floatclip-review .fc-more-actions{position:absolute;inset:0 0 0 auto;width:150px;display:flex;align-items:center;justify-content:center;visibility:hidden}
+#floatclip-review .fc-row[data-swipe=more] .fc-more-actions{visibility:visible}
+#floatclip-review .fc-meta{font-size:11px;color:var(--fc-muted);display:flex;gap:6px;align-items:center;padding-right:22px;margin-bottom:7px}
+#floatclip-review .fc-meta svg{width:12px;height:12px}
+#floatclip-review .fc-content{font-size:16px;line-height:1.65;overflow-wrap:anywhere}
+#floatclip-review .fc-flag{display:inline-block;position:relative;vertical-align:-1px;width:21px;height:14px;background:#de2910;color:#ffde00;border-radius:1px;margin:0 2px}
+#floatclip-review .fc-flag b{position:absolute;left:2px;top:-2px;font-size:10px;font-weight:400;line-height:14px}
+#floatclip-review .fc-flag small{position:absolute;left:9px;top:-2px;font-size:4px;line-height:5px;width:8px;white-space:normal}
+#floatclip-review .fc-more{position:absolute;right:8px;top:6px;color:var(--fc-muted)}
+#floatclip-review .fc-more svg{width:16px;height:16px}
+#floatclip-review .fc-picture{height:132px;border-radius:7px;background:linear-gradient(125deg,#a8bfe8,#d7d9f4 50%,#edd8d6);color:#253d66;display:flex;align-items:center;justify-content:space-between;padding:22px;overflow:hidden;position:relative}
+#floatclip-review .fc-picture strong{font-size:24px;line-height:1.3;z-index:1}
+#floatclip-review .fc-picture span{width:94px;height:94px;border-radius:50%;background:linear-gradient(135deg,#f7f1d2,#d0b0d8);box-shadow:-30px 34px 0 #6583bc45;transform:rotate(-20deg);flex:none}
+#floatclip-review .fc-picture-foot{display:flex;align-items:center;justify-content:space-between;color:var(--fc-muted);font-size:11px;margin-top:8px}
+#floatclip-review .fc-picture-foot button{font-size:12px;padding:4px 8px;color:var(--fc-accent);background:var(--fc-tint)}
+#floatclip-review .fc-footer{display:flex;align-items:center;flex-wrap:wrap;gap:7px;font-size:11px;color:var(--fc-muted);margin:16px 2px 0}
+#floatclip-review .fc-dot{width:5px;height:5px;border-radius:50%;background:var(--fc-accent)}
+#floatclip-review .fc-toast{background:var(--fc-surface);border:1px solid var(--fc-line);border-radius:8px;padding:9px 12px;margin-top:10px;display:flex;align-items:center;justify-content:space-between;font-size:12px}
+#floatclip-review .fc-menu{position:absolute;top:34px;right:8px;z-index:4;width:150px;padding:5px;background:var(--fc-surface);border:1px solid var(--fc-line);border-radius:10px;box-shadow:0 6px 20px #0002}
+#floatclip-review .fc-menu button{display:block;width:100%;text-align:left;font-size:13px}
+#floatclip-review .fc-danger{color:var(--fc-danger)}
+#floatclip-review .fc-pane{position:absolute;top:58px;right:10px;left:24px;z-index:8;background:var(--fc-surface);border:1px solid var(--fc-line);border-radius:12px;padding:18px;box-shadow:0 12px 35px #0003}
+#floatclip-review .fc-pane-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;font-size:18px;font-weight:600}
+#floatclip-review .fc-pane p{margin:10px 0;color:var(--fc-muted);font-size:13px}
+#floatclip-review .fc-field{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--fc-line);font-size:13px}
+#floatclip-review select{font:inherit;border:1px solid var(--fc-line);border-radius:7px;padding:6px 8px;background:var(--fc-bg);color:var(--fc-text)}
+#floatclip-review .fc-pane-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:18px}
+#floatclip-review .fc-pane .fc-picture{height:240px;margin:8px 0}
+#floatclip-review .fc-progress{height:4px;background:var(--fc-tint);border-radius:4px;overflow:hidden;margin:18px 0 8px}
+#floatclip-review .fc-progress span{display:block;height:100%;background:var(--fc-accent);transition:width .3s linear}
+#floatclip-review .fc-empty{text-align:center;color:var(--fc-muted);padding:70px 10px;font-size:13px}
+#floatclip-review [data-layout=expanded] .fc-app{width:820px;display:grid;grid-template-columns:minmax(280px,1fr) minmax(260px,1fr);gap:20px}
+#floatclip-review .fc-inspector{border-left:1px solid var(--fc-line);padding-left:20px}
+#floatclip-review .fc-inspector h3{font-size:16px;margin:8px 0 18px;font-weight:500}
+#floatclip-review .fc-inspector p{font-size:13px;color:var(--fc-muted)}
+#floatclip-review .fc-inspector .fc-picture{height:260px}
+@media(max-width:620px){#floatclip-review [data-layout=expanded] .fc-app{grid-template-columns:minmax(0,1fr)}#floatclip-review .fc-inspector{border-left:0;border-top:1px solid var(--fc-line);padding:16px 0 0}#floatclip-review .fc-stage{min-height:960px}#floatclip-review .fc-app{padding:12px}#floatclip-review .fc-pane{left:12px;right:12px}#floatclip-review .fc-head{padding-right:90px}#floatclip-review .fc-title{font-size:18px}}
+@media(prefers-reduced-motion:reduce){#floatclip-review *{transition:none!important}}
+</style>
+<script>
+(function(){
+  const root=document.getElementById('floatclip-review');
+  const seed=[{id:'idea',text:'把灵感留住，下次一眼找到。 ✨',device:'本机',time:'13:42',pin:true,lock:false,kind:'text'},{id:'image',text:'今日灵感',device:'本机',time:'13:40',pin:false,lock:false,kind:'image'},{id:'emoji',text:'周末一起出发 😀 👍🏽 👨‍👩‍👧‍👦 🇨🇳',device:'我的手机',time:'13:38',pin:false,lock:true,kind:'text'},{id:'note',text:'会议安排：周五 15:00，带上新的设计稿。',device:'本机',time:'13:35',pin:false,lock:false,kind:'text'}];
+  const saved=window.openai?.widgetState?.privateContent||{};
+  root.querySelectorAll('.fc-stage').forEach((stage,index)=>{
+    const state={items:seed.map(x=>({...x})),query:'',filter:'all',appearance:['system','light','dark','tokyo-night'].includes(saved.appearance)?saved.appearance:'tokyo-night',menu:'',pane:'',toast:'',removed:[],update:'available',notice:true,progress:0,selected:'image',radius:12,density:14};
+    stage.innerHTML='<div class="fc-app" aria-label="FloatClip Windows"><main><div class="fc-head"><div class="fc-logo"><i data-lucide="layers" aria-hidden="true"></i></div><span class="fc-title">剪贴板</span></div><div class="fc-tools"><button class="fc-icon cursor-interaction" data-action="devices" aria-label="我的设备 · 连接手机"><i data-lucide="smartphone" aria-hidden="true"></i></button><button class="fc-icon cursor-interaction" data-action="pin-window" aria-label="固定面板"><i data-lucide="pin" aria-hidden="true"></i></button><button class="fc-icon cursor-interaction" data-action="settings" aria-label="设置"><i data-lucide="settings-2" aria-hidden="true"></i></button></div><label class="fc-search"><i data-lucide="search" aria-hidden="true"></i><input type="search" aria-label="搜索剪贴板" placeholder="搜索文字、图片或设备"></label><div class="fc-filters"><button data-filter="all" aria-pressed="true">全部</button><button data-filter="local" aria-pressed="false">本机</button><button data-filter="image" aria-pressed="false">图片</button><button class="fc-clear cursor-interaction" data-action="clear">全部清除</button></div><div class="fc-banner"></div><div class="fc-list"></div><div class="fc-toast" aria-live="polite" hidden></div><div class="fc-footer"><span class="fc-dot"></span>配对状态仅在客户端显示<span style="margin-left:auto">Ctrl + Alt + V</span></div></main><aside class="fc-inspector" hidden></aside><div class="fc-overlay"></div></div>';
+    const app=stage.querySelector('.fc-app'),list=app.querySelector('.fc-list'),banner=app.querySelector('.fc-banner'),overlay=app.querySelector('.fc-overlay'),inspector=app.querySelector('.fc-inspector'),toast=app.querySelector('.fc-toast');
+    const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const icon=name=>'<i data-lucide="'+name+'" aria-hidden="true"></i>';
+    const picture=()=>'<div class="fc-picture" role="img" aria-label="剪贴板中的设计图片"><strong>今日<br>灵感</strong><span></span></div>';
+    const persist=()=>{window.openai?.setWidgetState?.({modelContent:{product:'FloatClip Windows',layout:stage.dataset.layout,appearance:state.appearance},privateContent:{appearance:state.appearance}}).catch(()=>{});};
+    function icons(){if(globalThis.lucide)lucide.createIcons({attrs:{width:16,height:16}});}
+    function glyphFallback(){app.querySelectorAll('.fc-content').forEach(el=>{if(el.textContent.includes('🇨🇳'))el.innerHTML=escape(el.textContent).replace(/🇨🇳/g,'<span class="fc-flag" role="img" aria-label="中国国旗"><b>★</b><small>★<br>　★<br>★ ★</small></span>');});}
+    function render(){
+      app.dataset.appearance=state.appearance;
+      app.style.colorScheme=state.appearance==='system'?'inherit':state.appearance==='tokyo-night'?'dark':state.appearance;
+      list.innerHTML=state.items.filter(x=>(state.filter!=='local'||x.device==='本机')&&(state.filter!=='image'||x.kind==='image')&&(x.text+' '+x.device+' '+(x.kind==='image'?'图片 image':'')).toLowerCase().includes(state.query.toLowerCase())).sort((a,b)=>Number(b.pin)-Number(a.pin)).map(x=>'<article class="fc-row cursor-interaction" data-id="'+x.id+'"><div class="fc-swipe"><button data-action="lock" data-id="'+x.id+'">'+(x.lock?'取消固定':'固定')+'</button></div><div class="fc-more-actions"><button data-action="pin" data-id="'+x.id+'">'+(x.pin?'取消置顶':'置顶')+'</button><button class="fc-danger" data-action="delete" data-id="'+x.id+'">删除</button></div><div class="fc-card" data-card="'+x.id+'"><div class="fc-meta">'+(x.pin?icon('pin'):'')+(x.lock?icon('lock-keyhole'):'')+escape(x.device)+' · '+x.time+'</div><button class="fc-more cursor-interaction" data-action="menu" data-id="'+x.id+'" aria-label="更多操作">'+icon('ellipsis')+'</button>'+(x.kind==='image'?picture()+'<div class="fc-picture-foot"><span>图片 · 1280 × 800</span><button data-action="copy" data-id="'+x.id+'">复制图片</button></div>':'<div class="fc-content">'+escape(x.text)+'</div>')+(state.menu===x.id?'<div class="fc-menu"><button data-action="view" data-id="'+x.id+'">'+(x.kind==='image'?'查看图片':'查看全文')+'</button><button data-action="copy" data-id="'+x.id+'">复制</button><button data-action="lock" data-id="'+x.id+'">'+(x.lock?'取消固定':'固定记录')+'</button><button data-action="pin" data-id="'+x.id+'">'+(x.pin?'取消置顶':'置顶')+'</button><button class="fc-danger" data-action="delete" data-id="'+x.id+'">删除</button></div>':'')+'</div></article>').join('')||'<div class="fc-empty">没有匹配的记录</div>';
+      app.querySelectorAll('[data-filter]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.filter===state.filter?'true':'false'));
+      banner.hidden=!state.notice;banner.innerHTML='<span>'+({available:'发现新版本 0.7.5 · 演示更新',downloading:'正在下载更新 '+state.progress+'%',ready:'更新已下载并通过校验',current:'已是最新版本'}[state.update])+'</span><button data-action="updates">查看</button>';
+      toast.hidden=!state.toast;toast.innerHTML='<span>'+escape(state.toast)+'</span>'+(state.removed.length?'<button data-action="undo">撤销</button>':'');
+      if(stage.dataset.layout==='expanded'){inspector.hidden=false;const selected=state.items.find(x=>x.id===state.selected)||state.items[0];inspector.innerHTML='<h3>内容预览</h3>'+(selected?(selected.kind==='image'?picture():'<div class="fc-content">'+escape(selected.text)+'</div>')+'<p>'+escape(selected.device)+' · '+selected.time+'</p><button class="fc-primary cursor-interaction" data-action="copy" data-id="'+selected.id+'">'+(selected.kind==='image'?'复制图片':'复制文字')+'</button>':'<p>选择一条记录</p>');}
+      renderPane();glyphFallback();icons();
+    }
+    function renderPane(){
+      if(!state.pane){overlay.innerHTML='';return;}
+      let title='',content='';
+      if(state.pane==='settings'){title='设置';content='<div class="fc-field"><span>外观</span><select aria-label="外观"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option><option value="tokyo-night">东京夜色</option></select></div><label class="fc-field"><span>收录文字与图片</span><input type="checkbox" checked></label><label class="fc-field"><span>启动时检查更新</span><input type="checkbox" checked></label><div class="fc-field"><span>快捷键</span><span>Ctrl + Alt + V</span></div><div class="fc-pane-actions"><button class="fc-primary" data-action="updates">版本与更新</button></div><p>当前版本 0.7.4 · build 19</p>';}
+      else if(state.pane==='devices'){title='我的设备';content='<label class="fc-field"><span>共享剪贴板</span><input type="checkbox" checked></label><p>文字在已授权设备之间加密同步；图片保存在各自设备。</p><strong>连接手机</strong><p>手机 FloatClip → 我的设备，开启共享并允许添加设备。电脑选择蓝牙或同一 Wi-Fi / 热点，然后核对两端识别码。</p><div class="fc-pane-actions"><button class="fc-primary" data-action="pair-demo">通过蓝牙添加（推荐）</button><button data-action="pair-demo">通过局域网添加</button></div><p>此处是界面预览。下面的候选客户端支持真实连接与配对。</p>';}
+      else if(state.pane==='updates'){title='版本与更新';content='<p>当前 0.7.4 · build 19</p><strong>'+({available:'发现新版本 0.7.5',downloading:'正在下载更新…',ready:'更新已下载并通过校验',current:'已是最新版本 0.7.4'}[state.update])+'</strong><p>改进图片预览和彩色表情；修复主题与焦点细节。</p>'+(state.update==='downloading'?'<div class="fc-progress"><span style="width:'+state.progress+'%"></span></div><p>'+state.progress+'%</p>':'')+'<div class="fc-pane-actions">'+(state.update==='ready'?'<button class="fc-primary" data-action="install">更新并重启</button>':state.update==='available'?'<button class="fc-primary" data-action="download">下载更新</button>':'<button data-action="check">检查更新</button>')+'<button data-action="later">稍后</button>'+(state.update==='available'?'<button data-action="skip">跳过此版本</button>':'')+'</div><p>这是更新交互演示。</p>';}
+      else{const item=state.items.find(x=>x.id===state.selected);if(!item){state.pane='';overlay.innerHTML='';return;}title=item.kind==='image'?'图片预览':'剪贴板全文';content=(item.kind==='image'?picture():'<div class="fc-content">'+escape(item.text)+'</div>')+'<p>'+escape(item.device)+(item.kind==='image'?' · 1280 × 800':'')+'</p><div class="fc-pane-actions"><button class="fc-primary" data-action="copy" data-id="'+item.id+'">复制'+(item.kind==='image'?'图片':'文字')+'</button><button data-action="close">返回</button></div>';}
+      overlay.innerHTML='<section class="fc-pane" aria-label="'+title+'"><div class="fc-pane-head"><span>'+title+'</span><button class="fc-icon" data-action="close" aria-label="关闭">'+icon('x')+'</button></div>'+content+'</section>';
+      const select=overlay.querySelector('select');if(select)select.value=state.appearance;
+      if(state.update==='downloading'){const checking=overlay.querySelector('[data-action="check"]');if(checking){checking.disabled=true;checking.textContent='下载中…';}}
+    }
+    app.querySelector('input[type=search]').addEventListener('input',e=>{state.query=e.target.value;state.menu='';render();});
+    app.addEventListener('change',e=>{if(e.target.matches('select')){state.appearance=e.target.value;render();persist();}});
+    app.addEventListener('click',e=>{
+      const button=e.target.closest('button'),card=e.target.closest('[data-card]');
+      if(!button){if(card){state.selected=card.dataset.card;if(stage.dataset.layout!=='expanded'){state.pane=state.items.find(x=>x.id===state.selected)?.kind==='image'?'view':'';state.toast=state.pane?'':'已复制文字（演示）';}render();}return;}
+      const action=button.dataset.action,id=button.dataset.id,item=state.items.find(x=>x.id===id);
+      if(button.dataset.filter){state.filter=button.dataset.filter;state.menu='';render();return;}
+      if(action==='menu')state.menu=state.menu===id?'':id;
+      else if(action==='settings')state.pane='settings';
+      else if(action==='devices')state.pane='devices';
+      else if(action==='pair-demo')state.toast='实际配对请在下面的 Windows 客户端完成；两端需核对识别码。';
+      else if(action==='updates')state.pane='updates';
+      else if(action==='close')state.pane='';
+      else if(action==='view'){state.selected=id;state.pane='view';state.menu='';}
+      else if(action==='copy'){state.toast='已复制'+(item?.kind==='image'?'图片':'文字')+'（演示）';state.menu='';}
+      else if(action==='pin-window'){const pressed=button.getAttribute('aria-pressed')==='true';button.setAttribute('aria-pressed',String(!pressed));state.toast=pressed?'面板已取消固定':'面板已固定';}
+      else if(action==='pin'&&item){item.pin=!item.pin;state.menu='';}
+      else if(action==='lock'&&item){item.lock=!item.lock;state.menu='';}
+      else if(action==='delete'&&item){state.removed=[item];state.items=state.items.filter(x=>x.id!==id);state.toast='记录已删除';state.menu='';}
+      else if(action==='clear'){state.removed=state.items.filter(x=>!x.pin&&!x.lock);state.items=state.items.filter(x=>x.pin||x.lock);state.toast='已清除 '+state.removed.length+' 条普通记录，固定和置顶已保留';}
+      else if(action==='undo'){state.items.push(...state.removed);state.removed=[];state.toast='已撤销';}
+      else if(action==='later'||action==='skip'){state.notice=false;state.pane='';state.toast=action==='skip'?'已跳过此演示版本':'下次启动时再提醒';}
+      else if(action==='download'){state.update='downloading';state.progress=0;const timer=setInterval(()=>{state.progress=Math.min(100,state.progress+20);if(state.progress===100){clearInterval(timer);state.update='ready';}render();},350);}
+      else if(action==='install'){state.update='current';state.notice=false;state.pane='';state.toast='更新交互演示完成，实际程序未改动';}
+      else if(action==='check'){state.update='available';state.notice=true;}
+      render();persist();
+    });
+    let start=null,suppress=false;
+    list.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;const row=e.target.closest('.fc-row');if(row)start={id:row.dataset.id,x:e.clientX,y:e.clientY};});
+    list.addEventListener('pointerup',e=>{if(!start)return;const dx=e.clientX-start.x,dy=e.clientY-start.y;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.3){const row=list.querySelector('[data-id="'+start.id+'"]');if(row)row.dataset.swipe=dx>0?'protect':'more';suppress=true;setTimeout(()=>suppress=false,0);}start=null;});
+    list.addEventListener('click',e=>{if(suppress){e.stopPropagation();e.preventDefault();}},true);
+    render();
+    if(globalThis.Tweak){const tweak=new Tweak({container:app,onChange:()=>{app.style.borderRadius=state.radius+'px';app.querySelectorAll('.fc-card').forEach(c=>c.style.padding=state.density+'px');}});tweak.addSlider(state,'radius',{label:'窗口圆角',min:8,max:20,step:2,unit:'px'});tweak.addSlider(state,'density',{label:'内容留白',min:10,max:20,step:2,unit:'px'});}
+  });
+})();
+</script>

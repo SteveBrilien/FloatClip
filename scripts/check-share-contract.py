@@ -6,9 +6,10 @@ def read(path): return path.read_text(encoding='utf-8')
 tokens=json.loads((web/'shared/design-tokens.json').read_text(encoding='utf-8'));release=json.loads((web/'public/release.json').read_text(encoding='utf-8'));feed=json.loads((root/'updates/share-preview.json').read_text(encoding='utf-8'));package=json.loads((web/'package.json').read_text(encoding='utf-8'))
 platforms={'android','windows','web'}
 assert set(release['versions'])==platforms
-assert len(set(release['versions'].values()))==1,'Unified clients must share a release version'
 version=release['versions']['web']
-assert version==package['version']==feed['version']
+assert version==package['version']==feed['web']['version'],'Web metadata must match the actual Web build'
+native_version=feed['version']
+assert release['versions']['android']==release['versions']['windows']==native_version,'Native publications must share their release version'
 assert tokens['revision']==release['designRevision']
 assert tokens['navigation']==['剪贴板']
 android=(root/'app/build.gradle.kts').read_text(encoding='utf-8');windows=(root/'windows/FloatClip.Desktop/FloatClip.Desktop.csproj').read_text(encoding='utf-8')
@@ -21,7 +22,7 @@ def semver(value):
  return tuple(map(int,value.split('.')))
 for platform,candidate in development['platforms'].items():
  assert candidate['version']==native_versions[platform],f'{platform}: development version differs from source'
- assert semver(candidate['version'])>=semver(version),f'{platform}: source predates published artifacts'
+ assert semver(candidate['version'])>=semver(release['versions'][platform]),f'{platform}: source predates published artifacts'
  assert (root/candidate['review']).is_file(),f'{platform}: missing candidate validation notes'
 windows_updates=read(root/'windows/FloatClip.Desktop/ShareUpdates.cs')
 assert re.search(r'Version="([0-9.]+)"',windows_updates).group(1)==native_versions['windows']
@@ -40,7 +41,7 @@ build=int(re.search(r'versionCode = (\d+)',android).group(1))
 assert build==development['platforms']['android']['build']
 for platform in ['android','windows']:
  assert release['distribution'][platform]=='available'
- assert feed[platform]['build']>0 and feed[platform]['version']==version
+ assert feed[platform]['build']>0 and feed[platform]['version']==native_version
  assert development['platforms'][platform]['build']>=feed[platform]['build']
  assert release['downloads'][platform]==feed[platform]
  assert re.fullmatch('[0-9a-f]{64}',feed[platform]['sha256']) and feed[platform]['bytes']>0
@@ -67,4 +68,4 @@ for mode in ['light','dark']:required.update(tokens[mode].values())
 assert not required-colours,'Shared UI colours do not match the design contract'
 lock=json.loads((web/'package-lock.json').read_text(encoding='utf-8'))
 assert not any(p.get('link') or 'sites/floatclip' in p.get('resolved','') for p in lock['packages'].values()),'Dependency lock contains a workstation path'
-print('FloatClip published '+version+'; native candidates '+str(native_versions)+': versions, hosts, provenance, storage and theme contract match')
+print('FloatClip published Web '+version+' / native '+native_version+'; native candidates '+str(native_versions)+': versions, hosts, provenance, storage and theme contract match')

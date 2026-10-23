@@ -2,7 +2,7 @@
 
 实际源码：Codex MCP Dev 项目 floatclip-cloud，路径 /home/codex/workspace/Android/FloatClip/analysis/cloud-workspace-build25；独立 Git 仓库，分支 codex/wpf-design-system-077。原 floatclip 根目录仍有其他历史未提交改动，不要重置或覆盖。
 
-当前版本：Windows 0.7.9 build28；Android 0.7.9 build29。Windows 原生198项、UpdateChecks45项、Android69项单测通过；Android lint 0 error / 18 warning。Android build29 已在 vivo V2115A Android11 覆盖安装成功，原包名/签名及首次安装时间保持；Windows包已放 D:\FloatClip\0.7.9-build28\FloatClip。
+当前版本：Windows 0.7.9 build29；Android 0.7.9 build29。Windows 原生198项、UpdateChecks45项、Android69项单测通过；Android lint 0 error / 18 warning。Android build29 已在 vivo V2115A Android11 覆盖安装成功，原包名/签名及首次安装时间保持；Windows包已放 D:\FloatClip\0.7.9-build29\FloatClip。
 
 本轮需求、修复和验收边界见 [当前候选记录](CANDIDATE_079_BUILD29_2026-10-24.md)。用户最近反馈的图片抖动、外观页小节/间距、固定右下角导入按钮已进入 build29；更新主源已切换到原钥签名的0.7.9，备用源与GitHub Release阶段须读取实际仓库/CI状态。
 

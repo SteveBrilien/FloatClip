@@ -46,3 +46,7 @@ Android assembleDebug / testDebugUnitTest / lintDebug 成功。69 tests / 0 fail
 ## 真机与主源附记
 
 V2115A 已成功覆盖安装 versionCode29。主界面图片页的导入按钮已位于视口右下角（独立于滚动列表），与 build28 的列表尾项实现不同。原有置顶悬浮面板可能遮挡主界面；检查时遵守当前前台窗口，未将此描述为全部手势验收。公网主源已原子合并原钥签名0.7.9，Windows实际联网检查验签返回0.7.9/build28。Android安装包在主源指向build29。GitHub备用及Release状态以最终推送和CI附记为准。
+
+## 发布元数据收尾
+
+Windows 程序集 Version 原仍为0.7.8，现与ShareUpdates统一为0.7.9/build29；本机成品 ProductVersion 已实测为0.7.9。Windows原生198项检查再次通过，重新生成不可变build29包（78,882,301 bytes，SHA-256 36e7e7a7c08db22a3e5ec6278d7cea2cf3df17bfffb571a42df3a9512e5dcfe0），build28保留。development-versions同步双端29。共享契约检查继续校验真实Web构建0.7.1，单独校验两个原生发布0.7.9，避免把未重建的Web伪标为新版。GitHub Release发布附件采用平台/build唯一名称，只增加缺失附件，不覆盖旧制品。

@@ -107,10 +107,6 @@ jobs:
             echo "Tag does not match the frozen native release" >&2
             exit 1
           fi
-          if gh release view "$tag" >/dev/null 2>&1; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
           echo "publish=true" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -148,22 +144,23 @@ jobs:
           PY
           android_url="$(python3 -c 'import json;print(json.load(open(".release-android.json"))["url"])')"
           windows_url="$(python3 -c 'import json;print(json.load(open(".release-windows.json"))["url"])')"
-          curl --fail --location --retry 3 "$android_url" --output "FloatClip-Android-${version}.apk"
-          curl --fail --location --retry 3 "$windows_url" --output "FloatClip-Windows-${version}.zip"
+          android_build="$(python3 -c 'import json;print(json.load(open(".release-android.json"))["build"])')"
+          windows_build="$(python3 -c 'import json;print(json.load(open(".release-windows.json"))["build"])')"
+          android_name="FloatClip-Android-${version}-build${android_build}.apk"
+          windows_name="FloatClip-Windows-${version}-build${windows_build}.zip"
+          curl --fail --location --retry 3 "$android_url" --output "$android_name"
+          curl --fail --location --retry 3 "$windows_url" --output "$windows_name"
           python3 - "$version" <<'PY'
           import hashlib,json,pathlib,sys
           version=sys.argv[1]
-          for platform,name in (
-              ('android',f'FloatClip-Android-{version}.apk'),
-              ('windows',f'FloatClip-Windows-{version}.zip'),
-          ):
+          for platform,label,extension in [('android','Android','apk'),('windows','Windows','zip')]:
               row=json.load(open(f'.release-{platform}.json'))
-              p=pathlib.Path(name); data=p.read_bytes()
+              p=pathlib.Path(f"FloatClip-{label}-{version}-build{row['build']}.{extension}"); data=p.read_bytes()
               assert len(data)==row['bytes'],(platform,len(data),row['bytes'])
               assert hashlib.sha256(data).hexdigest()==row['sha256'],platform
           PY
-          echo "android=FloatClip-Android-${version}.apk" >> "$GITHUB_OUTPUT"
-          echo "windows=FloatClip-Windows-${version}.zip" >> "$GITHUB_OUTPUT"
+          echo "android=$android_name" >> "$GITHUB_OUTPUT"
+          echo "windows=$windows_name" >> "$GITHUB_OUTPUT"
 
       - name: Publish verified GitHub Release
         if: steps.native_release.outputs.publish == 'true'
@@ -174,6 +171,13 @@ jobs:
           RELEASE_TAG: ${{ steps.native_release.outputs.tag }}
           RELEASE_VERSION: ${{ steps.native_release.outputs.version }}
         run: |
-          gh release create "$RELEASE_TAG" "$ANDROID" "$WINDOWS" --target "$GITHUB_SHA" \
-            --title "FloatClip $RELEASE_VERSION" \
-            --generate-notes
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "FloatClip $RELEASE_VERSION" --generate-notes
+          fi
+          for asset in "$ANDROID" "$WINDOWS"; do
+            if gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | grep -Fxq "$asset"; then
+              continue
+            fi
+            gh release upload "$RELEASE_TAG" "$asset"
+          done

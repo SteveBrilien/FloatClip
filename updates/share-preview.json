@@ -24,10 +24,10 @@
   },
   "windows": {
     "version": "0.7.9",
-    "build": 28,
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-c4006f1b65374d529ce97e83d21e6438/FloatClip-Windows-0.7.9-build28.zip?exp=0&sig=87d2f3928623c6826c0380c927adcad6506aba9c66c3221b7fb7c62158a8f80a",
-    "sha256": "f6dd3aafb89252a9b2029780329282bf036bf6375b7421891604398399d80a98",
-    "bytes": 78881727,
+    "build": 29,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-3b2a35e8fd3b469ea20580409e2e620a/FloatClip-Windows-0.7.9-build29.zip?exp=0&sig=2aae0c6e58d7b1dd432ff6b48725f6c25849a06bfd0095b1e4582abaf99bfe23",
+    "sha256": "36e7e7a7c08db22a3e5ec6278d7cea2cf3df17bfffb571a42df3a9512e5dcfe0",
+    "bytes": 78882301,
     "status": "available"
   }
 }

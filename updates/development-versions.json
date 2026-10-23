@@ -2,14 +2,14 @@
   "channel": "development",
   "platforms": {
     "android": {
-      "version": "0.7.8",
-      "build": 25,
-      "review": "docs/CANDIDATE_078_BUILD25_2026-10-23.md"
+      "version": "0.7.9",
+      "build": 29,
+      "review": "docs/CANDIDATE_079_BUILD29_2026-10-24.md"
     },
     "windows": {
-      "version": "0.7.8",
-      "build": 25,
-      "review": "docs/CANDIDATE_078_BUILD25_2026-10-23.md"
+      "version": "0.7.9",
+      "build": 29,
+      "review": "docs/CANDIDATE_079_BUILD29_2026-10-24.md"
     }
   }
 }

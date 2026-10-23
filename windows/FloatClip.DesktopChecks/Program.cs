@@ -240,6 +240,7 @@ static class Program
             CheckFileCatalog(dataRoot);
             NativeSyncChecks.Run(dataRoot,Check);
             DesignChecks.Run(app,window,host,output,Check,Pump);
+            ProductFixChecks.Run(dataRoot,Check,Pump,Snapshot);
             Check(host.UiFailureCount==0,"no guarded UI exceptions were hidden during acceptance");
             File.WriteAllText(Path.Combine(output,"report.json"),JsonSerializer.Serialize(new{result="PASS",checks,isolated=true,userClipboardUntouched=true,uiFailures=host.UiFailureCount,utc=DateTime.UtcNow},new JsonSerializerOptions{WriteIndented=true}));
             if(args.Contains("--interactive"))

@@ -73,7 +73,7 @@ public sealed partial class LocalClipboardWindow
         var grid=new Grid();grid.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});grid.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
         var labels=new StackPanel{VerticalAlignment=VerticalAlignment.Center};labels.Children.Add(new System.Windows.Controls.TextBlock{Text=title,FontSize=14,TextWrapping=TextWrapping.Wrap});if(detail.Length>0){var hint=MutedLabel(detail,new(0,4,0,0));hint.FontSize=12;labels.Children.Add(hint);}grid.Children.Add(labels);
         control.VerticalAlignment=VerticalAlignment.Center;control.Margin=new(16,0,0,0);Grid.SetColumn(control,1);grid.Children.Add(control);
-        var row=new Border{Child=grid,Padding=(Thickness)Application.Current.FindResource("FloatClip.Padding.Card"),CornerRadius=DesignTokens.Radius("Card"),BorderThickness=new(1),Margin=new(0,0,0,4)};row.SetResourceReference(Border.BackgroundProperty,"FloatClip.Surface");row.SetResourceReference(Border.BorderBrushProperty,"FloatClip.Line");DesignTokens.Hover(row);return row;
+        return new Border{Child=grid,Style=(Style)Application.Current.FindResource("FloatClip.Setting.Row")};
     }
     FrameworkElement ToggleSetting(string title,string detail,bool selected,Action<bool> change,string id="")
     {

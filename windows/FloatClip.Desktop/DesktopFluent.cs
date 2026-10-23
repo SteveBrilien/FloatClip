@@ -28,5 +28,6 @@ public static class DesktopFluent
         resources["TextFillColorPrimaryBrush"]=text;resources["TextFillColorSecondaryBrush"]=muted;
         resources["ControlStrokeColorDefaultBrush"]=line;resources["ControlFillColorSecondaryBrush"]=tint;
         resources["AccentFillColorDefaultBrush"]=accent;resources["AccentTextFillColorPrimaryBrush"]=accent;
+        foreach(Window window in Application.Current.Windows)WindowAppearance.Theme(window,dark);
     }
 }

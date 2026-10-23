@@ -1,0 +1,14 @@
+{
+  "windowsZip": {
+    "bytes": 78794697,
+    "sha256": "1fa63e0559117455556deabb6fb41c1ee50de6ba34b5ba739a68f6665e35093f"
+  },
+  "windowsExe": {
+    "bytes": 207442758,
+    "sha256": "85ff216fe833c54825cf56f5ac8ec04489cbb92baa1aeef12fd6f8b74d103af5"
+  },
+  "androidApk": {
+    "bytes": 3621045,
+    "sha256": "e0dea0aec8c9716535a94a047c4ebfc68f58f32a2d35259fd238af4f995ef56f"
+  }
+}

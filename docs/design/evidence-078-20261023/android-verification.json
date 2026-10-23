@@ -1,0 +1,17 @@
+{
+  "tests": {
+    "tests": 61,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lint": {
+    "Warning": 17
+  },
+  "apk": {
+    "bytes": 3621045,
+    "sha256": "e0dea0aec8c9716535a94a047c4ebfc68f58f32a2d35259fd238af4f995ef56f",
+    "identity": "package: name='com.floatclip.probe' versionCode='23' versionName='0.7.8' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'",
+    "certificate": "Signer #1 certificate SHA-256 digest: 0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c"
+  }
+}

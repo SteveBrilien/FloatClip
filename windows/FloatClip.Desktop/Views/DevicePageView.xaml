@@ -8,7 +8,7 @@
     <StackPanel Margin="{DynamicResource FloatClip.Padding.Page}">
       <TextBlock Text="我的设备" FontSize="{DynamicResource FloatClip.Font.Title}" FontWeight="Medium"/>
       <TextBlock Text="{Binding Status}" Style="{StaticResource Detail}" TextWrapping="NoWrap" Margin="{DynamicResource FloatClip.Margin.Bottom12}"/>
-      <Border Style="{StaticResource FloatClip.Setting.Row}" Height="{DynamicResource FloatClip.Device.OptionHeight}">
+      <Border Style="{StaticResource FloatClip.Setting.OptionRow}">
         <DockPanel LastChildFill="True"><ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding Enabled,Mode=TwoWay}" Style="{StaticResource FloatClip.ToggleSwitch}" AutomationProperties.Name="共享剪贴板"/><TextBlock Text="共享剪贴板" Style="{StaticResource BodyLabel}"/></DockPanel>
       </Border>
       <DockPanel Margin="{DynamicResource FloatClip.Margin.Section}" LastChildFill="True">
@@ -51,10 +51,10 @@
         </StackPanel>
       </Border>
       <TextBlock Text="同步选项" FontSize="{DynamicResource FloatClip.Font.Section}" Margin="{DynamicResource FloatClip.Margin.Section}"/>
-      <Border Style="{StaticResource FloatClip.Setting.Row}" Height="{DynamicResource FloatClip.Device.OptionHeight}"><DockPanel><ui:ToggleSwitch DockPanel.Dock="Right" Style="{StaticResource FloatClip.ToggleSwitch}" IsChecked="{Binding Automatic,Mode=TwoWay}" AutomationProperties.Name="自动连接已授权设备"/><TextBlock Text="自动连接已授权设备" Style="{StaticResource BodyLabel}"/></DockPanel></Border>
-      <Border Style="{StaticResource FloatClip.Setting.Row}" Height="{DynamicResource FloatClip.Device.OptionHeight}"><DockPanel><ui:ToggleSwitch DockPanel.Dock="Right" Style="{StaticResource FloatClip.ToggleSwitch}" IsChecked="{Binding Send,Mode=TwoWay}" AutomationProperties.Name="发送新复制的文字"/><TextBlock Text="发送新复制的文字" Style="{StaticResource BodyLabel}"/></DockPanel></Border>
-      <Border Style="{StaticResource FloatClip.Setting.Row}" Height="{DynamicResource FloatClip.Device.OptionHeight}"><DockPanel><ui:ToggleSwitch DockPanel.Dock="Right" Style="{StaticResource FloatClip.ToggleSwitch}" IsChecked="{Binding Receive,Mode=TwoWay}" AutomationProperties.Name="接收文字到历史"/><TextBlock Text="接收文字到历史" Style="{StaticResource BodyLabel}"/></DockPanel></Border>
-      <Border Style="{StaticResource FloatClip.Setting.Row}" Height="{DynamicResource FloatClip.Device.OptionHeight}"><DockPanel><ui:ToggleSwitch DockPanel.Dock="Right" Style="{StaticResource FloatClip.ToggleSwitch}" IsChecked="{Binding Apply,Mode=TwoWay}" AutomationProperties.Name="接收后写入系统剪贴板"/><TextBlock Text="接收后写入系统剪贴板" Style="{StaticResource BodyLabel}"/></DockPanel></Border>
+      <Border Style="{StaticResource FloatClip.Setting.OptionRow}"><DockPanel><ui:ToggleSwitch DockPanel.Dock="Right" Style="{StaticResource FloatClip.ToggleSwitch}" IsChecked="{Binding Automatic,Mode=TwoWay}" AutomationProperties.Name="自动连接已授权设备"/><TextBlock Text="自动连接已授权设备" Style="{StaticResource BodyLabel}"/></DockPanel></Border>
+      <Border Style="{StaticResource FloatClip.Setting.OptionRow}"><DockPanel><ui:ToggleSwitch DockPanel.Dock="Right" Style="{StaticResource FloatClip.ToggleSwitch}" IsChecked="{Binding Send,Mode=TwoWay}" AutomationProperties.Name="发送新复制的文字"/><TextBlock Text="发送新复制的文字" Style="{StaticResource BodyLabel}"/></DockPanel></Border>
+      <Border Style="{StaticResource FloatClip.Setting.OptionRow}"><DockPanel><ui:ToggleSwitch DockPanel.Dock="Right" Style="{StaticResource FloatClip.ToggleSwitch}" IsChecked="{Binding Receive,Mode=TwoWay}" AutomationProperties.Name="接收文字到历史"/><TextBlock Text="接收文字到历史" Style="{StaticResource BodyLabel}"/></DockPanel></Border>
+      <Border Style="{StaticResource FloatClip.Setting.OptionRow}"><DockPanel><ui:ToggleSwitch DockPanel.Dock="Right" Style="{StaticResource FloatClip.ToggleSwitch}" IsChecked="{Binding Apply,Mode=TwoWay}" AutomationProperties.Name="接收后写入系统剪贴板"/><TextBlock Text="接收后写入系统剪贴板" Style="{StaticResource BodyLabel}"/></DockPanel></Border>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

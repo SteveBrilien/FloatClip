@@ -6,10 +6,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.ConscryptMode
 import java.util.Base64
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk=[30])
+// Use the JVM RSA provider, as the other host tests do. Conscrypt has no Linux ARM64 JNI artifact.
+@ConscryptMode(ConscryptMode.Mode.OFF)
 class ShareUpdatesTest {
     private fun fixture()=javaClass.classLoader!!.getResourceAsStream("native-updates.json")!!.readBytes()
     private fun issued(data:ByteArray):Long {

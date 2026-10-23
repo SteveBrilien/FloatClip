@@ -153,7 +153,12 @@ public sealed class FileShelfView:UserControl,IDisposable
         var b=new Wpf.Ui.Controls.Button{Content=label,Appearance=Wpf.Ui.Controls.ControlAppearance.Transparent,Margin=new Thickness(0,0,DesignTokens.Number("Space.4"),0)};
         DesignTokens.Button(b,"Toolbar");b.Click+=(_,_)=>Run(action);return b;
     }
-    static void CommandIcon(Button button,string glyph){var label=button.Content;var panel=new StackPanel{Orientation=Orientation.Horizontal};panel.Children.Add(new TextBlock{Text=glyph,FontFamily=new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),FontSize=16,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,8,0)});panel.Children.Add(new TextBlock{Text=label?.ToString(),VerticalAlignment=VerticalAlignment.Center});button.Content=panel;System.Windows.Automation.AutomationProperties.SetName(button,label?.ToString());}
+    static void CommandIcon(Button button,string glyph)
+    {
+        var label=button.Content;
+        var symbol=glyph switch{"\uE8E5"=>Wpf.Ui.Controls.SymbolRegular.DocumentAdd24,"\uE896"=>Wpf.Ui.Controls.SymbolRegular.ArrowDownload24,"\uE8A7"=>Wpf.Ui.Controls.SymbolRegular.Eye24,"\uE74E"=>Wpf.Ui.Controls.SymbolRegular.Save24,"\uE72A"=>Wpf.Ui.Controls.SymbolRegular.ArrowForward24,_=>Wpf.Ui.Controls.SymbolRegular.Info24};
+        var panel=new StackPanel{Orientation=Orientation.Horizontal};panel.Children.Add(new Wpf.Ui.Controls.SymbolIcon(symbol){FontSize=DesignTokens.Number("Icon.Small"),VerticalAlignment=VerticalAlignment.Center,Margin=(Thickness)Application.Current.FindResource("FloatClip.Margin.End8")});panel.Children.Add(new TextBlock{Text=label?.ToString(),VerticalAlignment=VerticalAlignment.Center});button.Content=panel;System.Windows.Automation.AutomationProperties.SetName(button,label?.ToString());
+    }
     static void ConfigureList(ListView list,ObservableCollection<FileShelfRow> rows)
     {
         list.ItemsSource=rows;list.SelectionMode=SelectionMode.Extended;list.MinHeight=92;list.BorderThickness=new Thickness(0);list.Padding=new Thickness(0);

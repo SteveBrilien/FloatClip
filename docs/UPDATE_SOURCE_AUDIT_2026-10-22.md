@@ -1,5 +1,7 @@
 # 更新源核实与自托管迁移准备（2026-10-22）
 
+> 后续状态：2026-10-23 的 0.7.8 候选已实现两端签名更新主源与 GitHub 备用源，并上线现有公开版本的签名元数据。当前入口、验证和发布步骤见 [原生更新发布说明](NATIVE_UPDATES_2026-10-23.md)。下文保留 10 月 22 日的排查事实，不能视为最新配置。
+
 ## 已核实的现状
 
 - Windows `windows/FloatClip.Desktop/ShareUpdates.cs` 的版本清单地址仍为 GitHub Raw 的 `updates/share-preview.json`。仅接受 HTTPS 且最后跳转主机必须为 raw.githubusercontent.com；因此不能只把常量改成小主机地址，还必须同步调整严格的地址策略。

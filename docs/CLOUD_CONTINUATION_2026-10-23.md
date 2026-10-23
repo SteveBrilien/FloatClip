@@ -1,6 +1,6 @@
 # FloatClip 云端续接资料
 
-从本轮 `codex/wpf-design-system-077` 分支继续。先读根 AGENTS.md、`design/FLOATCLIP_WINDOWS_DESIGN_SYSTEM.md`、`design/CHANGELOG.md`、`WINDOWS_WPF_DESIGN_077_2026-10-23.md`；保留 WPF + XAML。WebView2 实验另存分支，不作为当前路线。Windows 和 Android 开发候选均为 0.7.7 / build 22；手机无撤销修订见 `CANDIDATE_ANDROID_0.7.7_2026-10-23.md`。旧候选记录仅作历史证据。
+从本轮 `codex/wpf-design-system-077` 分支继续。先读根 AGENTS.md、`design/FLOATCLIP_WINDOWS_DESIGN_SYSTEM.md`、`design/CHANGELOG.md`、`CANDIDATE_0.7.8_2026-10-23.md`、`NATIVE_UPDATES_2026-10-23.md`；保留 WPF + XAML。WebView2 实验另存分支，不作为当前路线。Windows 和 Android 当前候选均为 0.7.8 / build 23；0.7.7 和更旧记录仅作历史证据。用户负责候选外观检查，不能代替其宣称验收。
 
 ## 用户已确认的方向
 
@@ -9,10 +9,12 @@ Windows 单一左侧导航窗口，紧凑标准控件，设置使用开关/滑�
 ## 关键源文件
 
 - Windows 窗口与交互：`windows/FloatClip.Desktop/LocalClipboardWindow.cs`、`ClipboardNavigation.cs`、`FileShelfView.cs`、`FilePreviewWindow.cs`、`ClipboardSharingWindow.cs`、`DesktopControls.xaml`。
+- 设计资源与设备页：`Design/`、`Views/DevicePageView.xaml`、`ViewModels/DevicePanelViewModel.cs`、`Services/ClipboardDeviceService.cs`、`Services/DocumentPreviewService.cs`、`ShellFileIcons.cs`。
 - 宿主/同步：`ClipboardHost.cs`、`NativeClipboardSync.cs`、`BluetoothSyncTransport.cs`、`ClipboardSyncEngine.cs`、`ShareCore.cs`、`FileCatalog.cs`。
 - 手机后台采集与蓝牙：`app/src/main/java/com/floatclip/app/sync/ClipboardSyncService.kt`、`capture/BackgroundClipboardCapture.kt`、`capture/AdbClipboardHelper.java`、`scripts/activate-adb-clipboard.sh`。
 - 手机文件：`app/src/main/java/com/floatclip/app/files/`。真实传输只在已授权的 FCP4 局域网会话使用清单帧，蓝牙/FCP3 继续使用既有文字协议。
 - 交互预览在 `docs/ui/`，为带模拟数据的设计参考，不是真实网络客户端。
+- 双端更新：`ShareUpdates.cs`、`nearby-probe/.../ShareUpdates.kt`、`UpdateManifestVerifier.cs`、两端 `UpdateTrust`、`updates/native-updates.json`、`scripts/sign-native-updates.py`。签名私钥只在原 Windows 本机，不在云端/小主机。
 
 ## 构建和检查
 
@@ -32,7 +34,9 @@ Android 候选此前通过隔离目录构建，复用了小主机既有 JDK17/SD
 
 ## 未完成的产品能力
 
-剪贴板图片跨设备自动同步、自托管签名更新源、Windows 系统跨应用分享、完整 Office 内嵌预览、Wi-Fi Direct 和手机重启后的后台采集恢复仍需推进。更新检查当前仍使用 GitHub 清单；不能把已有公网安装包链接误写成已完成更新源迁移。
+剪贴板图片跨设备自动同步、Windows 系统跨应用分享、完整 Office 排版预览、Wi-Fi Direct 和手机重启后的后台采集恢复仍需推进。Office 当前仅只读文字/单元格预览。双端签名更新源已迁移到小主机公网主源、GitHub 备用，实际签名验证通过；公开清单仍为 0.7.1，不能把候选称为已公开发版。Android 下载仍通过浏览器/系统安装，应用内 APK 下载后验哈希未做。
+
+0.7.8 桌面 168 项检查、更新 43 项检查、Android 61 项单测与 lint 通过。候选目录 `analysis/candidate-078` 用于手机构建，最终资料快照 `analysis/cloud-handoff-078-final` 独立保存，勿覆盖小主机原工作区的 18 项其他修改。下一轮真实蓝牙/手机回归仍应保留原授权数据；本轮未以模拟服务或 TCP 回环冒充手机实机验收。
 
 ## 切回云端
 

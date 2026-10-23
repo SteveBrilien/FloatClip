@@ -1,0 +1,11 @@
+{
+  "version": "0.7.8", "build": 25, "package": "com.floatclip.probe",
+  "bytes": 3762500,
+  "sha256": "d42927159abbc4cc72b995791c66c224cf0bbb271483746765e2033a8b34ed90",
+  "signerSha256": "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c",
+  "tests": {"tests": 62, "failures": 0, "errors": 0, "skipped": 0},
+  "lint": {"Error": 0, "Warning": 17},
+  "jobId": "task-floatclip_078_build25-9975362b97994ee6be49",
+  "artifactId": "artifact-493192dd4c3a429db1066aced24d2d28",
+  "hardwareVerified": false
+}

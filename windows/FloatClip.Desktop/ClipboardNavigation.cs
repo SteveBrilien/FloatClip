@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using Wpf.Ui.Controls;
 using FloatClip.Desktop.Design;
+using FloatClip.Desktop.ViewModels;
 
 namespace FloatClip.Desktop;
 
@@ -21,13 +22,14 @@ public sealed partial class LocalClipboardWindow
     readonly Dictionary<Type,FrameworkElement> pages=new();
     ClipboardSharingView? devicesView;
     FileShelfView? filesView;
+    CategorySettingsViewModel? categorySettingsModel;
     Type currentPage=typeof(ClipboardPage);
     bool shellReady,expandedNavigation;
     double clipFontSize=14,cardSpacing=8,panelWidth=520;
     sealed class PageProvider(Func<Type,object> resolve):IServiceProvider{public object GetService(Type type)=>resolve(type);}
     void BuildShell()
     {
-        shell.SetResourceReference(Panel.BackgroundProperty,"FloatClip.Background");
+        shell.Background=Brushes.Transparent;
         var titleBar=new DockPanel{Height=DesignTokens.Number("Hit.Title"),Margin=new(0,2,8,0),LastChildFill=true,Background=Brushes.Transparent};
         System.Windows.Automation.AutomationProperties.SetAutomationId(titleBar,"WindowDragRegion");
         titleBar.MouseLeftButtonDown+=(_,e)=>{
@@ -51,12 +53,13 @@ public sealed partial class LocalClipboardWindow
                 filesView=new FileShelfView(sync,prefsRoot);
                 page=new FilesPage{Content=filesView};
             }else page=new UpdatesPage{Content=new ScrollViewer{Content=BuildUpdateSection(),Margin=new(20,8,20,16),VerticalScrollBarVisibility=ScrollBarVisibility.Auto}};
-            page.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");pages[type]=page;return page;
+            page.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");page.SetResourceReference(Control.BackgroundProperty,"FloatClip.Background");pages[type]=page;return page;
         }));
         void Item(string label,SymbolRegular icon,Type type,bool footer=false){var item=new NavigationViewItem{Content=label,Icon=new SymbolIcon(icon){FontSize=18},TargetPageType=type,ToolTip=label};System.Windows.Automation.AutomationProperties.SetAutomationId(item,"Navigate"+type.Name);if(footer)navigation.FooterMenuItems.Add(item);else navigation.MenuItems.Add(item);}
         Item("剪贴板",SymbolRegular.Clipboard24,typeof(ClipboardPage));Item("文件",SymbolRegular.Folder24,typeof(FilesPage));Item("我的设备",SymbolRegular.Phone24,typeof(DevicesPage));Item("设置",SymbolRegular.Settings24,typeof(SettingsPage),true);Item("版本与更新",SymbolRegular.ArrowDownload24,typeof(UpdatesPage),true);
-        navigation.Navigated+=(_,args)=>{if(args.Page is FrameworkElement element)currentPage=element.GetType();};
-        navigation.SetResourceReference(Control.BackgroundProperty,"FloatClip.Background");navigation.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");shell.Children.Add(navigation);
+        navigation.Navigated+=(_,args)=>{if(args.Page is FrameworkElement element)currentPage=element.GetType();ApplyClipboardBackground();};
+        navigation.Background=Brushes.Transparent;navigation.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");shell.Children.Add(navigation);
+        navigation.Resources["NavigationViewContentBackground"]=Brushes.Transparent;
         if(Content is Border border)border.Child=shell;else Content=shell;
         shellReady=true;UpdateNavigation();Loaded+=(_,_)=>Navigate(currentPage);Closed+=(_,_)=>{devicesView?.Dispose();filesView?.Dispose();};
     }
@@ -67,7 +70,7 @@ public sealed partial class LocalClipboardWindow
         System.Windows.Automation.AutomationProperties.SetName(pin,host.Pinned?"取消固定面板":"固定面板");
     }
     void UpdateNavigation(){navigation.PaneDisplayMode=NavigationViewPaneDisplayMode.Left;navigation.IsPaneOpen=expandedNavigation;}
-    void Navigate(Type type){currentPage=type;if(shellReady)navigation.Navigate(type);}
+    void Navigate(Type type){currentPage=type;if(type==typeof(SettingsPage))categorySettingsModel?.Reload();if(shellReady)navigation.Navigate(type);}
     FrameworkElement SettingRow(string title,string detail,FrameworkElement control)
     {
         var grid=new Grid();grid.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});grid.ColumnDefinitions.Add(new(){Width=GridLength.Auto});

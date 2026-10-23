@@ -1,0 +1,11 @@
+{
+  "actualWindowsDpi": 1.5,
+  "offscreenDpi": [96,120,144,192],
+  "physicalFourDpiVerified": false,
+  "materialProbe": "DWM support, background alpha, keyboard focus and pin checked in isolated windows; not all hardware or performance",
+  "androidUi": "Robolectric card geometry and protocol tests; physical device offline",
+  "bluetoothToLan": "loopback adapter transition, catalog and text/ACK regression passed; no actual phone transport verification",
+  "imageImport": "explicit authorized content URI; no gallery scanning or cross-device image sync",
+  "visualAcceptance": "user review pending",
+  "userClipboardUntouched": true
+}

@@ -1,0 +1,241 @@
+<div id="floatclip-file-shelf" class="viz-dotted-background">
+  <div class="fs-stage">
+    <div class="fs-app" aria-label="FloatClip 资源管理器式文件列表"></div>
+  </div>
+</div>
+<style>
+#floatclip-file-shelf [hidden]{display:none!important}
+#floatclip-file-shelf .fs-stage{padding:12px 4px 22px}
+#floatclip-file-shelf .fs-app{--fs-bg:light-dark(#f4f6f9,#1b1e23);--fs-surface:light-dark(#fff,#24282f);--fs-text:light-dark(#24282f,#edf0f6);--fs-muted:light-dark(#657183,#adb6c6);--fs-line:light-dark(#e1e5ed,#3d4552);--fs-hover:light-dark(#f1f5fb,#303744);--fs-selected:light-dark(#e8f0fd,#2c3d58);--fs-accent:light-dark(#245db8,#9ac1ff);--fs-button:light-dark(#3068c5,#94bdff);--fs-on-button:light-dark(#fff,#172942);--fs-good:light-dark(#267251,#91d1af);--fs-danger:light-dark(#b33643,#f4a0aa);--fs-radius:5px;--fs-row:40px;--fs-icon:21px;position:relative;min-width:0;border:1px solid var(--fs-line);border-radius:9px;background:var(--fs-bg);color:var(--fs-text);font:13px/1.5 "Segoe UI Variable","Segoe UI","Microsoft YaHei UI","Microsoft YaHei",sans-serif;overflow:clip;box-shadow:0 10px 28px light-dark(#2b385310,#0003)}
+#floatclip-file-shelf .fs-app[data-theme=tokyo-night]{--fs-bg:#1a1b26;--fs-surface:#24283b;--fs-text:#e4e9ff;--fs-muted:#bbc4e5;--fs-line:#414868;--fs-hover:#2b3150;--fs-selected:#303e62;--fs-accent:#a9c7ff;--fs-button:#7aa2f7;--fs-on-button:#192338;--fs-good:#b7dc8d;--fs-danger:#f7b4c3}
+#floatclip-file-shelf .fs-app *{box-sizing:border-box}
+#floatclip-file-shelf .fs-app{--fs-muted:light-dark(#5e6a7d,#bdc6d6)}
+#floatclip-file-shelf .fs-app[data-theme=tokyo-night]{--fs-muted:#bbc4e5}
+#floatclip-file-shelf .fs-app button,#floatclip-file-shelf .fs-app input,#floatclip-file-shelf .fs-app select{font:inherit}
+#floatclip-file-shelf .fs-app button{color:var(--fs-text);background:transparent;border:1px solid transparent;border-radius:var(--fs-radius);padding:5px 8px;min-height:31px;max-width:100%;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+#floatclip-file-shelf .fs-app button:hover{background:var(--fs-hover)}
+#floatclip-file-shelf .fs-app button:disabled{opacity:.45;cursor:default}
+#floatclip-file-shelf .fs-app button.fs-primary{background:var(--fs-button);color:var(--fs-on-button)}
+#floatclip-file-shelf .fs-app button.fs-bordered{border-color:var(--fs-line);background:var(--fs-surface)}
+#floatclip-file-shelf .fs-app button[aria-pressed=true]{background:var(--fs-selected);color:var(--fs-accent)}
+#floatclip-file-shelf .fs-app svg{width:16px;height:16px;flex:none}
+#floatclip-file-shelf .fs-app input[type=checkbox]{width:15px;height:15px;margin:0;accent-color:var(--fs-accent)}
+#floatclip-file-shelf .fs-app input:not([type=checkbox]):not([type=file]),#floatclip-file-shelf .fs-app select{min-width:0;width:100%;border:1px solid var(--fs-line);border-radius:4px;background:var(--fs-surface);color:var(--fs-text);padding:7px 8px}
+#floatclip-file-shelf .fs-titlebar{display:flex;align-items:center;gap:8px;min-height:35px;padding:5px 13px;border-bottom:1px solid var(--fs-line);font-size:12px}
+#floatclip-file-shelf .fs-brand{width:20px;height:20px;border-radius:5px;background:var(--fs-button);color:var(--fs-on-button);display:grid;place-items:center}
+#floatclip-file-shelf .fs-brand svg{width:14px;height:14px}
+#floatclip-file-shelf .fs-caption{color:var(--fs-muted)}
+#floatclip-file-shelf .fs-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 17px 13px}
+#floatclip-file-shelf .fs-heading h2{font-size:20px;font-weight:500;line-height:1.3;margin:0 0 5px}
+#floatclip-file-shelf .fs-heading p{font-size:12px;color:var(--fs-muted);margin:0}
+#floatclip-file-shelf .fs-connection{display:flex;gap:5px;align-items:center;font-size:12px;color:var(--fs-good);margin-left:auto;white-space:nowrap}
+#floatclip-file-shelf .fs-connection svg{width:14px;height:14px}
+#floatclip-file-shelf .fs-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:3px;padding:7px 9px;border-block:1px solid var(--fs-line)}
+#floatclip-file-shelf .fs-toolbar button{font-size:12px}
+#floatclip-file-shelf .fs-divider{width:1px;height:19px;background:var(--fs-line);margin:0 3px}
+#floatclip-file-shelf .fs-toolbar .fs-details-toggle{margin-left:auto}
+#floatclip-file-shelf .fs-workspace{display:grid;grid-template-columns:minmax(0,1fr);background:var(--fs-surface);min-height:394px}
+#floatclip-file-shelf .fs-app.fs-with-pane .fs-workspace{grid-template-columns:minmax(0,1fr) 262px}
+#floatclip-file-shelf .fs-list{min-width:0;padding:0 7px 13px}
+#floatclip-file-shelf .fs-list table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px;color:var(--fs-text)}
+#floatclip-file-shelf .fs-list td.fs-name-col{color:var(--fs-text)}
+#floatclip-file-shelf .fs-list th{font-weight:400;color:var(--fs-muted);text-align:left;height:33px;border-bottom:1px solid var(--fs-line);padding:0 5px}
+#floatclip-file-shelf .fs-list th button{padding:3px 0;min-height:28px;gap:3px;font-size:12px;justify-content:flex-start;border-radius:2px}
+#floatclip-file-shelf .fs-list th button svg{width:12px;height:12px}
+#floatclip-file-shelf .fs-list td{height:var(--fs-row);padding:3px 5px;border-bottom:1px solid transparent;vertical-align:middle}
+#floatclip-file-shelf .fs-list tr:hover td{background:var(--fs-hover)}
+#floatclip-file-shelf .fs-list tr[aria-selected=true] td{background:var(--fs-selected)}
+#floatclip-file-shelf .fs-list .fs-check-col{width:27px;text-align:center;padding-inline:3px}
+#floatclip-file-shelf .fs-list .fs-name-col{width:auto}
+#floatclip-file-shelf .fs-list .fs-modified-col{width:128px}
+#floatclip-file-shelf .fs-list .fs-type-col{width:73px}
+#floatclip-file-shelf .fs-list .fs-size-col{width:61px;text-align:right;font-variant-numeric:tabular-nums}
+#floatclip-file-shelf .fs-list .fs-source-col{width:68px}
+#floatclip-file-shelf .fs-list .fs-state-col{width:86px}
+#floatclip-file-shelf .fs-list td.fs-modified-col,#floatclip-file-shelf .fs-list td.fs-type-col,#floatclip-file-shelf .fs-list td.fs-size-col,#floatclip-file-shelf .fs-list td.fs-source-col{color:var(--fs-muted)}
+#floatclip-file-shelf .fs-list td.fs-modified-col,#floatclip-file-shelf .fs-list td.fs-type-col{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#floatclip-file-shelf .fs-list .fs-name-button{display:flex;gap:8px;min-width:0;width:100%;padding:3px 0;justify-content:flex-start;text-align:left;font-size:13px;color:var(--fs-text)}
+#floatclip-file-shelf .fs-list .fs-name-button:hover{background:transparent}
+#floatclip-file-shelf .fs-name-text{display:block;min-width:0;flex:1}
+#floatclip-file-shelf .fs-filename{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fs-text);-webkit-text-fill-color:var(--fs-text)}
+#floatclip-file-shelf .fs-mobile-meta{display:none;color:var(--fs-muted);font-size:11px}
+#floatclip-file-shelf .fs-file-icon{--fs-file-color:light-dark(#55708b,#526d8b);--fs-file-ink:light-dark(#526b88,#bdcfe4);width:var(--fs-icon);height:calc(var(--fs-icon) * 1.2);border-radius:3px;border:1.5px solid transparent;display:flex;align-items:center;justify-content:center;flex:none;background:var(--fs-file-color);color:light-dark(#fff,#fff);font-size:11px;font-weight:500;line-height:1}
+#floatclip-file-shelf .fs-file-icon[data-type=pdf]{--fs-file-color:light-dark(#c54451,#b94655);--fs-file-ink:light-dark(#af3443,#f5a6b3)}
+#floatclip-file-shelf .fs-file-icon[data-type=docx]{--fs-file-color:light-dark(#2867bb,#3668b6);--fs-file-ink:light-dark(#2860ad,#a1c5ff)}
+#floatclip-file-shelf .fs-file-icon[data-type=xlsx]{--fs-file-color:light-dark(#25734f,#357956);--fs-file-ink:light-dark(#246d4c,#a1d8b8)}
+#floatclip-file-shelf .fs-file-icon[data-type=pptx]{--fs-file-color:light-dark(#b84c2b,#b85a3a);--fs-file-ink:light-dark(#a34426,#f6ba9c)}
+#floatclip-file-shelf .fs-file-icon[data-type=png]{--fs-file-color:light-dark(#7657a8,#7056a1);--fs-file-ink:light-dark(#6c4ba1,#d2b6f7)}
+#floatclip-file-shelf .fs-file-icon[data-type=zip]{--fs-file-color:light-dark(#95691e,#856126);--fs-file-ink:light-dark(#805c1e,#e5c281)}
+#floatclip-file-shelf .fs-file-icon.fs-remote{background:transparent;color:var(--fs-file-ink);border:1.5px dashed currentColor}
+#floatclip-file-shelf .fs-file-icon svg{width:13px;height:13px}
+#floatclip-file-shelf .fs-state{display:block;font-size:11px;color:var(--fs-muted);white-space:nowrap}
+#floatclip-file-shelf .fs-state.fs-ready{color:var(--fs-good)}
+#floatclip-file-shelf .fs-track{height:3px;background:var(--fs-selected);margin-top:4px;overflow:hidden;border-radius:2px}
+#floatclip-file-shelf .fs-track span{display:block;height:100%;background:var(--fs-accent)}
+#floatclip-file-shelf .fs-with-pane .fs-modified-col,#floatclip-file-shelf .fs-with-pane .fs-type-col,#floatclip-file-shelf .fs-with-pane .fs-source-col{display:none}
+#floatclip-file-shelf .fs-empty{padding:44px 16px;color:var(--fs-muted);text-align:center}
+#floatclip-file-shelf .fs-pane{border-left:1px solid var(--fs-line);padding:13px 14px 18px;min-width:0;background:var(--fs-bg)}
+#floatclip-file-shelf .fs-pane-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+#floatclip-file-shelf .fs-pane-head h3{font-size:14px;font-weight:500;margin:0}
+#floatclip-file-shelf .fs-pane-head button{width:28px;min-height:28px;padding:4px}
+#floatclip-file-shelf .fs-pane-file{display:flex;align-items:center;gap:10px;margin-bottom:13px}
+#floatclip-file-shelf .fs-pane-file strong{font-size:13px;font-weight:500;overflow-wrap:anywhere;display:block}
+#floatclip-file-shelf .fs-pane-file small{display:block;font-size:11px;color:var(--fs-muted);margin-top:3px}
+#floatclip-file-shelf .fs-pane-file .fs-file-icon{width:30px;height:36px;flex:none;font-size:12px}
+#floatclip-file-shelf .fs-tabs{display:flex;border-bottom:1px solid var(--fs-line);margin-bottom:13px;gap:12px}
+#floatclip-file-shelf .fs-tabs button{border-radius:0;padding:6px 2px;border-bottom:2px solid transparent;min-height:30px;font-size:12px}
+#floatclip-file-shelf .fs-tabs button[aria-pressed=true]{background:transparent;border-bottom-color:var(--fs-accent)}
+#floatclip-file-shelf .fs-placeholder{min-height:178px;display:flex;flex-direction:column;gap:9px;justify-content:center;align-items:center;text-align:center;padding:15px 6px;color:var(--fs-muted);font-size:12px}
+#floatclip-file-shelf .fs-placeholder svg{width:25px;height:25px}
+#floatclip-file-shelf .fs-placeholder p{margin:0}
+#floatclip-file-shelf .fs-placeholder button{margin-top:4px}
+#floatclip-file-shelf .fs-paper{background:var(--fs-surface);border:1px solid var(--fs-line);border-radius:3px;padding:18px 15px;min-height:215px;color:var(--fs-text)}
+#floatclip-file-shelf .fs-paper table,#floatclip-file-shelf .fs-paper td,#floatclip-file-shelf .fs-paper th{color:var(--fs-text)}
+#floatclip-file-shelf .fs-paper small{color:var(--fs-muted);font-size:11px}
+#floatclip-file-shelf .fs-paper h4{font-size:17px;font-weight:500;margin:14px 0}
+#floatclip-file-shelf .fs-paper p{font-size:12px;margin:11px 0;line-height:1.85}
+#floatclip-file-shelf .fs-paper hr{border:0;border-top:1px solid var(--fs-line);margin:15px 0}
+#floatclip-file-shelf .fs-paper table{font-size:11px;border-collapse:collapse;width:100%;margin-top:15px}
+#floatclip-file-shelf .fs-paper td,#floatclip-file-shelf .fs-paper th{border:1px solid var(--fs-line);padding:7px 4px;text-align:left;overflow-wrap:anywhere;font-weight:400}
+#floatclip-file-shelf .fs-paper th{background:var(--fs-hover)}
+#floatclip-file-shelf .fs-properties{margin:0;font-size:12px}
+#floatclip-file-shelf .fs-properties div{padding:6px 0;display:grid;grid-template-columns:61px minmax(0,1fr);gap:8px}
+#floatclip-file-shelf .fs-properties dt{color:var(--fs-muted)}
+#floatclip-file-shelf .fs-properties dd{margin:0;overflow-wrap:anywhere}
+#floatclip-file-shelf .fs-pane-actions{display:flex;flex-wrap:wrap;gap:5px;margin-top:13px}
+#floatclip-file-shelf .fs-pane-actions button{font-size:12px}
+#floatclip-file-shelf .fs-form label{display:block;margin:13px 0;font-size:12px;color:var(--fs-muted)}
+#floatclip-file-shelf .fs-form input,#floatclip-file-shelf .fs-form select{display:block;margin-top:5px}
+#floatclip-file-shelf .fs-form p{font-size:12px;color:var(--fs-muted);overflow-wrap:anywhere}
+#floatclip-file-shelf .fs-validation{font-size:12px;color:var(--fs-danger)}
+#floatclip-file-shelf .fs-statusbar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;min-height:33px;border-top:1px solid var(--fs-line);padding:7px 14px;font-size:11px;color:var(--fs-muted)}
+#floatclip-file-shelf .fs-legend{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+#floatclip-file-shelf .fs-legend>span{display:inline-flex;align-items:center;gap:5px}
+#floatclip-file-shelf .fs-legend-icon{display:inline-block;width:9px;height:12px;background:var(--fs-accent);border-radius:2px}
+#floatclip-file-shelf .fs-legend-icon.fs-dashed{border:1px dashed var(--fs-accent);background:transparent}
+#floatclip-file-shelf .fs-notice{padding:8px 14px;font-size:12px;color:var(--fs-accent);background:var(--fs-selected);border-top:1px solid var(--fs-line);overflow-wrap:anywhere}
+#floatclip-file-shelf .fs-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+@media(max-width:690px){#floatclip-file-shelf .fs-list .fs-type-col{display:none}#floatclip-file-shelf .fs-app.fs-with-pane .fs-workspace{grid-template-columns:minmax(0,1fr) 240px}#floatclip-file-shelf .fs-with-pane .fs-list .fs-size-col{display:none}}
+@media(max-width:580px){#floatclip-file-shelf .fs-list .fs-modified-col,#floatclip-file-shelf .fs-list .fs-source-col{display:none}#floatclip-file-shelf .fs-mobile-meta{display:block}#floatclip-file-shelf .fs-app.fs-with-pane .fs-workspace{grid-template-columns:minmax(0,1fr)}#floatclip-file-shelf .fs-pane{border-left:0;border-top:1px solid var(--fs-line)}#floatclip-file-shelf .fs-with-pane .fs-list .fs-size-col{display:table-cell}#floatclip-file-shelf .fs-connection{margin-left:0}#floatclip-file-shelf .fs-heading{padding:13px}#floatclip-file-shelf .fs-heading h2{font-size:18px}#floatclip-file-shelf .fs-list td{height:max(var(--fs-row),46px)}#floatclip-file-shelf .fs-workspace{min-height:0}}
+@media(max-width:390px){#floatclip-file-shelf .fs-list .fs-size-col,#floatclip-file-shelf .fs-with-pane .fs-list .fs-size-col{display:none}#floatclip-file-shelf .fs-heading p{max-width:255px}#floatclip-file-shelf .fs-toolbar .fs-details-toggle{margin-left:0}#floatclip-file-shelf .fs-toolbar .fs-divider{display:none}#floatclip-file-shelf .fs-list .fs-state-col{width:76px}#floatclip-file-shelf .fs-statusbar{gap:8px}}
+@media(pointer:coarse){#floatclip-file-shelf .fs-app button{min-height:44px}#floatclip-file-shelf .fs-list td{height:max(var(--fs-row),48px)}#floatclip-file-shelf .fs-check-col label{display:flex;align-items:center;justify-content:center;min-height:44px}#floatclip-file-shelf .fs-app input:not([type=checkbox]),#floatclip-file-shelf .fs-app select{font-size:16px}#floatclip-file-shelf .fs-pane-head button{width:44px}}
+</style>
+<script>
+(()=>{
+const root=document.getElementById('floatclip-file-shelf');
+const app=root.querySelector('.fs-app');
+const cfg={rowHeight:40,iconSize:21,theme:'system',previewPane:false};
+const types={pdf:['PDF 文档','P'],docx:['Word 文档','W'],xlsx:['Excel 表格','X'],png:['PNG 图像',''],zip:['ZIP 压缩包',''],pptx:['PPT 文稿','P'],dwg:['DWG 图纸',''],txt:['文本文档','']};
+const files=[
+{id:'pdf',name:'FloatClip 设计说明.pdf',type:'pdf',bytes:2526848,source:'我的手机',online:true,local:false,created:'2026/10/21 20:12',modified:'2026/10/22 14:08',attributes:'只读',pages:'12 页'},
+{id:'word',name:'会议纪要与下一步安排.docx',type:'docx',bytes:63841,source:'本机',online:true,local:true,created:'2026/10/22 15:02',modified:'2026/10/22 16:26',attributes:'可编辑',pages:'3 页'},
+{id:'excel',name:'项目进度与预算.xlsx',type:'xlsx',bytes:184320,source:'我的手机',online:true,local:true,created:'2026/10/20 10:32',modified:'2026/10/22 15:46',attributes:'可编辑',pages:'3 个工作表'},
+{id:'image',name:'界面参考.png',type:'png',bytes:1290240,source:'我的手机',online:true,local:false,created:'2026/10/22 13:18',modified:'2026/10/22 13:18',attributes:'只读',pages:'1920 × 1080'},
+{id:'dwg',name:'结构草图.dwg',type:'dwg',bytes:61440,source:'工作电脑',online:false,local:false,created:'2026/10/19 10:25',modified:'2026/10/21 23:36',attributes:'只读',pages:'—'},
+{id:'zip',name:'UI 资源.zip',type:'zip',bytes:8626176,source:'本机',online:true,local:true,created:'2026/10/21 09:08',modified:'2026/10/22 10:32',attributes:'可读写',pages:'—'},
+{id:'slides',name:'功能演示.pptx',type:'pptx',bytes:1468006,source:'我的手机',online:true,local:false,created:'2026/10/21 11:12',modified:'2026/10/22 12:41',attributes:'可编辑',pages:'8 张幻灯片'},
+{id:'text',name:'配对说明.txt',type:'txt',bytes:820,source:'本机',online:true,local:true,created:'2026/10/20 16:05',modified:'2026/10/20 16:18',attributes:'可读写',pages:'—'}
+];
+const selected=new Set();const jobs=new Map();
+let sortKey='original',direction=1,paneMode='preview',message='',form=null,validation='';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const icon=n=>`<i data-lucide="${n}" aria-hidden="true"></i>`;
+const size=b=>b<1024?`${b} B`:b<1048576?`${Math.round(b/1024)} KB`:`${(b/1048576).toFixed(1)} MB`;
+const lookup=id=>files.find(f=>f.id===id);
+const chosen=()=>files.filter(f=>selected.has(f.id));
+const one=()=>selected.size===1?lookup([...selected][0]):null;
+const ready=f=>f.local||f.online;
+const fileIcon=f=>`<span class="fs-file-icon ${f.local?'':'fs-remote'}" data-type="${esc(f.type)}" aria-label="${f.local?'本机已有':'未下载'}">${types[f.type]?.[1]||icon(f.type==='png'?'image':f.type==='zip'?'file-archive':'file')}</span>`;
+function state(f){const j=jobs.get(f.id);return j?`下载中 ${j.progress}%`:f.local?(f.source==='本机'?'本机文件':'已下载'):f.cancelled?'已取消':f.online?'未下载':'源设备离线'}
+function hydrate(value){const m=value?.modelContent;if(!m||m.fileView!=='资源管理器式详细列表')return;if(['system','light','dark','tokyo-night'].includes(m.theme))cfg.theme=m.theme;if(Number.isFinite(m.rowHeight))cfg.rowHeight=Math.max(32,Math.min(52,m.rowHeight));if(Number.isFinite(m.iconSize))cfg.iconSize=Math.max(16,Math.min(26,m.iconSize));if(typeof m.previewPane==='boolean')cfg.previewPane=m.previewPane;}
+function remember(){try{if(window.openai?.setWidgetState)Promise.resolve(window.openai.setWidgetState({modelContent:{fileView:'资源管理器式详细列表',theme:cfg.theme,rowHeight:cfg.rowHeight,iconSize:cfg.iconSize,previewPane:cfg.previewPane},privateContent:null})).catch(()=>{});}catch{}}
+try{hydrate(window.openai?.widgetState);}catch{}
+app.innerHTML=`<div class="fs-titlebar"><span class="fs-brand">${icon('layers')}</span><span>FloatClip</span><span class="fs-caption">／ 文件传输</span></div>
+<header class="fs-heading"><div><h2>共享文件</h2><p>文件留在来源设备，需要时再下载到本机</p></div><div class="fs-connection">${icon('wifi')}我的手机 · 已连接</div></header>
+<div class="fs-toolbar" role="toolbar" aria-label="文件操作">
+<button type="button" data-action="add">${icon('file-plus-2')}添加文件</button><span class="fs-divider"></span>
+<button type="button" class="fs-primary" data-action="download">${icon('download')}<span>下载</span></button>
+<button type="button" data-action="cancel" hidden>${icon('circle-x')}取消下载</button>
+<button type="button" data-action="preview">${icon('panel-right')}预览</button>
+<button type="button" data-action="save">${icon('save')}另存为</button>
+<button type="button" data-action="forward">${icon('forward')}转发</button>
+<button type="button" class="fs-details-toggle" data-action="properties">${icon('info')}属性</button>
+<input type="file" class="fs-sr" aria-label="添加到共享列表的文件" multiple>
+</div>
+<main class="fs-workspace"><section class="fs-list" aria-label="共享文件详细列表"><table aria-label="共享文件"><thead><tr>
+<th class="fs-check-col"><label><input type="checkbox" data-action="select-all" aria-label="选择全部文件"></label></th>
+<th class="fs-name-col" data-sort="name"><button type="button" class="cursor-interaction" data-action="sort" data-key="name">名称</button></th>
+<th class="fs-modified-col" data-sort="modified"><button type="button" class="cursor-interaction" data-action="sort" data-key="modified">修改时间</button></th>
+<th class="fs-type-col" data-sort="type"><button type="button" class="cursor-interaction" data-action="sort" data-key="type">类型</button></th>
+<th class="fs-size-col" data-sort="bytes"><button type="button" class="cursor-interaction" data-action="sort" data-key="bytes">大小</button></th>
+<th class="fs-source-col" data-sort="source"><button type="button" class="cursor-interaction" data-action="sort" data-key="source">来源</button></th>
+<th class="fs-state-col">本机状态</th></tr></thead><tbody></tbody></table></section>
+<aside class="fs-pane" aria-label="所选文件详情" hidden></aside></main>
+<footer class="fs-statusbar"><span class="fs-count"></span><span class="fs-legend"><span><i class="fs-legend-icon"></i>本机已有</span><span><i class="fs-legend-icon fs-dashed"></i>未下载</span></span></footer>
+<div class="fs-notice" role="status" aria-live="polite" hidden></div>`;
+const tbody=app.querySelector('tbody'),pane=app.querySelector('.fs-pane');
+function applyDesign(){app.dataset.theme=cfg.theme;app.style.colorScheme=cfg.theme==='system'?'light dark':cfg.theme==='tokyo-night'?'dark':cfg.theme;app.style.setProperty('--fs-row',`${cfg.rowHeight}px`);app.style.setProperty('--fs-icon',`${cfg.iconSize}px`);app.classList.toggle('fs-with-pane',cfg.previewPane);pane.hidden=!cfg.previewPane;}
+function renderList(){let rows=files.slice();if(sortKey!=='original')rows.sort((a,b)=>direction*(typeof a[sortKey]==='number'?a[sortKey]-b[sortKey]:String(a[sortKey]).localeCompare(String(b[sortKey]),'zh-CN')));
+tbody.innerHTML=rows.map(f=>`<tr data-id="${esc(f.id)}" aria-selected="${selected.has(f.id)}" class="cursor-interaction"><td class="fs-check-col"><label><input type="checkbox" class="cursor-interaction" data-action="check" data-id="${esc(f.id)}" aria-label="选择 ${esc(f.name)}" ${selected.has(f.id)?'checked':''}></label></td><td class="fs-name-col"><button type="button" class="fs-name-button cursor-interaction" data-action="select" data-id="${esc(f.id)}" aria-label="选中 ${esc(f.name)}" data-tooltip="${esc(f.name)}">${fileIcon(f)}<span class="fs-name-text"><span class="fs-filename">${esc(f.name)}</span><span class="fs-mobile-meta">${size(f.bytes)} · ${esc(f.source)}</span></span></button></td><td class="fs-modified-col">${esc(f.modified)}</td><td class="fs-type-col">${esc(types[f.type]?.[0]||'文件')}</td><td class="fs-size-col">${size(f.bytes)}</td><td class="fs-source-col">${esc(f.source)}</td><td class="fs-state-col"><span class="fs-state-wrap">${statusHTML(f)}</span></td></tr>`).join('');
+updateControls();icons();}
+function statusHTML(f){const j=jobs.get(f.id);return `<span class="fs-state ${f.local?'fs-ready':''}">${state(f)}</span>${j?`<div class="fs-track" role="progressbar" aria-label="${esc(f.name)} 下载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${j.progress}"><span style="width:${j.progress}%"></span></div>`:''}`;}
+function updateControls(){const group=chosen(),f=one(),pending=group.filter(x=>!x.local&&x.online&&!jobs.has(x.id));
+const d=app.querySelector('[data-action=download]');d.disabled=!pending.length;d.querySelector('span').textContent=pending.length>1?`下载 (${pending.length})`:'下载';d.setAttribute('data-tooltip',!group.length?'选择需要下载的文件':f?.local?'文件已在本机':f&&!f.online?'来源设备离线，上线后可下载':'下载所选文件');
+app.querySelector('[data-action=cancel]').hidden=!group.some(x=>jobs.has(x.id));
+for(const action of ['preview','properties'])app.querySelector(`[data-action=${action}]`).disabled=!f;
+for(const action of ['save','forward'])app.querySelector(`[data-action=${action}]`).disabled=!f||!ready(f)||jobs.has(f.id);
+app.querySelector('[data-action=preview]').setAttribute('aria-pressed',String(cfg.previewPane&&paneMode==='preview'));
+app.querySelector('[data-action=properties]').setAttribute('aria-pressed',String(cfg.previewPane&&paneMode==='properties'));
+const check=app.querySelector('[data-action=select-all]');check.checked=selected.size===files.length&&files.length>0;check.indeterminate=selected.size>0&&selected.size<files.length;
+app.querySelector('.fs-count').textContent=`${files.length} 个文件${group.length?` · 已选择 ${group.length} 个` : ''}${jobs.size?` · ${jobs.size} 个正在下载`:''}`;
+const notice=app.querySelector('.fs-notice');notice.hidden=!message;if(notice.textContent!==message)notice.textContent=message;
+for(const th of app.querySelectorAll('th[data-sort]')){const active=th.dataset.sort===sortKey;th.setAttribute('aria-sort',active?(direction===1?'ascending':'descending'):'none');const button=th.querySelector('button');button.innerHTML=({name:'名称',modified:'修改时间',type:'类型',bytes:'大小',source:'来源'})[th.dataset.sort]+(active?icon(direction===1?'arrow-up':'arrow-down'):'');}
+}
+function preview(f){if(!f.local){const j=jobs.get(f.id);return `<div class="fs-placeholder">${icon(f.online?'file-down':'wifi-off')}<p>${j?`正在下载 ${j.progress}%`:f.online?'文件尚未下载':'源设备离线'}</p><p>${j?'完成后可在此预览':f.online?'只选中不会开始传输':'清单仍保留，来源设备上线后可下载'}</p>${f.online?`<button type="button" class="${j?'fs-bordered':'fs-primary'} cursor-interaction" data-action="${j?'cancel-one':'download-one'}" data-id="${f.id}">${j?'取消下载':'下载文件'}</button>`:''}</div>`;}
+if(f.userFile)return `<div class="fs-placeholder">${icon('file-check')}<p>本机文件</p><p>此处仅展示文件信息，未读取实际文档内容</p></div>`;
+if(f.type==='pdf')return `<div class="fs-paper" aria-label="PDF 示例预览"><small>PDF · 第 1 页 / 12 页</small><h4>FloatClip 设计说明</h4><hr><p>共享文件清单</p><p>跨设备查看文件信息。选择需要的文件，再下载到当前设备。</p><p>文档示例 · 2026 年 10 月</p></div>`;
+if(f.type==='docx')return `<div class="fs-paper" aria-label="Word 示例预览"><small>Word · 第 1 页 / 3 页</small><h4>会议纪要</h4><hr><p>1. 确认文件列表布局。</p><p>2. 下载操作由用户选择后触发。</p><p>3. 已下载文件支持另存为和转发。</p></div>`;
+if(f.type==='xlsx')return `<div class="fs-paper" aria-label="Excel 示例预览"><small>Excel · 工作表：进度</small><table><thead><tr><th>事项</th><th>状态</th></tr></thead><tbody><tr><td>界面调整</td><td>进行中</td></tr><tr><td>设备配对</td><td>完成</td></tr><tr><td>文件传输</td><td>待验证</td></tr></tbody></table></div>`;
+if(f.type==='txt')return `<div class="fs-paper" aria-label="文本示例预览"><small>配对说明.txt</small><p>让手机和电脑连接同一个 Wi-Fi 或手机热点。</p><p>先完成配对，再共享所需文件。</p></div>`;
+return `<div class="fs-placeholder">${icon(f.type==='png'?'image':f.type==='zip'?'file-archive':'file')}<p>文件已在本机</p><p>此演示未提供该格式的内容预览</p></div>`;
+}
+function properties(f){const fields=[['文件名',f.name],['类型',types[f.type]?.[0]||'文件'],['大小',`${size(f.bytes)}（${f.bytes.toLocaleString('zh-CN')} 字节）`],['属性',f.attributes],['来源',f.source],['创建时间',f.created],['修改时间',f.modified],['本机状态',state(f)],['下载时间',f.received||'—'],['本机位置',f.saved?`${f.saved.folder} / ${f.saved.name}`:f.local?(f.source==='本机'?'本机原文件':'FloatClip 接收文件'):'未下载']];return `<dl class="fs-properties">${fields.map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`;}
+function renderPane(){applyDesign();if(!cfg.previewPane)return;const f=one();const title=({preview:'文件预览',properties:'文件属性',save:'另存为',forward:'转发文件'})[paneMode];pane.innerHTML=`<div class="fs-pane-head"><h3>${title}</h3><button type="button" class="cursor-interaction" data-action="close-pane" aria-label="关闭详情">${icon('x')}</button></div>`;
+if(!f){pane.innerHTML+=`<div class="fs-placeholder">${icon('mouse-pointer-2')}<p>${selected.size?'已选择多个文件':'选择一个文件'}</p><p>${selected.size?'可批量下载所选文件':'在这里查看预览和属性'}</p></div>`;icons();return;}
+pane.innerHTML+=`<div class="fs-pane-file">${fileIcon(f)}<div><strong>${esc(f.name)}</strong><small>${size(f.bytes)} · ${esc(f.source)} · ${state(f)}</small></div></div>`;
+if(paneMode==='preview'||paneMode==='properties')pane.innerHTML+=`<div class="fs-tabs" aria-label="文件详情视图"><button type="button" class="cursor-interaction" data-action="preview-tab" aria-pressed="${paneMode==='preview'}">预览</button><button type="button" class="cursor-interaction" data-action="properties-tab" aria-pressed="${paneMode==='properties'}">属性</button></div>${paneMode==='preview'?preview(f):properties(f)}`;
+if(paneMode==='save'){pane.innerHTML+=`<form class="fs-form" data-form="save"><label>文件名<input required data-field="name" aria-label="另存为文件名" value="${esc(form?.name||f.name)}"></label><label>保存到<select data-field="folder" aria-label="保存位置">${['下载 / FloatClip','桌面','文档'].map(s=>`<option ${form?.folder===s?'selected':''}>${s}</option>`).join('')}</select></label><p>${f.local?'将本机文件保存到所选位置':'文件尚未下载，确认后先下载再保存'}</p><div class="fs-validation" role="alert">${esc(validation)}</div><button type="submit" class="fs-primary cursor-interaction">${f.local?'保存':'下载并保存'}</button></form>`;}
+if(paneMode==='forward'){pane.innerHTML+=`<form class="fs-form" data-form="forward"><label>转发到<select data-field="destination" aria-label="转发设备"><option value="我的手机" ${form?.destination==='我的手机'?'selected':''}>我的手机 · 已连接</option><option value="平板" ${form?.destination==='平板'?'selected':''}>平板 · 已连接</option><option value="工作电脑" disabled>工作电脑 · 离线</option></select></label><p>${f.local?'确认后将文件传输到所选设备':'文件尚未下载，确认后先下载再转发'}</p><button type="submit" class="fs-primary cursor-interaction">${f.local?'确认转发':'下载并转发'}</button></form>`;}
+icons();}
+function icons(){app.querySelectorAll('button,input,select').forEach(el=>el.classList.add('cursor-interaction'));if(globalThis.lucide)lucide.createIcons({attrs:{width:16,height:16}});}
+function render(){const focused=app.contains(document.activeElement)?document.activeElement:null;const focusAction=focused?.dataset.action,focusId=focused?.dataset.id;renderList();renderPane();if(focusAction){const match=[...app.querySelectorAll(`[data-action="${focusAction}"]`)].find(x=>x.dataset.id===focusId);match?.focus({preventScroll:true});}}
+function select(id,toggle=false){if(toggle){selected.has(id)?selected.delete(id):selected.add(id);}else{selected.clear();selected.add(id);}form=null;validation='';if(paneMode==='save'||paneMode==='forward')paneMode='preview';message='';render();}
+function openPane(mode){paneMode=mode;cfg.previewPane=true;form=mode==='save'?{name:one()?.name||'',folder:'下载 / FloatClip'}:mode==='forward'?{destination:one()?.source==='我的手机'?'平板':'我的手机'}:null;validation='';renderPane();updateControls();remember();}
+function stamp(){return new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());}
+function download(f,after){if(!f)return;if(f.local){after?.();return;}if(!f.online||jobs.has(f.id))return;f.cancelled=false;const job={progress:0,after,timer:null};jobs.set(f.id,job);message=`正在下载 ${f.name}（演示）`;render();job.timer=setInterval(()=>{job.progress=Math.min(100,job.progress+10);if(job.progress>=100){clearInterval(job.timer);jobs.delete(f.id);f.local=true;f.received=stamp();message=`已下载 ${f.name}（演示）`;job.after?.();render();}else{const row=tbody.querySelector(`[data-id="${f.id}"] .fs-state-wrap`);if(row)row.innerHTML=statusHTML(f);updateControls();if(cfg.previewPane&&one()?.id===f.id&&(paneMode==='preview'||paneMode==='properties'))renderPane();icons();}},220);}
+function cancel(f){const job=jobs.get(f.id);if(!job)return;clearInterval(job.timer);jobs.delete(f.id);f.cancelled=true;message=`已取消 ${f.name}，文件仍保留在清单中`;render();}
+app.addEventListener('click',event=>{const button=event.target.closest('[data-action]');if(!button){const row=event.target.closest('tbody tr[data-id]');if(row&&event.target.tagName!=='INPUT'&&event.target.tagName!=='LABEL')select(row.dataset.id,event.ctrlKey||event.metaKey);return;}if(button.disabled)return;const action=button.dataset.action;
+if(action==='select'){select(button.dataset.id,event.ctrlKey||event.metaKey);return;}
+if(action==='sort'){sortKey===button.dataset.key?direction*=-1:(sortKey=button.dataset.key,direction=1);renderList();return;}
+if(action==='add'){app.querySelector('input[type=file]').click();return;}
+if(action==='download'){const ids=chosen().filter(f=>!f.local&&f.online&&!jobs.has(f.id)).map(f=>f.id);ids.forEach(id=>download(lookup(id)));return;}
+if(action==='download-one'){download(lookup(button.dataset.id));return;}
+if(action==='cancel'){chosen().forEach(cancel);return;}
+if(action==='cancel-one'){cancel(lookup(button.dataset.id));return;}
+if(action==='close-pane'){cfg.previewPane=false;renderPane();updateControls();remember();return;}
+if(['preview','properties','save','forward'].includes(action)){openPane(action);return;}
+if(action==='preview-tab'||action==='properties-tab'){openPane(action==='preview-tab'?'preview':'properties');}
+});
+app.addEventListener('change',event=>{const input=event.target;if(input.dataset.action==='check'){select(input.dataset.id,true);return;}if(input.dataset.action==='select-all'){selected.clear();if(input.checked)files.forEach(f=>selected.add(f.id));message='';form=null;paneMode='preview';render();return;}if(input.type==='file'){const chosenFiles=[...input.files];if(!chosenFiles.length)return;selected.clear();for(const f of chosenFiles){const ext=f.name.split('.').pop().toLowerCase(),id=`local-${Date.now()}-${files.length}`;files.push({id,name:f.name,type:types[ext]?ext:'other',bytes:f.size,source:'本机',online:true,local:true,created:'未知',modified:f.lastModified?new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(f.lastModified):'未知',attributes:'本机文件',pages:'—',userFile:true});selected.add(id);}input.value='';message=`已将 ${chosenFiles.length} 个文件加入清单，未开始传输（演示）`;paneMode='properties';render();return;}if(input.dataset.field&&form)form[input.dataset.field]=input.value;});
+app.addEventListener('input',event=>{if(event.target.dataset.field&&form)form[event.target.dataset.field]=event.target.value;});
+app.addEventListener('dblclick',event=>{const row=event.target.closest('tbody tr[data-id]');if(row){select(row.dataset.id);openPane('preview');}});
+app.addEventListener('contextmenu',event=>{const row=event.target.closest('tbody tr[data-id]');if(!row)return;event.preventDefault();select(row.dataset.id);openPane('properties');});
+app.addEventListener('submit',event=>{event.preventDefault();const f=one();if(!f||!ready(f)||jobs.has(f.id))return;const kind=event.target.dataset.form;
+if(kind==='save'){const name=(form?.name||'').trim(),folder=form?.folder||'下载 / FloatClip';if(!name||/[\\/:*?"<>|]/.test(name)||/[. ]$/.test(name)||/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)){validation='请使用有效的 Windows 文件名';renderPane();return;}const finish=()=>{f.saved={name,folder,time:stamp()};message=`已另存为：${folder} / ${name}（演示）`;};if(f.local){finish();openPane('properties');updateControls();}else{paneMode='properties';form=null;download(f,finish);}}
+if(kind==='forward'){const destination=form?.destination||'我的手机';if(!['我的手机','平板'].includes(destination))return;const finish=()=>{message=`已转发 ${f.name} 至${destination}（演示）`;};if(f.local){finish();openPane('properties');updateControls();}else{paneMode='properties';form=null;download(f,finish);}}
+});
+window.addEventListener('openai:set_globals',event=>{const value=event.detail?.globals?.widgetState;if(value){hydrate(value);render();}});
+render();
+if(globalThis.Tweak){const tweak=new Tweak({container:app,onChange:()=>{applyDesign();renderPane();updateControls();remember();}});tweak.addSlider(cfg,'rowHeight',{label:'列表行高',min:32,max:52,unit:'px'});tweak.addSlider(cfg,'iconSize',{label:'文件图标',min:16,max:26,unit:'px'});tweak.addToggle(cfg,'previewPane',{label:'展开预览栏'});tweak.addSelect(cfg,'theme',{label:'外观',options:[{label:'跟随系统',value:'system'},{label:'浅色',value:'light'},{label:'深色',value:'dark'},{label:'东京夜色',value:'tokyo-night'}]});}
+})();
+</script>

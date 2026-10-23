@@ -21,6 +21,8 @@ import com.floatclip.app.overlay.ui.EntryGestureRow
 import com.floatclip.app.prefs.OverlayPreferences
 import com.floatclip.app.sync.*
 import com.floatclip.app.ui.FloatDialog
+import com.floatclip.app.ui.FileUi
+import com.floatclip.app.clipboard.ImageImportActivity
 import com.floatclip.share.ShareWire
 import java.io.File
 import java.io.IOException
@@ -48,6 +50,7 @@ class FileActivity:Activity(),SyncRuntime.Observer {
     private var detailDialog:FloatDialog.Handle?=null
     private var page=Color.WHITE;private var card=Color.WHITE;private var text=Color.BLACK
     private var muted=Color.GRAY;private var line=Color.LTGRAY;private var accent=Color.BLUE;private var tint=Color.LTGRAY
+    private lateinit var colors:FileUi.Palette
     private lateinit var list:LinearLayout
     private lateinit var scroll:ScrollView
     private val repaint=Runnable{if(!isFinishing&&!busy)render()}
@@ -59,24 +62,26 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         render()
     }
     override fun onSaveInstanceState(out:Bundle){out.putInt("range",range);out.putBoolean("selecting",selecting);out.putStringArrayList("selected",ArrayList(selected));super.onSaveInstanceState(out)}
-    override fun onResume(){super.onResume();resumed=true;SyncRuntime.setObserver(this);render();pendingHandoff?.let{pendingHandoff=null;it()}}
+    override fun onResume(){super.onResume();resumed=true;SyncRuntime.setObserver(this);worker.execute{repo.publish()};render();pendingHandoff?.let{pendingHandoff=null;it()}}
     override fun onPause(){resumed=false;SyncRuntime.clearObserver(this);super.onPause()}
     override fun onDestroy(){canceled=true;active?.cancel(true);batchDialog?.dialog?.dismiss();detailDialog?.dialog?.dismiss();main.removeCallbacksAndMessages(null);unregisterReceiver(receiver);worker.shutdownNow();super.onDestroy()}
     override fun onConfigurationChanged(config:Configuration){super.onConfigurationChanged(config);if(!busy)render()}
     override fun dispatchTouchEvent(event:android.view.MotionEvent):Boolean{if(event.actionMasked==android.view.MotionEvent.ACTION_DOWN)EntryGestureRow.closeOutside(event.rawX,event.rawY);return super.dispatchTouchEvent(event)}
     private fun palette(){
+        colors=FileUi.palette(this)
         val dark=when(OverlayPreferences(this).themeMode().name){"DARK"->true;"LIGHT"->false;else->resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK==Configuration.UI_MODE_NIGHT_YES}
-        page=Color.parseColor(if(dark)"#1A1B26" else "#F0F3F8");card=Color.parseColor(if(dark)"#24283B" else "#FFFFFF");text=Color.parseColor(if(dark)"#E4E9FF" else "#19283F");muted=Color.parseColor(if(dark)"#BBC4E5" else "#596C85");line=Color.parseColor(if(dark)"#414868" else "#DCE3EF");accent=Color.parseColor(if(dark)"#9AB7FF" else "#225BC4");tint=Color.parseColor(if(dark)"#303C5B" else "#EAF0FF")
+        page=colors.page;card=colors.surface;text=colors.text;muted=colors.muted;line=colors.border;accent=colors.accent;tint=colors.selected
         window.statusBarColor=page;window.navigationBarColor=page
         window.decorView.systemUiVisibility=if(dark)0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
     }
-    private fun shape(fill:Int=card,stroke:Int=line,radius:Int=12)=GradientDrawable().apply{setColor(fill);cornerRadius=dp(radius).toFloat();setStroke(dp(1),stroke)}
+    private fun shape(fill:Int=card,stroke:Int=line,radius:Int=FileUi.CARD_RADIUS)=FileUi.shape(this,fill,stroke,radius)
     private fun label(value:String,size:Float=14f,color:Int=text)=TextView(this).apply{this.text=value;textSize=size;setTextColor(color);includeFontPadding=false;gravity=Gravity.CENTER_VERTICAL}
     private fun column()=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
     private fun row()=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
-    private fun button(value:String,action:()->Unit)=label(value,14f,accent).apply{gravity=Gravity.CENTER;minHeight=dp(48);setPadding(dp(12),0,dp(12),0);isClickable=true;isFocusable=true;background=shape(tint,tint);setOnClickListener{action()}}
+    private fun button(value:String,action:()->Unit)=label(value,14f,accent).apply{gravity=Gravity.CENTER;minHeight=dp(FileUi.HIT);setPadding(dp(12),0,dp(12),0);isClickable=true;isFocusable=true;background=FileUi.action(this@FileActivity,colors);setOnClickListener{action()}}
+    private fun icon(resource:Int,name:String,action:()->Unit)=ImageView(this).apply{setImageResource(resource);imageTintList=android.content.res.ColorStateList.valueOf(accent);contentDescription=name;setPadding(dp(12),dp(12),dp(12),dp(12));isFocusable=true;background=FileUi.action(this@FileActivity,colors);setOnClickListener{action()}}
     private fun time(value:Long)=if(value<=0)"未知" else DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(value))
-    private fun size(value:Long)=when{value<1024->"$value B";value<1024*1024->"%.1f KB".format(value/1024.0);else->"%.1f MB".format(value/1048576.0)}
+    private fun size(value:Long)=FileUi.size(value)
     private fun peer(value:String)=if(value=="local")"本机分享" else SyncRuntime.current()?.peers()?.firstOrNull{it.key==value}?.device?.name?:"已配对设备"
     private fun visible():List<SharedFile>{val cutoff=when(range){1->System.currentTimeMillis()-86400000;2->System.currentTimeMillis()-7*86400000L;3->System.currentTimeMillis()-30*86400000L;else->0};return repo.snapshot().filter{it.shared>=cutoff}}
     private fun picked()=visible().filter{it.key in selected}
@@ -84,15 +89,17 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         if(busy)return;palette();val oldY=if(::scroll.isInitialized)scroll.scrollY else 0
         selected.retainAll(repo.snapshot().map{it.key}.toSet())
         val shell=column().apply{setPadding(dp(16),dp(8),dp(16),dp(12));setBackgroundColor(page)}
-        val title=row();title.addView(button("‹"){finish()},LinearLayout.LayoutParams(dp(44),dp(48)))
+        val title=row();title.addView(icon(R.drawable.ic_chevron_left,"返回"){finish()},LinearLayout.LayoutParams(dp(48),dp(48)))
         title.addView(label("文件",24f).apply{typeface=Typeface.DEFAULT_BOLD},LinearLayout.LayoutParams(0,dp(52),1f))
-        title.addView(button("＋"){pickFiles()});title.addView(button("管理"){manage()});shell.addView(title)
-        shell.addView(label(SyncRuntime.current()?.status?:"先在设备页完成配对，再连接同一 Wi-Fi 或手机热点",12f,muted).apply{maxLines=2;setPadding(0,dp(6),0,dp(10));setOnClickListener{devices()}},LinearLayout.LayoutParams(-1,-2))
+        title.addView(button("添加"){pickFiles()});title.addView(button("管理"){manage()});shell.addView(title)
+        val peers=repo.connectedFilePeers()
+        val connection=if(peers>0)"$peers 台设备可接收文件" else if((SyncRuntime.current()?.connectedCount?:0)>0)"蓝牙仅同步文字，连接 Wi-Fi 后共享文件" else "连接同一 Wi-Fi 或手机热点以共享文件"
+        shell.addView(button(connection){devices()}.apply{textSize=12f;gravity=Gravity.CENTER_VERTICAL;maxLines=2},LinearLayout.LayoutParams(-1,-2))
         if(repo.warning.isNotEmpty())shell.addView(label(repo.warning,12f,muted).apply{setPadding(0,0,0,dp(8))})
         val filter=row();filter.addView(button(arrayOf("全部时间⌄","最近24小时⌄","最近7天⌄","最近30天⌄")[range]){FloatDialog.choices(this,"时间",listOf("全部时间","最近24小时","最近7天","最近30天"),range){range=it;render()}})
         filter.addView(View(this),LinearLayout.LayoutParams(0,1,1f));filter.addView(button(if(selecting)"完成" else "选择"){selecting=!selecting;selected.clear();render()});shell.addView(filter)
-        if(selecting){val actions=row();actions.addView(button("全选"){selected.addAll(visible().map{it.key});render()});actions.addView(button("下载 ${selected.size}"){chooseFolder(picked())});actions.addView(button("分享"){prepare(picked(),"share",null)});shell.addView(HorizontalScrollView(this).apply{isHorizontalScrollBarEnabled=false;addView(actions)})}
-        list=column();val files=visible();if(files.isEmpty())list.addView(label("暂无文件\n添加文件后会出现在已连接设备的清单中。\n文件内容仅在点击下载时传输。",15f,muted).apply{gravity=Gravity.CENTER;setPadding(dp(8),dp(48),dp(8),dp(32))}) else files.forEach{list.addView(card(it),LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(12)})}
+        if(selecting){val actions=row();actions.addView(button(if(selected.size==visible().size&&selected.isNotEmpty())"取消全选" else "全选"){if(selected.size==visible().size)selected.clear() else selected.addAll(visible().map{it.key});render()});actions.addView(label("已选 ${selected.size}",12f,muted).apply{setPadding(dp(8),0,dp(8),0)});actions.addView(button("下载"){chooseFolder(picked())}.apply{isEnabled=selected.isNotEmpty();alpha=if(isEnabled)1f else .45f});actions.addView(button("分享"){prepare(picked(),"share",null)}.apply{isEnabled=selected.isNotEmpty();alpha=if(isEnabled)1f else .45f});shell.addView(HorizontalScrollView(this).apply{isHorizontalScrollBarEnabled=false;addView(actions)},LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(4)})}
+        list=column();val files=visible();if(files.isEmpty())list.addView(label("暂无文件",15f,muted).apply{gravity=Gravity.CENTER;setPadding(dp(8),dp(48),dp(8),dp(32))}) else files.forEach{list.addView(card(it),LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(12)})}
         scroll=ScrollView(this).apply{isFillViewport=true;addView(list)};shell.addView(scroll,LinearLayout.LayoutParams(-1,0,1f));setContentView(shell);scroll.post{scroll.scrollTo(0,oldY)}
     }
     private fun card(file:SharedFile):View {
@@ -111,7 +118,16 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         val actions=row();actions.addView(button("下载"){chooseFolder(listOf(file))},LinearLayout.LayoutParams(dp(72),-1));actions.addView(button("分享"){prepare(listOf(file),"share",null)},LinearLayout.LayoutParams(dp(72),-1))
         return EntryGestureRow(this).apply{bind(front,if(selecting)null else actions,dp(144));contentDescription="${file.name}，${size(file.size)}，${status.contentDescription}，${time(file.shared)}";onSingleTap={if(selecting){if(!selected.add(file.key))selected.remove(file.key);render()}else details(file)};onLongPress={selecting=true;selected.add(file.key);render()}}
     }
-    private fun details(file:SharedFile){detailDialog?.dialog?.dismiss();val body=column();body.addView(label("${size(file.size)} · ${SharedFileProvider.mime(file.name)}\n来源：${peer(file.peer)}\n共享：${time(file.shared)}\n修改：${time(file.modified)}\n状态：${if(repo.local(file)!=null)"本机已有" else if(file.online)"等待下载" else "来源离线"}",14f,muted));body.addView(button("预览 / 打开"){prepare(listOf(file),"open",null)});body.addView(button("下载到文件夹"){chooseFolder(listOf(file))});body.addView(button("分享 / 转发"){prepare(listOf(file),"share",null)});body.addView(button(if(file.kept)"取消保留" else "保留此文件（清理时跳过）"){repo.keep(file,!file.kept);detailDialog?.dialog?.dismiss();render()});detailDialog=FloatDialog.show(this,file.name,custom=body,negative="关闭",positive=null)}
+    private fun details(file:SharedFile){
+        detailDialog?.dialog?.dismiss();val body=column()
+        fun property(name:String,value:String){val r=row();r.addView(label(name,13f,muted),LinearLayout.LayoutParams(dp(56),dp(32)));r.addView(label(value,13f).apply{maxLines=2},LinearLayout.LayoutParams(0,-2,1f));body.addView(r)}
+        property("大小",size(file.size));property("来源",peer(file.peer));property("修改",time(file.modified));property("状态",if(repo.local(file)!=null)"本机已有" else if(file.online)"等待下载" else "来源离线")
+        fun action(name:String,run:()->Unit){body.addView(View(this).apply{setBackgroundColor(line)},LinearLayout.LayoutParams(-1,dp(1)).apply{topMargin=dp(4)});body.addView(button(name){detailDialog?.dialog?.dismiss();run()}.apply{gravity=Gravity.CENTER_VERTICAL},LinearLayout.LayoutParams(-1,dp(48)))}
+        action("预览 / 打开"){prepare(listOf(file),"open",null)};action("下载到文件夹"){chooseFolder(listOf(file))};action("分享 / 转发"){prepare(listOf(file),"share",null)}
+        if(SharedFileProvider.mime(file.name).startsWith("image/")&&repo.local(file)!=null)action("加入剪贴板"){startActivity(Intent(this,ImageImportActivity::class.java).setAction(Intent.ACTION_SEND).setType("image/*").putExtra(Intent.EXTRA_STREAM,SharedFileProvider.uri(packageName,file.key)))}
+        action(if(file.kept)"取消保留" else "保留此文件"){repo.keep(file,!file.kept);render()}
+        detailDialog=FloatDialog.show(this,file.name,custom=ScrollView(this).apply{addView(body);isFillViewport=false},negative="关闭",positive=null)
+    }
     private fun devices(){startActivity(Intent(this,DeviceActivity::class.java).putExtra("devicesOnly",true))}
     private fun pickFiles(){if(busy)return;startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE);putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true)},100)}
     private fun chooseFolder(files:List<SharedFile>){if(files.isEmpty()){message("请先选择文件");return};if(busy)return;treeSelection=files;startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),101)}

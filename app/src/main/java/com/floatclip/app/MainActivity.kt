@@ -443,6 +443,9 @@ open class MainActivity : Activity() {
         })
         val filterScroll=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false }
         val filters=LinearLayout(this).apply { id=R.id.clipboard_sources; gravity=Gravity.CENTER_VERTICAL; setPadding(0,dp(8),0,dp(8)) }
+        filters.addView(headerIcon(R.drawable.ic_image,"添加图片或截图") {
+            startActivity(Intent(this,com.floatclip.app.clipboard.ImageImportActivity::class.java))
+        },LinearLayout.LayoutParams(dp(48),dp(48)))
         val sources=ClipboardSources.tabs(this,clipStore.entries())
         if(sourceFilter !in sources.map { it.id })sourceFilter=""
         sources.forEach { source ->

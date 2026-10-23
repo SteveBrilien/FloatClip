@@ -1,8 +1,8 @@
 # Signed distribution assets
 
-This directory contains the preverified APK used for GitHub Releases.
+This directory retains 0.5.5 because release.env and the legacy release workflow still reference it. Older APK duplicates were removed from the current tree; their GitHub Releases and original tags remain. This is not the current cross-platform release. See ../docs/README.md.
 
-## Current release: FloatClip 0.5.5
+## Legacy Android release: FloatClip 0.5.5
 
 - APK: `FloatClip-0.5.5-debug.apk`
 - SHA-256: `2d1678990249b8071abf0af9f5ca38cc7ccb010d823c4e9dba7d229dce000ae3`

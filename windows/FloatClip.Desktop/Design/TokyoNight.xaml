@@ -8,4 +8,5 @@
   <SolidColorBrush x:Key="FloatClip.Danger" Color="#FFB5C2"/><SolidColorBrush x:Key="FloatClip.Success" Color="#83D9BE"/>
   <SolidColorBrush x:Key="FloatClip.Source.Windows" Color="#9AB7FF"/><SolidColorBrush x:Key="FloatClip.Source.Android" Color="#83D9BE"/><SolidColorBrush x:Key="FloatClip.Source.Tablet" Color="#C8ACEF"/>
   <SolidColorBrush x:Key="FloatClip.File.Pdf" Color="#C43E55"/><SolidColorBrush x:Key="FloatClip.File.Word" Color="#2863B9"/><SolidColorBrush x:Key="FloatClip.File.Excel" Color="#24754F"/><SolidColorBrush x:Key="FloatClip.File.Presentation" Color="#BC5538"/><SolidColorBrush x:Key="FloatClip.File.Image" Color="#7852AB"/><SolidColorBrush x:Key="FloatClip.File.Archive" Color="#906521"/><SolidColorBrush x:Key="FloatClip.File.Default" Color="#58718E"/>
+  <SolidColorBrush x:Key="FloatClip.Category.Blue" Color="#9AB7FF"/><SolidColorBrush x:Key="FloatClip.Category.Teal" Color="#83D9BE"/><SolidColorBrush x:Key="FloatClip.Category.Purple" Color="#C8ACEF"/><SolidColorBrush x:Key="FloatClip.Category.Orange" Color="#F0BC80"/><SolidColorBrush x:Key="FloatClip.Category.Red" Color="#FFB5C2"/>
 </ResourceDictionary>

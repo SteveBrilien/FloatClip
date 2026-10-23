@@ -38,6 +38,10 @@ object ClipboardImages {
             clip.description.extras?.getBoolean("android.content.extra.IS_SENSITIVE",false)==true)return null
         require(clip.itemCount==1) { "暂仅支持单张剪贴板图片" }
         val uri=clip.getItemAt(0).uri ?: return null
+        return importUri(context,uri,store)
+    }
+    /** Explicit picker/share import also works when a screenshot was never put in ClipData. */
+    fun importUri(context:Context,uri:android.net.Uri,store:ClipStore):ClipEntry? {
         require(uri.scheme=="content") { "仅收录获授权的剪贴板图片" }
         val encoded=context.contentResolver.openInputStream(uri)?.use { input ->
             val output=BoundedOutput(ImageBlobStore.MAX_IMAGE_BYTES)
@@ -48,6 +52,8 @@ object ClipboardImages {
         require(bounds.outWidth in 1..16384 && bounds.outHeight in 1..16384 && bounds.outWidth.toLong()*bounds.outHeight<=ImageBlobStore.MAX_PIXELS) { "图片尺寸超过 1600 万像素" }
         val bitmap=BitmapFactory.decodeByteArray(encoded,0,encoded.size) ?: error("图片无法读取")
         return try {
+            // Screenshots already in PNG retain their exact pixels/metadata and avoid recompression.
+            if(encoded.take(8).toByteArray().contentEquals(byteArrayOf(137.toByte(),80,78,71,13,10,26,10)))return store.addImage(encoded)
             val output=BoundedOutput(ImageBlobStore.MAX_IMAGE_BYTES)
             check(bitmap.compress(Bitmap.CompressFormat.PNG,100,output)) { "图片转换失败" }
             store.addImage(output.toByteArray())

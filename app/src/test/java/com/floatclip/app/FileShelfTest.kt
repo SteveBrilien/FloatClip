@@ -50,6 +50,7 @@ class FileShelfTest {
         val aSession=ShareSession(outgoing,File(aContext.cacheDir,"sync-files"),events(a,"phone"),true,true);val bSession=ShareSession(incoming,File(bContext.cacheDir,"sync-files"),events(b,"windows"),true,true)
         try{
             a.attach("phone",aSession){true};b.attach("windows",bSession){true};aSession.start();bSession.start();waitFor{b.snapshot().size==1};val row=b.snapshot().single();assertEquals("合同 😀.pdf",row.name);assertNull(b.local(row));assertEquals(0,File(bContext.cacheDir,"sync-files").listFiles()!!.size)
+            assertEquals(1,a.connectedFilePeers());assertEquals(1,b.connectedFilePeers())
             val received=b.download(row).get(8,TimeUnit.SECONDS);assertArrayEquals(bytes,received.readBytes());assertArrayEquals(bytes,file.readBytes());b.keep(row,true);b.clear(listOf(row),true,true);assertTrue(received.exists());assertEquals(1,b.snapshot().size)
             FileRepository(bContext).use{restored->assertTrue(restored.snapshot().single().kept);assertNotNull(restored.local(restored.snapshot().single()));assertFalse(restored.snapshot().single().online)}
             b.keep(row,false);b.clear(listOf(row),false,true);assertFalse(received.exists());assertEquals(1,b.snapshot().size);assertArrayEquals(bytes,b.download(row).get(8,TimeUnit.SECONDS).readBytes())
@@ -58,7 +59,7 @@ class FileShelfTest {
     }
     @Test fun oldSessionCannotSendCatalogAndPrivatePathsNeverEscape(){
         val ctx=context();val session=ShareSession(java.io.ByteArrayInputStream(byteArrayOf()),java.io.ByteArrayOutputStream(),java.io.Closeable{},File(ctx.cacheDir,"wire"),events(FileRepository(ctx),"old"),true)
-        try{assertFalse(session.catalogEnabled);assertTrue(runCatching{session.sendCatalog("{}".toByteArray())}.isFailure)}finally{session.close()}
+        try{assertFalse(session.catalogEnabled);assertTrue(runCatching{session.sendCatalog("{}".toByteArray())}.isFailure);FileRepository(ctx).use{repo->repo.attach("old",session){true};assertEquals(0,repo.connectedFilePeers())}}finally{session.close()}
         FileRepository(ctx).use{repo->val external=File(ctx.filesDir,"unrelated.txt").apply{writeText("keep")};val row=SharedFile("local","1".repeat(32),"a".repeat(64),"x.txt",4,0,0,0,source=external.path,cached=external.path);assertNull(repo.local(row));repo.clear(listOf(row),true,true);assertEquals("keep",external.readText())}
     }
     private fun descendants(view:View):List<View> = listOf(view)+if(view is ViewGroup)(0 until view.childCount).flatMap{descendants(view.getChildAt(it))} else emptyList()

@@ -1,0 +1,147 @@
+<div id="floatclip-mobile-file-cards" class="viz-dotted-background">
+  <div class="fm-stage"><div class="fm-app" aria-label="FloatClip 手机文件卡片"></div></div>
+</div>
+<style>
+#floatclip-mobile-file-cards [hidden]{display:none!important}
+#floatclip-mobile-file-cards .fm-stage{display:flex;justify-content:center;padding:12px 4px 24px}
+#floatclip-mobile-file-cards .fm-app{--fm-bg:light-dark(#f1f3f7,#191d24);--fm-card:light-dark(#fff,#272d38);--fm-text:light-dark(#222833,#f1f4fc);--fm-muted:light-dark(#5e697c,#c0cadb);--fm-line:light-dark(#dce2ec,#465165);--fm-hover:light-dark(#eff4fd,#343f53);--fm-accent:light-dark(#245eb9,#a6c7ff);--fm-primary:light-dark(#2f66c3,#9bbfff);--fm-on-primary:light-dark(#fff,#162843);--fm-good:light-dark(#246d4e,#aad8bc);--fm-error:light-dark(#aa3142,#ffb4c1);--fm-radius:10px;--fm-hit:48px;--fm-gap:16px;width:390px;max-width:100%;min-width:0;background:var(--fm-bg);color:var(--fm-text);font:14px/1.5 "Segoe UI","Microsoft YaHei UI","Microsoft YaHei",sans-serif;border:1px solid var(--fm-line);border-radius:16px;overflow:clip;box-shadow:0 10px 25px light-dark(#23314a12,#0003)}
+#floatclip-mobile-file-cards .fm-app[data-theme=tokyo-night]{--fm-bg:#1a1b26;--fm-card:#24283b;--fm-text:#e4e9ff;--fm-muted:#bbc4e5;--fm-line:#414868;--fm-hover:#303d5c;--fm-accent:#a9c7ff;--fm-primary:#7aa2f7;--fm-on-primary:#192338;--fm-good:#b7dc8d;--fm-error:#f7b4c3}
+#floatclip-mobile-file-cards .fm-app *{box-sizing:border-box}
+#floatclip-mobile-file-cards .fm-app button,#floatclip-mobile-file-cards .fm-app input,#floatclip-mobile-file-cards .fm-app select{font:inherit}
+#floatclip-mobile-file-cards .fm-app button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:var(--fm-hit);max-width:100%;padding:9px 12px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--fm-text)}
+#floatclip-mobile-file-cards .fm-app button:hover{background:var(--fm-hover)}
+#floatclip-mobile-file-cards .fm-app button:disabled{opacity:.5;cursor:default}
+#floatclip-mobile-file-cards .fm-app button.fm-primary{background:var(--fm-primary);color:var(--fm-on-primary)}
+#floatclip-mobile-file-cards .fm-app button.fm-secondary{background:var(--fm-card);border-color:var(--fm-line)}
+#floatclip-mobile-file-cards .fm-app svg{width:18px;height:18px;flex:none}
+#floatclip-mobile-file-cards .fm-brand{display:flex;align-items:center;gap:7px;padding:11px 15px 4px;font-size:12px;color:var(--fm-muted)}
+#floatclip-mobile-file-cards .fm-brand-icon{width:21px;height:21px;display:grid;place-items:center;background:var(--fm-primary);color:var(--fm-on-primary);border-radius:5px}
+#floatclip-mobile-file-cards .fm-brand-icon svg{width:15px;height:15px}
+#floatclip-mobile-file-cards .fm-header{padding:8px 13px 15px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--fm-line)}
+#floatclip-mobile-file-cards .fm-header h2{font-size:20px;font-weight:500;line-height:1.3;margin:0 0 5px;color:var(--fm-text)}
+#floatclip-mobile-file-cards .fm-header p{font-size:12px;color:var(--fm-muted);margin:0;display:flex;align-items:center;gap:5px}
+#floatclip-mobile-file-cards .fm-header p svg{width:13px;height:13px}
+#floatclip-mobile-file-cards .fm-header>button{margin-left:auto;font-size:13px;color:var(--fm-accent)}
+#floatclip-mobile-file-cards .fm-main{padding:16px 13px 20px;min-width:0}
+#floatclip-mobile-file-cards .fm-source{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--fm-muted);font-size:12px;margin:0 3px 7px;flex-wrap:wrap}
+#floatclip-mobile-file-cards .fm-file{margin-bottom:var(--fm-gap)}
+#floatclip-mobile-file-cards .fm-file:last-child{margin-bottom:0}
+#floatclip-mobile-file-cards .fm-card{border:1px solid var(--fm-line);border-radius:var(--fm-radius);background:var(--fm-card);overflow:clip}
+#floatclip-mobile-file-cards .fm-app button.fm-summary{display:flex;align-items:center;justify-content:space-between;gap:13px;width:100%;min-height:102px;padding:14px;text-align:left;border:0;border-radius:0;color:var(--fm-text)}
+#floatclip-mobile-file-cards .fm-file-text{display:block;min-width:0;flex:1}
+#floatclip-mobile-file-cards .fm-filename{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;font-size:16px;line-height:1.5;font-weight:400;color:var(--fm-text);-webkit-text-fill-color:var(--fm-text)}
+#floatclip-mobile-file-cards .fm-meta{display:block;font-size:12px;line-height:1.6;color:var(--fm-muted);margin-top:7px}
+#floatclip-mobile-file-cards .fm-downloaded{color:var(--fm-good)}
+#floatclip-mobile-file-cards .fm-document{--fm-type:light-dark(#bd394a,#aa3e50);--fm-type-ink:light-dark(#ad3142,#ffbac8);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;width:48px;height:60px;flex:none;border:1.5px solid transparent;border-radius:5px;background:var(--fm-type);color:light-dark(#fff,#fff);font-size:12px;line-height:1;font-weight:500}
+#floatclip-mobile-file-cards .fm-document[data-type=docx]{--fm-type:light-dark(#2863b4,#3464a9);--fm-type-ink:light-dark(#245baa,#b0d0ff)}
+#floatclip-mobile-file-cards .fm-document[data-type=xlsx]{--fm-type:light-dark(#26734f,#2e7252);--fm-type-ink:light-dark(#226849,#b4e3c7)}
+#floatclip-mobile-file-cards .fm-document[data-type=other]{--fm-type:light-dark(#526d8a,#4a6381);--fm-type-ink:light-dark(#526d8a,#c4d6ed)}
+#floatclip-mobile-file-cards .fm-document.fm-missing{border:1.5px dashed var(--fm-type-ink);background:transparent;color:var(--fm-type-ink)}
+#floatclip-mobile-file-cards .fm-document svg{width:20px;height:20px}
+#floatclip-mobile-file-cards .fm-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border-top:1px solid var(--fm-line);padding:2px 3px}
+#floatclip-mobile-file-cards .fm-actions button{padding:8px 3px;min-height:var(--fm-hit);font-size:13px;border-radius:5px}
+#floatclip-mobile-file-cards .fm-actions button.fm-action-main{color:var(--fm-accent);font-weight:500}
+#floatclip-mobile-file-cards .fm-more{border-top:1px solid var(--fm-line);padding:4px}
+#floatclip-mobile-file-cards .fm-more button{width:100%;justify-content:flex-start;font-size:13px}
+#floatclip-mobile-file-cards .fm-progress{height:4px;background:var(--fm-hover);overflow:hidden}
+#floatclip-mobile-file-cards .fm-progress span{height:100%;display:block;background:var(--fm-accent)}
+#floatclip-mobile-file-cards .fm-footer{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--fm-line);padding:12px 15px;color:var(--fm-muted);font-size:11px}
+#floatclip-mobile-file-cards .fm-footer span{display:flex;align-items:center;gap:5px}
+#floatclip-mobile-file-cards .fm-key{height:13px;width:10px;border-radius:2px;background:var(--fm-accent);display:inline-block}
+#floatclip-mobile-file-cards .fm-key.fm-dashed{background:transparent;border:1px dashed var(--fm-accent)}
+#floatclip-mobile-file-cards .fm-viewbar{display:flex;align-items:center;gap:7px;margin:-5px -5px 10px}
+#floatclip-mobile-file-cards .fm-viewbar button{padding-inline:6px;color:var(--fm-accent)}
+#floatclip-mobile-file-cards .fm-viewbar h3{font-weight:500;font-size:16px;margin:0;color:var(--fm-text)}
+#floatclip-mobile-file-cards .fm-detail-file{display:flex;align-items:center;gap:12px;margin:0 0 16px}
+#floatclip-mobile-file-cards .fm-detail-file strong{font-size:14px;font-weight:500;overflow-wrap:anywhere;color:var(--fm-text);display:block}
+#floatclip-mobile-file-cards .fm-detail-file small{color:var(--fm-muted);font-size:12px;display:block;margin-top:6px}
+#floatclip-mobile-file-cards .fm-view-actions{display:flex;gap:7px;flex-wrap:wrap;margin:13px 0}
+#floatclip-mobile-file-cards .fm-view-actions button{flex:1;min-width:78px;font-size:13px}
+#floatclip-mobile-file-cards .fm-unavailable{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-height:190px;color:var(--fm-muted);text-align:center;font-size:13px;padding:20px 8px}
+#floatclip-mobile-file-cards .fm-unavailable p{margin:0}
+#floatclip-mobile-file-cards .fm-paper{background:var(--fm-card);color:var(--fm-text);border:1px solid var(--fm-line);border-radius:5px;padding:24px 18px;min-height:240px}
+#floatclip-mobile-file-cards .fm-paper small{font-size:11px;color:var(--fm-muted)}
+#floatclip-mobile-file-cards .fm-paper h4{font-weight:500;font-size:20px;color:var(--fm-text);margin:15px 0}
+#floatclip-mobile-file-cards .fm-paper p{font-size:13px;line-height:1.9;margin:13px 0;color:var(--fm-text)}
+#floatclip-mobile-file-cards .fm-paper table{width:100%;border-collapse:collapse;font-size:12px;color:var(--fm-text)}
+#floatclip-mobile-file-cards .fm-paper td,#floatclip-mobile-file-cards .fm-paper th{color:var(--fm-text);padding:8px;border:1px solid var(--fm-line);font-weight:400;text-align:left}
+#floatclip-mobile-file-cards .fm-paper th{background:var(--fm-hover)}
+#floatclip-mobile-file-cards .fm-properties{margin:0;color:var(--fm-text);font-size:13px}
+#floatclip-mobile-file-cards .fm-properties>div{display:grid;grid-template-columns:70px minmax(0,1fr);gap:10px;padding:9px 0;border-bottom:1px solid var(--fm-line)}
+#floatclip-mobile-file-cards .fm-properties dt{color:var(--fm-muted)}
+#floatclip-mobile-file-cards .fm-properties dd{margin:0;overflow-wrap:anywhere;color:var(--fm-text)}
+#floatclip-mobile-file-cards .fm-form label{display:block;font-size:13px;color:var(--fm-muted);margin:15px 0}
+#floatclip-mobile-file-cards .fm-form input,#floatclip-mobile-file-cards .fm-form select{min-height:48px;width:100%;min-width:0;padding:10px;border:1px solid var(--fm-line);background:var(--fm-card);color:var(--fm-text);border-radius:6px;margin-top:6px;font-size:16px}
+#floatclip-mobile-file-cards .fm-form button[type=submit]{width:100%;margin-top:12px}
+#floatclip-mobile-file-cards .fm-note{font-size:12px;color:var(--fm-muted);line-height:1.7;margin:12px 0}
+#floatclip-mobile-file-cards .fm-error{font-size:12px;color:var(--fm-error)}
+#floatclip-mobile-file-cards .fm-notice{font-size:12px;padding:12px 14px;color:var(--fm-accent);background:var(--fm-hover);border-top:1px solid var(--fm-line);overflow-wrap:anywhere}
+</style>
+<script>
+(()=>{
+const root=document.getElementById('floatclip-mobile-file-cards'),app=root.querySelector('.fm-app');
+const cfg={theme:'system',radius:10,hit:48,gap:16};
+const types={pdf:{label:'PDF',name:'PDF 文档',icon:'file-text'},docx:{label:'W',name:'Word 文档',icon:'file-text'},xlsx:{label:'X',name:'Excel 表格',icon:'file-spreadsheet'},other:{label:'FILE',name:'文件',icon:'file'}};
+const files=[
+ {id:'word',name:'会议纪要与下一步安排.docx',type:'docx',size:63841,source:'我的电脑',local:false,added:'2026/10/22 16:28',created:'2026/10/22 15:02',modified:'2026/10/22 16:26',attribute:'可编辑文档'},
+ {id:'pdf',name:'FloatClip 设计说明.pdf',type:'pdf',size:2526848,source:'本机',local:true,added:'2026/10/22 16:24',created:'2026/10/21 20:12',modified:'2026/10/22 14:08',attribute:'只读文档'},
+ {id:'excel',name:'项目进度与预算.xlsx',type:'xlsx',size:184320,source:'我的电脑',local:true,added:'2026/10/22 15:46',created:'2026/10/20 10:32',modified:'2026/10/22 15:46',received:'2026/10/22 15:48',attribute:'3 个工作表'}
+];
+let view='list',selected='word',menu='',notice='',form=null,error='';
+const jobs=new Map(),find=id=>files.find(f=>f.id===id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const icon=n=>`<i data-lucide="${n}" aria-hidden="true"></i>`;
+const size=b=>b<1024?`${b} B`:b<1048576?`${(b/1024).toFixed(1)} KB`:`${(b/1048576).toFixed(1)} MB`;
+const stamp=()=>new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
+function glyph(f){return `<span class="fm-document ${f.local?'':'fm-missing'}" data-type="${f.type}" role="img" aria-label="${types[f.type].name}，${f.local?'本机已有':'未下载'}">${icon(types[f.type].icon)}<span>${types[f.type].label}</span></span>`;}
+function status(f){const job=jobs.get(f.id);return job?`下载中 ${job.progress}%`:f.local?(f.source==='本机'?'本机文件':'已下载'):f.cancelled?'未下载 · 已取消':'未下载';}
+function progress(f){const job=jobs.get(f.id);return job?`<div class="fm-progress" role="progressbar" aria-label="${esc(f.name)} 下载进度" aria-valuenow="${job.progress}" aria-valuemin="0" aria-valuemax="100"><span style="width:${job.progress}%"></span></div>`:'';}
+function button(text,action,id='',klass=''){return `<button type="button" class="cursor-interaction ${klass}" data-action="${action}" ${id?`data-id="${id}"`:''}>${text}</button>`;}
+function hydrate(value){const m=value?.modelContent;if(m?.product!=='FloatClip 手机文件卡片')return;if(['system','light','dark','tokyo-night'].includes(m.theme))cfg.theme=m.theme;for(const [k,min,max] of [['radius',4,18],['hit',48,56],['gap',8,24]])if(Number.isFinite(m[k]))cfg[k]=Math.max(min,Math.min(max,m[k]));}
+function remember(){try{if(window.openai?.setWidgetState)Promise.resolve(window.openai.setWidgetState({modelContent:{product:'FloatClip 手机文件卡片',theme:cfg.theme,radius:cfg.radius,hit:cfg.hit,gap:cfg.gap},privateContent:null})).catch(()=>{});}catch{}}
+try{hydrate(window.openai?.widgetState);}catch{}
+app.innerHTML=`<div class="fm-brand"><span class="fm-brand-icon">${icon('layers')}</span>FloatClip</div><header class="fm-header"><div><h2>共享文件</h2><p>${icon('wifi')}我的电脑 · 已连接</p></div>${button(icon('plus')+' 添加','add')}</header><main class="fm-main"></main><footer class="fm-footer"><span><i class="fm-key"></i>本机已有</span><span><i class="fm-key fm-dashed"></i>未下载</span><span>按需下载</span></footer><div class="fm-notice" role="status" aria-live="polite" hidden></div><input type="file" aria-label="手机添加文件" hidden>`;
+const main=app.querySelector('main');
+function list(){return files.map(f=>`<article class="fm-file" data-file="${f.id}"><div class="fm-source"><span>${f.source==='本机'?'从本机共享':`来自${esc(f.source)}`}</span><time datetime="${f.added.replaceAll('/','-').replace(' ','T')}">${f.added}</time></div><div class="fm-card"><button type="button" class="fm-summary cursor-interaction" data-action="preview" data-id="${f.id}" aria-label="查看 ${esc(f.name)}" data-tooltip="${esc(f.name)}"><span class="fm-file-text"><span class="fm-filename">${esc(f.name)}</span><span class="fm-meta">${size(f.size)} · <span class="${f.local?'fm-downloaded':''}">${status(f)}</span></span></span>${glyph(f)}</button>${progress(f)}<div class="fm-actions">${jobs.has(f.id)?button('取消下载','cancel',f.id,'fm-action-main'):f.local?button(icon('eye')+' 预览','preview',f.id,'fm-action-main'):button(icon('download')+' 下载','download',f.id,'fm-action-main')}${button('另存为','save',f.id)}${button(icon('ellipsis')+' 更多','more',f.id)}</div>${menu===f.id?`<div class="fm-more">${button(icon('forward')+' 转发到设备','forward',f.id)}${button(icon('info')+' 文件属性','properties',f.id)}${button(icon('share-2')+' 分享到其他应用','share',f.id)}</div>`:''}</div></article>`).join('');}
+function properties(f){const fields=[['文件名',f.name],['类型',types[f.type].name],['大小',`${size(f.size)}（${f.size.toLocaleString('zh-CN')} 字节）`],['来源',f.source],['属性',f.attribute],['共享时间',f.added],['创建时间',f.created],['修改时间',f.modified],['下载时间',f.received||'—'],['本机状态',status(f)],['保存位置',f.saved?`${f.saved.folder} / ${f.saved.name}`:f.local?(f.source==='本机'?'本机原文件':'FloatClip 接收文件'):'未下载']];return `<dl class="fm-properties">${fields.map(([k,v])=>`<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`;}
+function preview(f){if(!f.local)return `<div class="fm-unavailable">${icon('file-down')}<p>文件尚未下载，点击下载后可预览</p>${progress(f)}${jobs.has(f.id)?button('取消下载','cancel',f.id,'fm-secondary'):button('下载文件','download',f.id,'fm-primary')}</div>`;
+if(f.userFile)return `<div class="fm-unavailable">${icon('file-check')}<p>已读取文件信息，未读取实际文档内容</p></div>`;
+if(f.type==='pdf')return `<div class="fm-paper" aria-label="手机 PDF 示例预览"><small>PDF · 第 1 页 / 12 页</small><h4>FloatClip 设计说明</h4><p>在设备之间共享文件信息，按需下载文件。</p><p>文件名、大小、时间和下载状态清晰可见。</p><small>示例文档</small></div>`;
+if(f.type==='docx')return `<div class="fm-paper" aria-label="手机 Word 示例预览"><small>Word · 第 1 页 / 3 页</small><h4>会议纪要</h4><p>1. 电脑使用详细文件列表。</p><p>2. 手机采用便于触控的文件卡片。</p><p>3. 用户确认后再开始下载。</p><small>示例文档</small></div>`;
+return `<div class="fm-paper" aria-label="手机 Excel 示例预览"><small>Excel · 工作表：进度</small><h4>项目进度</h4><table><thead><tr><th>事项</th><th>状态</th></tr></thead><tbody><tr><td>设备配对</td><td>完成</td></tr><tr><td>文件卡片</td><td>预览中</td></tr></tbody></table></div>`;
+}
+function contents(){if(view==='list')return list();const f=find(selected);if(!f)return '';const title={preview:'文件预览',properties:'文件属性',save:'另存为',forward:'转发文件',share:'系统分享'}[view];const head=`<div class="fm-viewbar">${button(icon('arrow-left'),'back','','')}<h3>${title}</h3></div><div class="fm-detail-file">${glyph(f)}<div><strong>${esc(f.name)}</strong><small>${size(f.size)} · ${status(f)}</small></div></div>`;
+if(view==='preview')return head+preview(f)+`<div class="fm-view-actions">${button('另存为','save',f.id,'fm-secondary')}${button('转发','forward',f.id,'fm-secondary')}${button('属性','properties',f.id,'fm-secondary')}</div><p class="fm-note">修改时间 ${esc(f.modified)}</p>`;
+if(view==='properties')return head+properties(f);
+if(view==='save')return head+`<form class="fm-form" data-form="save"><label>文件名<input aria-label="手机另存为文件名" data-field="name" required value="${esc(form?.name||f.name)}"></label><label>保存到<select aria-label="手机保存位置" data-field="folder"><option ${form?.folder==='下载 / FloatClip'?'selected':''}>下载 / FloatClip</option><option ${form?.folder==='文档'?'selected':''}>文档</option></select></label><p class="fm-note">${f.local?'保存到手机所选位置':'确认后先下载，再保存到所选位置'}</p><div class="fm-error" role="alert">${esc(error)}</div><button type="submit" class="fm-primary cursor-interaction" ${jobs.has(f.id)?'disabled':''}>${f.local?'保存':'下载并保存'}</button></form>`;
+if(view==='forward')return head+`<form class="fm-form" data-form="forward"><label>转发到<select aria-label="手机转发设备" data-field="destination"><option value="我的电脑" ${form?.destination==='我的电脑'?'selected':''}>我的电脑 · 已连接</option><option value="平板" ${form?.destination==='平板'?'selected':''}>平板 · 已连接</option></select></label><p class="fm-note">${f.local?'确认后传输至所选设备':'确认后先下载，再转发至所选设备'}</p><button type="submit" class="fm-primary cursor-interaction" ${jobs.has(f.id)?'disabled':''}>${f.local?'确认转发':'下载并转发'}</button></form>`;
+if(view==='share')return head+`<p class="fm-note">${f.local?'选择其他应用分享文件':'确认后先下载，再分享文件'}</p><div class="fm-view-actions">${button('微信','share-app',f.id,'fm-secondary')}${button('邮件','share-app',f.id,'fm-secondary')}${button('更多应用','share-app',f.id,'fm-secondary')}</div>`;
+return head;}
+function render(){const focused=app.contains(document.activeElement)?document.activeElement:null;const field=focused?.dataset.field,action=focused?.dataset.action,id=focused?.dataset.id,selection=field==='name'?[focused.selectionStart,focused.selectionEnd]:null;
+app.dataset.theme=cfg.theme;app.style.colorScheme=cfg.theme==='system'?'light dark':cfg.theme==='tokyo-night'?'dark':cfg.theme;app.style.setProperty('--fm-radius',`${cfg.radius}px`);app.style.setProperty('--fm-hit',`${cfg.hit}px`);app.style.setProperty('--fm-gap',`${cfg.gap}px`);main.innerHTML=contents();
+main.querySelector('[data-action=back]')?.setAttribute('aria-label','返回文件列表');app.querySelector('.fm-header>button').hidden=view!=='list';const n=app.querySelector('.fm-notice');n.hidden=!notice;if(n.textContent!==notice)n.textContent=notice;
+app.querySelectorAll('input,select,button').forEach(el=>el.classList.add('cursor-interaction'));if(globalThis.lucide)lucide.createIcons({attrs:{width:18,height:18}});
+if(field){const input=main.querySelector(`[data-field="${field}"]`);if(input&&!input.disabled){input.focus({preventScroll:true});if(selection)input.setSelectionRange(...selection);}}else if(action){[...main.querySelectorAll(`[data-action="${action}"]`)].find(el=>el.dataset.id===id)?.focus({preventScroll:true});}}
+function open(f,next){selected=f.id;view=next;menu='';notice='';error='';form=next==='save'?{name:f.saved?.name||f.name,folder:f.saved?.folder||'下载 / FloatClip'}:next==='forward'?{destination:f.source==='我的电脑'?'平板':'我的电脑'}:null;render();}
+function download(f,after){if(f.local){after?.();render();return;}if(jobs.has(f.id))return;f.cancelled=false;const job={progress:0,timer:null,after};jobs.set(f.id,job);render();job.timer=setInterval(()=>{job.progress=Math.min(100,job.progress+10);if(job.progress===100){clearInterval(job.timer);jobs.delete(f.id);f.local=true;f.received=stamp();notice=`已下载 ${f.name}（演示）`;job.after?.();}render();},220);}
+function cancel(f){const job=jobs.get(f.id);if(!job)return;clearInterval(job.timer);jobs.delete(f.id);f.cancelled=true;notice='下载已取消，文件信息仍保留';render();}
+app.addEventListener('click',event=>{const b=event.target.closest('[data-action]');if(!b||b.disabled)return;const action=b.dataset.action,f=find(b.dataset.id||selected);
+if(action==='add'){app.querySelector('input[type=file]').click();return;}
+if(action==='back'){view='list';menu='';notice='';form=null;render();return;}
+if(action==='more'){menu=menu===f.id?'':f.id;render();return;}
+if(['preview','properties','save','forward','share'].includes(action)){open(f,action);return;}
+if(action==='download'){download(f);return;}
+if(action==='cancel'){cancel(f);return;}
+if(action==='share-app'){const target=b.textContent.trim();download(f,()=>{view='list';notice=`将打开${target}分享文件（演示）`;});}
+});
+app.addEventListener('input',event=>{if(event.target.dataset.field&&form)form[event.target.dataset.field]=event.target.value;});
+app.addEventListener('change',event=>{const input=event.target;if(input.dataset.field&&form)form[input.dataset.field]=input.value;if(input.type==='file'){const f=input.files[0];if(!f)return;const ext=f.name.split('.').pop().toLowerCase(),id=`local-${Date.now()}`;files.unshift({id,name:f.name,type:types[ext]?ext:'other',size:f.size,source:'本机',local:true,added:stamp(),created:'未知',modified:f.lastModified?new Intl.DateTimeFormat('zh-CN',{dateStyle:'short',timeStyle:'short',hour12:false}).format(f.lastModified):'未知',attribute:'本机文件',userFile:true});view='list';notice='已添加文件信息，未开始传输（演示）';input.value='';render();}});
+app.addEventListener('submit',event=>{event.preventDefault();const f=find(selected),kind=event.target.dataset.form;if(!f||jobs.has(f.id))return;
+if(kind==='save'){const name=(form?.name||'').trim(),folder=form?.folder||'下载 / FloatClip';if(!name||/[\\/:*?"<>|]/.test(name)||/[. ]$/.test(name)){error='请使用有效的文件名';render();return;}download(f,()=>{f.saved={name,folder};view='list';notice=`已另存为 ${folder} / ${name}（演示）`;});}
+if(kind==='forward'){const destination=form?.destination;if(!['我的电脑','平板'].includes(destination))return;download(f,()=>{view='list';notice=`已转发 ${f.name} 至${destination}（演示）`;});}
+});
+window.addEventListener('openai:set_globals',event=>{const value=event.detail?.globals?.widgetState;if(value){hydrate(value);render();}});
+render();
+if(globalThis.Tweak){const tweak=new Tweak({container:app,onChange:()=>{render();remember();}});tweak.addSlider(cfg,'radius',{label:'卡片圆角',min:4,max:18,unit:'px'});tweak.addSlider(cfg,'hit',{label:'按钮点击高度',min:48,max:56,unit:'px'});tweak.addSlider(cfg,'gap',{label:'卡片间距',min:8,max:24,unit:'px'});tweak.addSelect(cfg,'theme',{label:'外观',options:[{label:'跟随系统',value:'system'},{label:'浅色',value:'light'},{label:'深色',value:'dark'},{label:'东京夜色',value:'tokyo-night'}]});}
+})();
+</script>

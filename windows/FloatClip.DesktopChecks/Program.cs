@@ -18,6 +18,9 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using FloatClip.Desktop;
 using FloatClip.Share;
+using FloatClip.Desktop.Design;
+using FloatClip.Desktop.Services;
+using FloatClip.Desktop.ViewModels;
 
 static class Program
 {
@@ -123,6 +126,14 @@ static class Program
             host=new ClipboardHost(dataRoot,false,updates);host.SetPinned(true);
             var vault=host.Vault;var first=vault.AddText("alpha 中文 😀 👍🏽 👨‍👩‍👧‍👦 🇨🇳 1️⃣");
             var row=first["entries"]![0]!.AsObject();row["pinned"]=true;row["category"]="工作";string textId=row["id"]!.GetValue<string>();vault.Commit(first["revision"]!.GetValue<string>(),first["entries"]!.AsArray());
+            var categoryService=new CategoryService(vault,dataRoot);
+            Check(categoryService.List().Any(c=>c.Name=="工作"),"category choices include existing vault categories");
+            categoryService.SetColor("工作","purple");categoryService.SetColor("自定义 😀","teal");
+            Check(new CategoryService(vault,dataRoot).List().Single(c=>c.Name=="工作").Color=="purple","category appearance persists independently of vault data");
+            categoryService.Assign(textId,"自定义 😀");var categorized=vault.Load()["entries"]!.AsArray().OfType<JsonObject>().Single(c=>c["id"]!.GetValue<string>()==textId);
+            Check(categorized["category"]!.GetValue<string>()=="自定义 😀"&&ClipboardVault.IsPinned(categorized),"category assignment preserves pinned state and original record");categoryService.Assign(textId,"工作");
+            var categoryPicker=new CategoryPickerViewModel(categoryService,textId,"工作");categoryPicker.Category="";categoryPicker.SaveCommand.Execute(null);
+            Check(categoryPicker.Error.Length>0&&vault.Load()["entries"]![0]!["category"]!.GetValue<string>()=="工作","empty category rejected without changing vault");
             var second=vault.AddText("beta protected");var beta=second["entries"]!.AsArray().OfType<JsonObject>().Single(c=>c["text"]!.GetValue<string>()=="beta protected");beta["locked"]=true;vault.Commit(second["revision"]!.GetValue<string>(),second["entries"]!.AsArray());
             vault.AddText("gamma ordinary");var image=vault.AddImage(png,2,2)["entries"]!.AsArray().OfType<JsonObject>().Single(c=>ClipboardVault.Kind(c)=="image");
             host.ShowPopup();Pump();var window=app.Windows.OfType<LocalClipboardWindow>().Single();window.Title="FloatClip · 隔离界面验收";
@@ -148,6 +159,9 @@ static class Program
             Check(shelfStore.Load().Single().IsAvailable,"restored source returns to available state");
             var nativeFileList=Field<ListView>(fileView,"localList");Check(((GridView)nativeFileList.View).Columns.All(c=>c.Width>0),"opening the file page exposes every Explorer metadata column");
             nativeFileList.SelectedIndex=0;Pump();Check(!Field<TextBlock>(fileView,"selectedInfo").Text.Contains('·')&&!Field<TextBlock>(fileView,"selectedInfo").Text.Contains("KiB"),"file footer shows counts with a separator, without repeated size and status annotations");
+            var selectedRow=(ListViewItem)nativeFileList.ItemContainerGenerator.ContainerFromIndex(0);
+            Check(Descendants(selectedRow).OfType<System.Windows.Controls.Primitives.GridViewRowPresenterBase>().Any()&&!Descendants(selectedRow).OfType<Border>().Any(b=>b.Background is GradientBrush),"selected file row uses shared flat presenter without Aero gradients");
+            Check(((SolidColorBrush)selectedRow.Background).Color.A==255,"selected file background is fully opaque");
             window.Width=760;Pump();Check(((GridView)nativeFileList.View).Columns.Sum(c=>c.Width)<=nativeFileList.ActualWidth,"normal desktop width fits all file metadata columns without forcing window resize");Snapshot(window,"files-page-approved-light");
             Check(!FilePreviewWindow.CanOpenDocument("example.exe")&&!FilePreviewWindow.CanOpenDocument("example.bat")&&FilePreviewWindow.CanOpenDocument("example.pdf"),"preview cannot launch executable files");
             double fileWidth=window.Width;Call(window,"Navigate",typeof(ClipboardPage));Pump();Check(window.Width==fileWidth,"page navigation preserves user window width");
@@ -161,6 +175,11 @@ static class Program
             Check(search.Template.FindName("PART_ContentHost",search) is ScrollViewer&&!Descendants(search).OfType<Border>().Any(),"search has one outer focus boundary and no nested partial underline");
             void Query(string value,int count){search.Text=value;Pump(180);Check(list.Children.Count==count,"search TextChanged matches "+value);}
             Query("alpha",1);Query("工作",1);Query("图片",1);Query("👍🏽",1);Query("",4);
+            Call(window,"CopyEntry",row["text"]!.GetValue<string>(),textId);Pump(180);
+            Check(Field<ClipboardPanelViewModel>(window,"viewModel").CopiedId==textId&&Descendants(list).OfType<TextBlock>().Any(t=>t.Text=="已复制"&&t.Visibility==Visibility.Visible),"successful copy keeps an inline confirmation visible through the release animation");Snapshot(window,"clipboard-copy-confirmation");Pump(700);
+            Check(Field<ClipboardPanelViewModel>(window,"viewModel").CopiedId==""&&window.IsVisible,"copy feedback expires without hiding a pinned window");
+            Call(window,"ChangeCategory",row);Call(window,"ChangeCategory",row);Pump();var categoryWindow=window.OwnedWindows.Cast<Window>().Single(w=>w.Title=="分类");
+            var categoryControl=Descendants(categoryWindow).OfType<ComboBox>().Single();Check(categoryControl.IsEditable&&categoryControl.Items.Cast<string>().Contains("自定义 😀"),"nonmodal category picker exposes saved categories and editable new names");Snapshot(categoryWindow,"category-picker");categoryWindow.Close();
             window.OpenSettings();window.OpenSettings();Pump();var settings=Field<System.Collections.Generic.Dictionary<Type,FrameworkElement>>(window,"pages")[typeof(SettingsPage)];
             Check(Descendants(window).OfType<SettingsPage>().Count()==1&&window.OwnedWindows.Count==0,"settings use one cached page in the main window");Check(window.IsEnabled,"settings navigation keeps the main window enabled");
             Check(Descendants(settings).OfType<Wpf.Ui.Controls.ToggleSwitch>().Count()>=5,"settings use native Fluent toggle controls");
@@ -242,6 +261,18 @@ static class Program
             DesignChecks.Run(app,window,host,output,Check,Pump);
             ProductFixChecks.Run(dataRoot,Check,Pump,Snapshot);
             Check(host.UiFailureCount==0,"no guarded UI exceptions were hidden during acceptance");
+            var acrylicPreferences=new DesignPreferences{ClipboardBackground="acrylic",BackgroundOpacity=.78};
+            string materialResult=ClipboardBackgroundService.Apply(window,acrylicPreferences,true);window.FocusSearch();Pump(200);
+            Check(window.Opacity==1&&Field<TextBox>(window,"search").IsKeyboardFocusWithin&&window.Topmost,"frosted background preserves opaque content, keyboard focus and pinned state");
+            Snapshot(window,"clipboard-acrylic");File.WriteAllText(Path.Combine(output,"material-probe.json"),JsonSerializer.Serialize(new{capability=MaterialPolicy.Evaluate(true),result=materialResult,backgroundAlpha=((SolidColorBrush)window.Background).Color.A,systemDpi=VisualTreeHelper.GetDpi(window).DpiScaleX}));ClipboardBackgroundService.Apply(window,new DesignPreferences(),true);
+            string materialRoot=Path.Combine(dataRoot,"material-fixture");Directory.CreateDirectory(materialRoot);
+            var materialPreferences=new DesignPreferences{ClipboardBackground="transparent",BackgroundOpacity=.78};materialPreferences.Save(materialRoot);
+            using(var materialHost=new ClipboardHost(materialRoot,false)) {
+                materialHost.SetPinned(true);materialHost.ShowPopup();Pump(200);var materialWindow=app.Windows.OfType<LocalClipboardWindow>().Single(w=>Field<ClipboardHost>(w,"host")==materialHost);
+                Check(materialWindow.AllowsTransparency&&materialWindow.Opacity==1&&materialWindow.Topmost,"transparent surface uses per-pixel background while text stays opaque and pin remains active");
+                materialWindow.FocusSearch();Pump();Check(Field<TextBox>(materialWindow,"search").IsKeyboardFocusWithin,"transparent clipboard accepts normal keyboard focus");
+                Snapshot(materialWindow,"clipboard-transparent");materialWindow.OpenSettings();Pump();Check(((SolidColorBrush)materialWindow.Background).Color.A==255,"settings keep a solid surface even in transparent clipboard mode");
+            }
             File.WriteAllText(Path.Combine(output,"report.json"),JsonSerializer.Serialize(new{result="PASS",checks,isolated=true,userClipboardUntouched=true,uiFailures=host.UiFailureCount,utc=DateTime.UtcNow},new JsonSerializerOptions{WriteIndented=true}));
             if(args.Contains("--interactive"))
             {

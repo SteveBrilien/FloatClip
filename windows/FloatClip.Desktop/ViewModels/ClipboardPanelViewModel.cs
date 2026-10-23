@@ -5,7 +5,10 @@ using FloatClip.Desktop.Services;
 namespace FloatClip.Desktop.ViewModels;
 public sealed class ClipboardPanelViewModel:ObservableObject
 {
-    string searchText="",statusMessage="";
+    string searchText="",statusMessage="",copiedId="";
+    public string CopiedId{get=>copiedId;private set=>SetProperty(ref copiedId,value);}
+    public void Copied(string id){CopiedId=id;StatusMessage="已复制";}
+    public void ClearCopy(){CopiedId="";}
     public string SearchText{get=>searchText;set{if(SetProperty(ref searchText,value))SearchChanged?.Invoke();}}
     public string StatusMessage{get=>statusMessage;private set=>SetProperty(ref statusMessage,value);}
     public IRelayCommand ClearSearchCommand{get;}

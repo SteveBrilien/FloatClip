@@ -1,0 +1,16 @@
+{
+  "actualWindowDpi": {
+    "DpiScaleX": 1.5,
+    "DpiScaleY": 1.5
+  },
+  "offscreenDpi": [
+    96,
+    120,
+    144,
+    192
+  ],
+  "physicalFourDpiInteractionVerified": false,
+  "hoverEventIsSynthetic": true,
+  "materialEnabled": false,
+  "utc": "2026-10-23T11:32:40.721063Z"
+}

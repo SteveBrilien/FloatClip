@@ -1,5 +1,7 @@
 # 0.7.8 / build 23 候选：WPF 交互与双端更新源
 
+后续 Windows 增量修复为 [0.7.8 / build 24](WINDOWS_078_HOTFIX_2026-10-23.md)，处理旧中文 ZIP 文件名与更新网络路径。Android 保持 build 23；下文为原候选记录。
+
 本轮从 0.7.7 WPF 继续，修复提示框清晰度、共享资源悬停/菜单/表头、系统关联图标、文件大小显示、实际内容预览、设备页嵌套与开关跳动。Windows 保留现有数据格式、原生配对与同步服务。Android 只修改共同更新客户端与版本比较，保持既有手机界面和数据兼容。
 
 共同更新源使用 https://clip.wmy-cloud.cn/release.json 的 nativeUpdates 字段，备用为 GitHub main/updates/native-updates.json。两端固定公钥验证标准 JWS Compact RS256，核对签发/到期时间、通道，再处理既有下载地址/摘要/版本校验。元数据校验失败不通过备用源掩盖。公网清单仍指向已发布 0.7.1，未将本轮候选推为公开更新。

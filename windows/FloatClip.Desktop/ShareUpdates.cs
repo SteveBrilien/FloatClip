@@ -12,33 +12,33 @@ namespace FloatClip.Share;
 public sealed record UpdateRelease(int Build,string Version,string Notes,string Url,string Sha256="",long Bytes=0);
 public static class ShareUpdates
 {
-    public const int Build=23;
+    public const int Build=24;
     public const string Version="0.7.8",Feed="https://clip.wmy-cloud.cn/release.json";
     public const string FallbackFeed="https://raw.githubusercontent.com/SteveBrilien/FloatClip/main/updates/native-updates.json";
     sealed class SourceUnavailable(string message,Exception? inner=null):IOException(message,inner);
     public static async Task<UpdateRelease> Check(CancellationToken cancellation=default)
     {
-        using var http=new HttpClient(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=Timeout.InfiniteTimeSpan};
+        using var http=UpdateHttpClient.Create(Timeout.InfiniteTimeSpan);
         http.DefaultRequestHeaders.UserAgent.ParseAdd("FloatClip-Windows/"+Version);
         return await CheckWithClient(http,cancellation);
     }
     internal static async Task<UpdateRelease> CheckWithClient(HttpClient http,CancellationToken cancellation=default,Func<byte[],byte[]>? verify=null)
     {
-        IOException? failure=null;
+        var failures=new List<string>();
         foreach(string source in new[]{Feed,FallbackFeed})
         {
             byte[] content;
             try{content=await Fetch(http,source,cancellation);}
-            catch(SourceUnavailable error){failure=error;continue;}
+            catch(SourceUnavailable error){failures.Add(error.Message);continue;}
             // Verification failures are never hidden by switching to another source.
             return Parse(verify==null?UpdateManifestVerifier.Verify(content):verify(content));
         }
-        throw new IOException("所有更新源暂不可用："+failure?.Message,failure);
+        throw new IOException("所有更新源暂不可用："+string.Join("；",failures));
     }
     static async Task<byte[]> Fetch(HttpClient http,string source,CancellationToken cancellation)
     {
         string label=source==Feed?"FloatClip 公网更新源":"GitHub 备用更新源";
-        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellation);timeout.CancelAfter(TimeSpan.FromSeconds(6));
+        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellation);timeout.CancelAfter(TimeSpan.FromSeconds(12));
         try
         {
             using var request=new HttpRequestMessage(HttpMethod.Get,source);
@@ -85,7 +85,7 @@ public static class ShareUpdates
         if(!Regex.IsMatch(release.Version,@"^[0-9]+\.[0-9]+\.[0-9]+$")||release.Build<1||release.Bytes>400L*1024*1024)throw new IOException("更新包信息无效");
         string cached=Path.Combine(directory,"FloatClip-"+release.Version+"-"+release.Build+".zip");
         if(File.Exists(cached)&&new FileInfo(cached).Length==release.Bytes){await using var cache=File.OpenRead(cached);if(CryptographicOperations.FixedTimeEquals(await SHA256.HashDataAsync(cache,cancellation),Convert.FromHexString(release.Sha256)))return cached;}
-        using var http=new HttpClient(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromMinutes(10)};
+        using var http=UpdateHttpClient.Create(TimeSpan.FromMinutes(10));
         http.DefaultRequestHeaders.UserAgent.ParseAdd("FloatClip-Windows/"+Version);
         {
             string url=release.Url;HttpResponseMessage? response=null;

@@ -25,9 +25,20 @@ public static class DocumentPreviewService
         token.ThrowIfCancellationRequested();string ext=Path.GetExtension(path).ToLowerInvariant();
         if(ext==".zip")
         {
-            using var zip=ZipFile.OpenRead(path);
-            var entries=zip.Entries.Take(MaxEntries).Select(e=>{token.ThrowIfCancellationRequested();return new ArchivePreviewEntry(e.FullName,e.FullName.EndsWith('/')?"文件夹":FileSizeFormatter.Format(e.Length),e.LastWriteTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm"));}).ToArray();
-            return new($"压缩包内容  |  {zip.Entries.Count} 项"+(zip.Entries.Count>MaxEntries?$"  |  显示前 {MaxEntries} 项":""),"",entries);
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            // A legacy Chinese ZIP may omit the UTF-8 flag. Decode strictly before
+            // falling back; replacement characters would permanently lose its name.
+            foreach(var encoding in new[]{new UTF8Encoding(false,true),Encoding.GetEncoding(936,EncoderFallback.ExceptionFallback,DecoderFallback.ExceptionFallback),Encoding.GetEncoding(437)})
+            {
+                try
+                {
+                    using var input=File.OpenRead(path);using var zip=new ZipArchive(input,ZipArchiveMode.Read,false,encoding);
+                    var entries=zip.Entries.Take(MaxEntries).Select(e=>{token.ThrowIfCancellationRequested();return new ArchivePreviewEntry(e.FullName,e.FullName.EndsWith('/')||e.FullName.EndsWith('\\')?"文件夹":FileSizeFormatter.Format(e.Length),e.LastWriteTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm"));}).ToArray();
+                    return new($"压缩包内容  |  {zip.Entries.Count} 项"+(zip.Entries.Count>MaxEntries?$"  |  显示前 {MaxEntries} 项":""),"",entries);
+                }
+                catch(DecoderFallbackException){token.ThrowIfCancellationRequested();}
+            }
+            throw new IOException("压缩包文件名编码无法识别");
         }
         if(ext is ".docx" or ".xlsx" or ".pptx")
         {

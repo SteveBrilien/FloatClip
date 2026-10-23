@@ -1,4 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>disable</ImplicitUsings></PropertyGroup>
-  <ItemGroup><Compile Include="../FloatClip.Desktop/ShareUpdates.cs" Link="ShareUpdates.cs"/><Compile Include="../FloatClip.Desktop/DesktopUpdates.cs" Link="DesktopUpdates.cs"/><Compile Include="../FloatClip.Desktop/UpdateManifestVerifier.cs" Link="UpdateManifestVerifier.cs"/><Compile Include="../FloatClip.Desktop/UpdateTrust.cs" Link="UpdateTrust.cs"/></ItemGroup>
+  <ItemGroup><Compile Include="../FloatClip.Desktop/ShareUpdates.cs" Link="ShareUpdates.cs"/><Compile Include="../FloatClip.Desktop/UpdateHttpClient.cs" Link="UpdateHttpClient.cs"/><Compile Include="../FloatClip.Desktop/DesktopUpdates.cs" Link="DesktopUpdates.cs"/><Compile Include="../FloatClip.Desktop/UpdateManifestVerifier.cs" Link="UpdateManifestVerifier.cs"/><Compile Include="../FloatClip.Desktop/UpdateTrust.cs" Link="UpdateTrust.cs"/><PackageReference Include="System.Net.Http.WinHttpHandler" Version="10.0.13"/></ItemGroup>
 </Project>

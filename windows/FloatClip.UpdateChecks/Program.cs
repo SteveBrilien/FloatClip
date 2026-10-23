@@ -25,6 +25,10 @@ static class Program
     {
         string root=Path.Combine(Path.GetTempPath(),"FloatClip-UpdateChecks-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
         try{
+            if(OperatingSystem.IsWindows()){
+                using var handler=UpdateHttpClient.CreateHandler();
+                Check(handler is WinHttpHandler native&&!native.AutomaticRedirection&&native.WindowsProxyUsePolicy==WindowsProxyUsePolicy.UseWinInetProxy,"Windows updates use the native system proxy without automatic redirects");
+            }
             byte[] bytes=Encoding.UTF8.GetBytes("generated update package");string hash=Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
             var release=new UpdateRelease(ShareUpdates.Build+1,"0.8.0","generated notes","https://github.com/SteveBrilien/FloatClip/releases/download/test/FloatClip.zip",hash,bytes.Length);
             byte[] Feed(string platformVersion="0.8.0")=>JsonSerializer.SerializeToUtf8Bytes(new{schema=1,channel="share-preview",version="0.7.1",notes="notes",windows=new{version=platformVersion,build=ShareUpdates.Build+1,url=release.Url,sha256=hash,bytes=bytes.Length,status="available"}});
@@ -32,6 +36,10 @@ static class Program
                 Check((await ShareUpdates.CheckWithClient(validHttp,verify:data=>data)).Version=="0.8.0","update response parsed through actual request path");
             }
             using(var unavailable=new HttpClient(new CheckHandler((request,_)=>Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable){RequestMessage=request}))))await RejectMessage(()=>ShareUpdates.CheckWithClient(unavailable),"HTTP 503");
+            using(var detailed=new HttpClient(new CheckHandler((request,_)=>Task.FromResult(new HttpResponseMessage(request.RequestUri!.Host=="clip.wmy-cloud.cn"?HttpStatusCode.BadGateway:HttpStatusCode.ServiceUnavailable){RequestMessage=request})))){
+                try{await ShareUpdates.CheckWithClient(detailed);throw new Exception("source errors discarded");}
+                catch(IOException error){Check(error.Message.Contains("公网更新源返回 HTTP 502")&&error.Message.Contains("GitHub 备用更新源返回 HTTP 503"),"failure reports retain both source diagnoses");}
+            }
             using(var timeout=new HttpClient(new CheckHandler((_,_)=>throw new TaskCanceledException("generated timeout"))))await RejectMessage(()=>ShareUpdates.CheckWithClient(timeout),"超时");
             using(var network=new HttpClient(new CheckHandler((_,_)=>throw new HttpRequestException("generated network failure"))))await RejectMessage(()=>ShareUpdates.CheckWithClient(network),"无法连接GitHub 备用更新源");
             using(var cancelled=new HttpClient(new CheckHandler((_,token)=>Task.FromCanceled<HttpResponseMessage>(token)))){

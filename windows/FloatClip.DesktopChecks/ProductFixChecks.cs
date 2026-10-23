@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -45,6 +46,12 @@ static class ProductFixChecks
         var archive=DocumentPreviewService.Read(zipPath,CancellationToken.None);
         check(archive.Entries?.Count==2&&archive.Entries[0].Name=="资料/报告 😀.txt","ZIP preview lists actual filenames instead of an enlarged icon");
         check(!Directory.Exists(Path.Combine(root,"资料")),"archive preview does not extract or execute files");
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        string gbkPath=Path.Combine(root,"legacy-gbk.zip");
+        using(var input=File.Create(gbkPath))using(var zip=new ZipArchive(input,ZipArchiveMode.Create,false,Encoding.GetEncoding(936))){zip.CreateEntry("资料/中文报告.pdf");zip.CreateEntry("资料/");zip.CreateEntry("报价单.pdf");}
+        var legacy=DocumentPreviewService.Read(gbkPath,CancellationToken.None);
+        check(legacy.Entries?.Select(e=>e.Name).SequenceEqual(new[]{"资料/中文报告.pdf","资料/","报价单.pdf"})==true,"legacy GBK ZIP names and folders preserve Chinese characters without replacement");
+        check(DocumentPreviewService.Read(zipPath,CancellationToken.None).Entries![0].Name=="资料/报告 😀.txt","UTF-8 ZIP and emoji names remain intact after legacy encoding fallback");
         string docx=Path.Combine(root,"fixture.docx");using(var zip=ZipFile.Open(docx,ZipArchiveMode.Create)){using var writer=new StreamWriter(zip.CreateEntry("word/document.xml").Open());writer.Write("<w:document xmlns:w='word'><w:body><w:p><w:r><w:t>真实文字 😀</w:t></w:r></w:p></w:body></w:document>");}
         check(DocumentPreviewService.Read(docx,CancellationToken.None).Text.Contains("真实文字 😀"),"Word preview reads actual document paragraphs");
         string xlsx=Path.Combine(root,"fixture.xlsx");using(var zip=ZipFile.Open(xlsx,ZipArchiveMode.Create)){

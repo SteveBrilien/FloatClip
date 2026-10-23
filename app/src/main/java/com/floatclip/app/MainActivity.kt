@@ -348,7 +348,7 @@ open class MainActivity : Activity() {
                     background = roundedBackground(colors.fieldBackground, 13f, true)
                     val iconButton=ImageView(this@MainActivity).apply {
                         setImageResource(CategoryIcons.resource(categoryStore.iconKey(category)))
-                        imageTintList=ColorStateList.valueOf(colors.accent)
+                        imageTintList=ColorStateList.valueOf(com.floatclip.app.prefs.CategoryColors.color(categoryStore.colorKey(category),colors.dark))
                         setPadding(dp(11),dp(11),dp(11),dp(11))
                         contentDescription="更换 $category 图标"
                         setOnClickListener {
@@ -373,21 +373,8 @@ open class MainActivity : Activity() {
                 row.addView(handle, LinearLayout.LayoutParams(dp(48), dp(48)))
                 val wrapper = EntryGestureRow(this)
                 wrapper.bind(row)
-                wrapper.onLongPress = {
-                    FloatDialog.show(
-                        this,
-                        "删除分类“$category”？",
-                        "词条会保留并移到未分类。",
-                        negative="取消",
-                        positive="删除",
-                    ) {
-                        clipStore.moveCategoryToDefault(category)
-                        categoryStore.delete(category)
-                        notifyOverlayAppearanceChanged()
-                        render()
-                        true
-                    }
-                }
+                wrapper.onSingleTap = { showCategoryActions(category) }
+                wrapper.onLongPress = { showCategoryActions(category) }
                 wrapper.touchPassthrough = handle
                 dragList.addView(wrapper, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(6) })
                 installCategoryDrag(handle, wrapper, dragList, dragItems, category)
@@ -396,6 +383,37 @@ open class MainActivity : Activity() {
         }
         addCard(categoryCard)
 
+    }
+
+    private fun showCategoryActions(category: String) {
+        FloatDialog.actions(this,category,listOf("重命名","特征色","图标","删除分类")) { action ->
+            when(action) {
+                0 -> {
+                    val input=EditText(this).apply { setText(category);isSingleLine=true;setTextColor(colors.primaryText);filters=arrayOf(InputFilter.LengthFilter(24)) }
+                    FloatDialog.show(this,"重命名分类",custom=input,negative="取消",positive="保存") {
+                        val name=input.text.toString().trim()
+                        if(name.isEmpty() || name.any { it.isISOControl() } || name==CategoryStore.DEFAULT_CATEGORY || name!=category && name in categoryStore.categories()) {
+                            Toast.makeText(this,"名称不能为空、重复或使用未分类",Toast.LENGTH_SHORT).show();false
+                        } else runCatching {
+                            // Retain every record and both protection flags. Preferences are independent of vault schema.
+                            clipStore.renameCategory(category,name)
+                            check(categoryStore.rename(category,name)) { "分类已变化，请重新打开分类管理" }
+                            if(historyCategory==category)historyCategory=name
+                            notifyOverlayAppearanceChanged();render();true
+                        }.getOrElse { Toast.makeText(this,it.message ?: "重命名未完成",Toast.LENGTH_LONG).show();false }
+                    }
+                }
+                1 -> FloatDialog.choices(this,"分类特征色",com.floatclip.app.prefs.CategoryColors.labels,com.floatclip.app.prefs.CategoryColors.keys.indexOf(categoryStore.colorKey(category))) {
+                    categoryStore.saveColor(category,com.floatclip.app.prefs.CategoryColors.keys[it]);notifyOverlayAppearanceChanged();render()
+                }
+                2 -> FloatDialog.choices(this,"分类图标",CategoryIcons.choices.map { it.label },CategoryIcons.choices.indexOfFirst { it.key==categoryStore.iconKey(category) }) {
+                    categoryStore.saveIcon(category,CategoryIcons.choices[it].key);notifyOverlayAppearanceChanged();render()
+                }
+                else -> FloatDialog.show(this,"删除分类“$category”？","词条会保留并移到未分类。",negative="取消",positive="删除") {
+                    clipStore.moveCategoryToDefault(category);categoryStore.delete(category);notifyOverlayAppearanceChanged();render();true
+                }
+            }
+        }
     }
 
     private fun renderClipboardPage() {
@@ -446,6 +464,11 @@ open class MainActivity : Activity() {
         filters.addView(headerIcon(R.drawable.ic_image,"添加图片或截图") {
             startActivity(Intent(this,com.floatclip.app.clipboard.ImageImportActivity::class.java))
         },LinearLayout.LayoutParams(dp(48),dp(48)))
+        filters.addView(headerIcon(R.drawable.ic_grid,"剪贴板布局") {
+            FloatDialog.choices(this,"剪贴板布局",listOf("居中单栏","左右双栏"),if(overlayPreferences.twoColumnClipboard())1 else 0) {
+                overlayPreferences.saveTwoColumnClipboard(it==1);refreshHistory();notifyOverlayAppearanceChanged()
+            }
+        },LinearLayout.LayoutParams(dp(48),dp(48)))
         val sources=ClipboardSources.tabs(this,clipStore.entries())
         if(sourceFilter !in sources.map { it.id })sourceFilter=""
         sources.forEach { source ->
@@ -474,7 +497,7 @@ open class MainActivity : Activity() {
             target.addView(textView(if(searchQuery.isEmpty()) "这里还没有记录" else "没有匹配的记录",15f,false,colors.secondaryText).apply { gravity=Gravity.CENTER; setPadding(0,dp(28),0,dp(20)) })
             if(searchQuery.isEmpty() && sourceFilter.isEmpty()) target.addView(compactTextAction("收录当前剪贴板") { captureCurrentClipboard();refreshHistory() })
         } else {
-            visibleHistory.forEach { addHistoryCard(it) }
+            com.floatclip.app.ui.ClipboardLayout.render(target, visibleHistory, overlayPreferences.twoColumnClipboard(), ::addHistoryCard)
         }
     }
 
@@ -641,6 +664,13 @@ open class MainActivity : Activity() {
             }
         })
 
+        addCard(card().apply {
+            addView(settingRow("剪贴板布局","主界面与悬浮剪贴板共用",if(overlayPreferences.twoColumnClipboard()) "左右双栏" else "居中单栏") {
+                FloatDialog.choices(this@MainActivity,"剪贴板布局",listOf("居中单栏","左右双栏"),if(overlayPreferences.twoColumnClipboard())1 else 0) {
+                    overlayPreferences.saveTwoColumnClipboard(it==1);notifyOverlayAppearanceChanged();render()
+                }
+            })
+        })
         sectionTitle("悬浮球")
         addCard(
             card().apply {
@@ -1120,7 +1150,7 @@ open class MainActivity : Activity() {
         searchQuery.isBlank() || entry.text.contains(searchQuery, ignoreCase = true) ||
             entry.category.contains(searchQuery, ignoreCase = true)
 
-    private fun addHistoryCard(entry: ClipEntry) {
+    private fun addHistoryCard(entry: ClipEntry): View {
         val item=ClipboardCard(this,entry,colors.dark,colors.primaryText,colors.cardBackground)
         val wrapper = EntryGestureRow(this)
         wrapper.contentDescription=entry.text+"，来源："+entry.sourceDeviceName+(if(entry.pinned) "，已置顶" else "")+(if(entry.locked) "，已保护" else "")
@@ -1138,10 +1168,9 @@ open class MainActivity : Activity() {
         )
         wrapper.onSingleTap = {
             runCatching {
-                if(entry.kind=="image")ClipboardImages.copy(this,clipStore,entry)
-                else ClipboardWrites.copyByUser(this,getSystemService(ClipboardManager::class.java),entry.text)
-            }.onSuccess { Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show() }
-                .onFailure { Toast.makeText(this,it.message ?: "复制未完成",Toast.LENGTH_LONG).show() }
+                if(entry.kind=="image") ClipboardImages.preview(this,clipStore,entry)
+                else { ClipboardWrites.copyByUser(this,getSystemService(ClipboardManager::class.java),entry.text); Toast.makeText(this,"已复制",Toast.LENGTH_SHORT).show() }
+            }.onFailure { Toast.makeText(this,it.message ?: "操作未完成",Toast.LENGTH_LONG).show() }
         }
         wrapper.onLongPress = {
             FloatDialog.actions(
@@ -1169,7 +1198,7 @@ open class MainActivity : Activity() {
                 }
             }
         }
-        historyList?.addView(wrapper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+        return wrapper
     }
 
     private fun deleteEntry(entry: ClipEntry) {

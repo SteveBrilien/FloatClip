@@ -1,5 +1,5 @@
 # 云端续接入口（2026-10-23）
-有效应用源码基线：ca01aaa47fcf58a35d14661b140efb9f38d69d8f / Windows 与 Android 0.7.8 build 25。交接提交只增加文档与设计参考，不是新的应用版本。
+原有效应用源码基线：ca01aaa47fcf58a35d14661b140efb9f38d69d8f / Windows 与 Android 0.7.8 build 25；交接文档提交为 65c9f43。当前工作区已完成 0.7.8 build 26 候选，详见 `docs/CANDIDATE_078_BUILD26_2026-10-23.md`。
 
 ## 直接使用的远端项目
 Codex MCP Dev 项目名：floatclip-cloud
@@ -15,27 +15,26 @@ MCP 路径：/home/codex/workspace/Android/FloatClip/analysis/cloud-workspace-bu
 AGENTS.md
 docs/design/FLOATCLIP_WINDOWS_DESIGN_SYSTEM.md
 docs/design/CHANGELOG.md
+docs/CANDIDATE_078_BUILD26_2026-10-23.md
 docs/CANDIDATE_078_BUILD25_2026-10-23.md
 docs/CLOUD_CONTINUATION_2026-10-23.md
 docs/NATIVE_UPDATES_2026-10-23.md
 docs/ui/ 下七份交互 HTML 是模拟数据设计参考，不是真实网络客户端。
 
 保留 WPF + XAML / .NET 10 / WPF UI；保留 Android vault、包名、原升级签名、配对与同步协议。
-公共更新仍为 0.7.1；build 25 尚未提升为公共更新。
-基线验证：Windows 187 项桌面、45 项更新通过；Android 62 项单测，lint 0 error / 17 warning。
-Windows ZIP SHA256：87f5e7240d116ea44294e266688ae350db5f5ea9c37ba0f3a99dd68b39de8b6c
-Android APK SHA256：d42927159abbc4cc72b995791c66c224cf0bbb271483746765e2033a8b34ed90
-不要覆盖已发布的 build 25 制品，后续改动使用更高 build。
+公共更新仍为 0.7.1；build 26 也只是候选。
+当前自动验证：Windows Release/Checks 交叉编译 0 warning / 0 error，LibraryChecks 82、Share core 120、UpdateChecks 44；Android 66 项单测全绿，lint 0 error / 0 warning。
+Windows build26 ZIP SHA256：ae7848532fc16828fa21b2f3361a6f7aa0cc274123293ab6a48e70c2b74e0a99
+Android build26 APK SHA256：68930fd41c25b5518a14b1eb8f2fc880a3369429ad3b40939345f01d15934f6d
+不要覆盖 build 25 / build 26 制品，后续应用改动使用更高 build。
 
-## 继续的需求（尚未实施）
-1. 磨砂/透明是 Windows 整个应用的外观选择。上一轮只作用于剪贴板背景，文件/设置仍强制纯色；用户本轮明确纠正范围。文字保持不透明，密集内容保留足够可读的 Surface，统一服务、主题与系统回退。
-2. Windows 分组支持编辑/删除，删除分组时将记录移到“未分类”，不删除内容；提供更多统一 Fluent 图标。Android 已有删除、缺少重命名，核对两端一致行为。
-3. 手机图片默认与文字混排；图片单击应直接应用内看大图（现在单击复制，预览藏在长按菜单）。悬浮剪贴板也需要直接大图与缩放/拖动。
-4. 图片卡片适配长截图，允许切换居中单栏与左右双栏；应用和悬浮面板使用同一布局偏好。
-5. Android 文件页“预览/打开”当前 ACTION_VIEW 交给其他应用，须改为真实应用内预览。分享单独保留 ACTION_SEND。图片、PDF、ZIP、可支持文本展示实际内容；不支持类型明确说明。
-6. 用户说手机已回局域网、ADB 小主机已开。最近 MCP 设备只有 127.0.0.1:25557 offline，本地 ADB 无设备；需重新连接，不能声称真机验收。只操作授权的 FloatClip。
-7. GitHub SSH 部署密钥可推代码分支；连接器 pull=true、push/maintain/admin=false，不代表可用 Release/admin API。不要导出或复制私钥。
-8. 用户要求完成后邮件发送两端下载链接及未验收范围。收件人留在会话/私有交接信息，不写入公共仓库。
+## 当前状态 / 下一步
+1. build 25 留下的“全应用背景、分类编辑、图片混排与大图、长图/双栏、Android 文件应用内预览、HELLO 后文件目录发布”已经进入 build 26 候选；不要重复实现，先读 build 26 候选记录和实际 diff。
+2. ADB 仍只有 127.0.0.1:25557 offline；旧无线地址从小主机无路由。恢复后才做 vivo Android 11 覆盖安装与 UI/手势/真实文件往返验收，不能声称已通过。
+3. Windows WPF/DWM、真实 DPI/跨屏、系统剪贴板/蓝牙仍需 Windows 主机；Orange Pi 只能做交叉编译与协议检查。
+4. 公共更新保持 0.7.1；未得到发布决定前不要修改 release feed。
+5. GitHub 代码分支可提交/推送，但禁止强推；若 SSH host-key/部署入口有问题，先修发布通道，不复制私钥。
+6. 用户此前要求完成候选后发送两端下载链接及未验收范围；收件人只保留在私有会话，不写公共仓库。
 
 ## 环境边界
 OrangePi 可构建 Android 和运行共享协议检查。WPF 的真实界面、DWM 材质、Windows 剪贴板/蓝牙及四档实机 DPI 仍需 Windows 主机；不能在 Linux 上把静态检查描述成 Windows 真机验收。

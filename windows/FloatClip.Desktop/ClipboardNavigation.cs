@@ -53,7 +53,7 @@ public sealed partial class LocalClipboardWindow
                 filesView=new FileShelfView(sync,prefsRoot);
                 page=new FilesPage{Content=filesView};
             }else page=new UpdatesPage{Content=new ScrollViewer{Content=BuildUpdateSection(),Margin=new(20,8,20,16),VerticalScrollBarVisibility=ScrollBarVisibility.Auto}};
-            page.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");page.SetResourceReference(Control.BackgroundProperty,"FloatClip.Background");pages[type]=page;return page;
+            page.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");((UserControl)page).Background=Brushes.Transparent;pages[type]=page;return page;
         }));
         void Item(string label,SymbolRegular icon,Type type,bool footer=false){var item=new NavigationViewItem{Content=label,Icon=new SymbolIcon(icon){FontSize=18},TargetPageType=type,ToolTip=label};System.Windows.Automation.AutomationProperties.SetAutomationId(item,"Navigate"+type.Name);if(footer)navigation.FooterMenuItems.Add(item);else navigation.MenuItems.Add(item);}
         Item("剪贴板",SymbolRegular.Clipboard24,typeof(ClipboardPage));Item("文件",SymbolRegular.Folder24,typeof(FilesPage));Item("我的设备",SymbolRegular.Phone24,typeof(DevicesPage));Item("设置",SymbolRegular.Settings24,typeof(SettingsPage),true);Item("版本与更新",SymbolRegular.ArrowDownload24,typeof(UpdatesPage),true);

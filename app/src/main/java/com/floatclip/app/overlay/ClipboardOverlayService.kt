@@ -873,7 +873,7 @@ class ClipboardOverlayService : Service() {
             })
             return
         }
-        items.forEach { container.addView(createClipRow(it)) }
+        com.floatclip.app.ui.ClipboardLayout.render(container, items, overlayPreferences.twoColumnClipboard(), ::createClipRow)
     }
 
     private fun renderSourceBar() {
@@ -963,9 +963,8 @@ class ClipboardOverlayService : Service() {
         )
         wrapper.onSingleTap = tap@{
             if(entry.kind=="image") {
-                runCatching { ClipboardImages.copy(this,store,entry) }
-                    .onSuccess { Toast.makeText(this,"已复制图片",Toast.LENGTH_SHORT).show();if(!panelPinnedMode)collapsePanel() }
-                    .onFailure { Toast.makeText(this,it.message ?: "图片复制未完成",Toast.LENGTH_LONG).show() }
+                runCatching { showImagePreview(entry) }
+                    .onFailure { Toast.makeText(this,it.message ?: "图片预览未完成",Toast.LENGTH_LONG).show() }
                 return@tap
             }
             val pasted=PasteAccessibilityService.paste(entry.text)
@@ -1117,7 +1116,7 @@ class ClipboardOverlayService : Service() {
 
     private fun showImagePreview(entry:ClipEntry) {
         val panel=panelView ?: return
-        val bitmap=ClipboardImages.thumbnail(store,entry,1600)
+        val bitmap=ClipboardImages.thumbnail(store,entry,8192)
         if(bitmap==null) { Toast.makeText(this,"图片暂不可用，请保留本机数据",Toast.LENGTH_LONG).show();return }
         dismissEntryActionLayer(animated=false)
         val palette=themeProvider.palette()
@@ -1132,8 +1131,8 @@ class ClipboardOverlayService : Service() {
         },LinearLayout.LayoutParams(0,dp(44),1f))
         header.addView(iconButton(R.drawable.ic_close,"关闭图片预览",palette.secondaryText) { dismissEntryActionLayer() },LinearLayout.LayoutParams(dp(44),dp(44)))
         layer.addView(header)
-        layer.addView(ImageView(this).apply {
-            setImageBitmap(bitmap);scaleType=ImageView.ScaleType.FIT_CENTER;contentDescription="剪贴板图片预览"
+        layer.addView(com.floatclip.app.ui.ZoomImageView(this).apply {
+            setImageBitmap(bitmap)
         },LinearLayout.LayoutParams(-1,0,1f))
         layer.addView(TextView(this).apply {
             text="复制图片";textSize=15f;gravity=Gravity.CENTER;minimumHeight=dp(48);setTextColor(accentColor(palette))

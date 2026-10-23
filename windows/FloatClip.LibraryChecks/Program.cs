@@ -6,14 +6,29 @@ using System.Text.Json.Nodes;
 using System.Security.Cryptography;
 using FloatClip.Desktop;
 using FloatClip.Share;
+using FloatClip.Desktop.Services;
 
 static class Program
 {
     static int checks;
     static void Check(bool value,string label){if(!value)throw new Exception(label);checks++;}
     static void Throws(Action action,string label){try{action();}catch{checks++;return;}throw new Exception(label);}
+    static void CategoryChecks(string root)
+    {
+        var vault=new ClipboardVault(Path.Combine(root,"CategoryVault"),b=>b,b=>b);vault.AddText("protected category content");
+        var service=new CategoryService(vault,Path.Combine(root,"CategoryPreferences"));var snapshot=vault.Load();var row=snapshot["entries"]![0]!.AsObject();
+        row["pinned"]=true;row["locked"]=true;row["category"]="工作";string id=row["id"]!.GetValue<string>();vault.Commit(snapshot["revision"]!.GetValue<string>(),snapshot["entries"]!.AsArray());
+        service.SetColor("工作","purple");service.SetIcon("工作","book");service.Rename("工作","研究");
+        Check(service.List().Single(c=>c.Name=="研究") is {Color:"purple",Icon:"book"},"rename retains feature color and icon");
+        Check(!service.List().Any(c=>c.Name=="工作"),"renamed built-in category does not reappear");
+        Throws(()=>service.Rename("研究","学习"),"duplicate category rename accepted");Throws(()=>service.Delete("未分类"),"unclassified group deletion accepted");
+        service.Delete("研究");var retained=vault.Load()["entries"]!.AsArray().OfType<JsonObject>().Single();
+        Check(retained["id"]!.GetValue<string>()==id&&retained["category"]!.GetValue<string>()=="未分类"&&ClipboardVault.IsPinned(retained)&&ClipboardVault.IsLocked(retained),"delete moves protected content without deleting records");
+        Check(!new CategoryService(vault,Path.Combine(root,"CategoryPreferences")).List().Any(c=>c.Name is "研究" or "工作"),"deleted group remains absent after reload");
+    }
     static void ImageChecks(string root,Func<byte[],byte[]> protect,Func<byte[],byte[]> unprotect,byte[] png)
     {
+        CategoryChecks(root);
         string imagesRoot=Path.Combine(root,"ImagesTest");var images=new ClipboardVault(imagesRoot,protect,unprotect);
         var source=new JsonObject{["id"]="image-device",["name"]="图片设备",["platform"]="windows"};
         JsonObject Row(ClipboardVault v)=>v.Load()["entries"]!.AsArray().OfType<JsonObject>().First(c=>ClipboardVault.Kind(c)=="image");

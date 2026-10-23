@@ -1,7 +1,7 @@
 name: Windows WPF CI
 on:
   push:
-    branches: [main]
+    branches: [main, codex/wpf-design-system-077]
   pull_request:
     branches: [main]
   workflow_dispatch:

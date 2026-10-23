@@ -232,7 +232,7 @@ public sealed class NativeClipboardSync: IDisposable
             try
             {
                 engine.Accept(key,frame,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-                if(frame.Type==SyncProtocol.Hello&&engine.Snapshot().Peers.TryGetValue(key,out var peer)&&peer.Device!=null){pairs.RememberDevice(key,peer.Device);link.Ready=true;Trace("hello-ready",new{kind,send=peer.Send,receive=peer.Receive});SetStatus(ConnectedCount+" 台设备同步就绪 · "+(kind=="bluetooth"?"蓝牙加密短连接":"局域网加密共享"));}
+                if(frame.Type==SyncProtocol.Hello&&engine.Snapshot().Peers.TryGetValue(key,out var peer)&&peer.Device!=null){pairs.RememberDevice(key,peer.Device);link.Ready=true;if(kind=="lan")Files.Publish(key);Trace("hello-ready",new{kind,send=peer.Send,receive=peer.Receive});SetStatus(ConnectedCount+" 台设备同步就绪 · "+(kind=="bluetooth"?"蓝牙加密短连接":"局域网加密共享"));}
             }
             catch(PersistenceFailure){Remove(key,link);SetStatus("本机保存失败，内容尚未确认送达；存储恢复后将重试连接");Signal();}
             catch(Exception e){Trace("sync-rejected",new{error=e.GetType().Name});blocked[key]=0;Remove(key,link);SetStatus("设备身份或同步校验失败，请重新核对授权");}

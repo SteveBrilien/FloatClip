@@ -53,6 +53,7 @@ public sealed class FileShelfRow
 public sealed class FileShelfView:UserControl,IDisposable
 {
     readonly NativeClipboardSync? sync;
+    readonly string preferencesRoot;
     readonly FileShelfStore store;
     readonly ObservableCollection<FileShelfRow> localRows=new(),transferRows=new();
     readonly ListView localList=new(),transferList=new();
@@ -70,8 +71,8 @@ public sealed class FileShelfView:UserControl,IDisposable
 
     public FileShelfView(NativeClipboardSync? sync,string preferencesRoot)
     {
-        this.sync=sync;store=sync?.Files.Store??new FileShelfStore(System.IO.Path.Combine(preferencesRoot,"file-shelf.json"));
-        SetResourceReference(BackgroundProperty,"FloatClip.Background");SetResourceReference(ForegroundProperty,"FloatClip.Text");
+        this.preferencesRoot=preferencesRoot;this.sync=sync;store=sync?.Files.Store??new FileShelfStore(System.IO.Path.Combine(preferencesRoot,"file-shelf.json"));
+        Background=Brushes.Transparent;SetResourceReference(ForegroundProperty,"FloatClip.Text");
         SetResourceReference(FontFamilyProperty,"FloatClip.FontFamily");SetResourceReference(FontSizeProperty,"FloatClip.Font.Body");
         var root=new Grid();
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
@@ -102,7 +103,7 @@ public sealed class FileShelfView:UserControl,IDisposable
         peers.MinWidth=150;peers.MinHeight=32;peers.Margin=new Thickness(4,0,8,0);peers.SetResourceReference(Control.BackgroundProperty,"FloatClip.Surface");peers.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");System.Windows.Automation.AutomationProperties.SetName(peers,"发送到局域网设备");System.Windows.Automation.AutomationProperties.SetAutomationId(peers,"FileTransferPeer");peers.SelectionChanged+=(_,_)=>RefreshActions();
         sendFile=Button("直接发送",SendSelected);System.Windows.Automation.AutomationProperties.SetAutomationId(sendFile,"SendShelfFile");
         var commands=new DockPanel{LastChildFill=true};propertiesCommand=Button("属性",ShowProperties);CommandIcon(propertiesCommand,"\uE946");DockPanel.SetDock(propertiesCommand,Dock.Right);commands.Children.Add(propertiesCommand);commands.Children.Add(actions);
-        var commandBand=new Border{Child=commands,Padding=new Thickness(12,6,12,6),BorderThickness=new Thickness(0,1,0,1)};commandBand.SetResourceReference(Border.BorderBrushProperty,"FloatClip.Line");commandBand.SetResourceReference(Border.BackgroundProperty,"FloatClip.Background");Grid.SetRow(commandBand,1);root.Children.Add(commandBand);
+        var commandBand=new Border{Child=commands,Padding=new Thickness(12,6,12,6),BorderThickness=new Thickness(0,1,0,1)};commandBand.SetResourceReference(Border.BorderBrushProperty,"FloatClip.Line");commandBand.Background=Brushes.Transparent;Grid.SetRow(commandBand,1);root.Children.Add(commandBand);
 
         var body=new Grid{Margin=new Thickness(12,0,12,0)};body.RowDefinitions.Add(new RowDefinition{Height=new GridLength(1,GridUnitType.Star)});body.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
         var localPanel=new DockPanel{LastChildFill=true};
@@ -362,7 +363,7 @@ public sealed class FileShelfView:UserControl,IDisposable
         var window=new Window{Title="属性",Width=460,Height=360,MinWidth=340,MinHeight=280,Owner=Window.GetWindow(this),WindowStartupLocation=WindowStartupLocation.CenterOwner};window.SetResourceReference(Window.BackgroundProperty,"FloatClip.Background");window.SetResourceReference(Window.ForegroundProperty,"FloatClip.Text");
         var panel=new Grid{Margin=new Thickness(20)};panel.ColumnDefinitions.Add(new(){Width=new GridLength(86)});panel.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
         var values=new[]{("名称",row.Name),("类型",row.Type),("大小",FileSizeFormatter.Format(row.SizeBytes)),("修改时间",row.Modified),("来源",row.Source),("本机状态",row.Status),("位置",row.Path)};
-        for(int index=0;index<values.Length;index++){panel.RowDefinitions.Add(new(){Height=GridLength.Auto});var label=new TextBlock{Text=values[index].Item1,Margin=new Thickness(0,0,10,14)};var value=new TextBlock{Text=values[index].Item2,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,14)};Grid.SetRow(label,index);Grid.SetRow(value,index);Grid.SetColumn(value,1);panel.Children.Add(label);panel.Children.Add(value);}window.Content=new ScrollViewer{Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};window.Show();
+        for(int index=0;index<values.Length;index++){panel.RowDefinitions.Add(new(){Height=GridLength.Auto});var label=new TextBlock{Text=values[index].Item1,Margin=new Thickness(0,0,10,14)};var value=new TextBlock{Text=values[index].Item2,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,14)};Grid.SetRow(label,index);Grid.SetRow(value,index);Grid.SetColumn(value,1);panel.Children.Add(label);panel.Children.Add(value);}window.Content=new ScrollViewer{Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};FloatClip.Desktop.Services.ClipboardBackgroundService.Configure(window,FloatClip.Desktop.Design.DesignPreferences.Load(preferencesRoot),caption:true);window.Show();
     }
     void RevealSelectedLocal()
     {

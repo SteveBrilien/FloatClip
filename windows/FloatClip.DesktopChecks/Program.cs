@@ -271,7 +271,7 @@ static class Program
                 materialHost.SetPinned(true);materialHost.ShowPopup();Pump(200);var materialWindow=app.Windows.OfType<LocalClipboardWindow>().Single(w=>Field<ClipboardHost>(w,"host")==materialHost);
                 Check(materialWindow.AllowsTransparency&&materialWindow.Opacity==1&&materialWindow.Topmost,"transparent surface uses per-pixel background while text stays opaque and pin remains active");
                 materialWindow.FocusSearch();Pump();Check(Field<TextBox>(materialWindow,"search").IsKeyboardFocusWithin,"transparent clipboard accepts normal keyboard focus");
-                Snapshot(materialWindow,"clipboard-transparent");materialWindow.OpenSettings();Pump();Check(((SolidColorBrush)materialWindow.Background).Color.A==255,"settings keep a solid surface even in transparent clipboard mode");
+                Snapshot(materialWindow,"clipboard-transparent");materialWindow.OpenSettings();Pump();var settingsAlpha=((SolidColorBrush)materialWindow.Background).Color.A;Call(materialWindow,"Navigate",typeof(FilesPage));Pump();Check(((SolidColorBrush)materialWindow.Background).Color.A==settingsAlpha,"files and settings use the same application backdrop policy");Check(Field<FileShelfView>(materialWindow,"filesView").Background==Brushes.Transparent,"file page does not hide application backdrop");
             }
             File.WriteAllText(Path.Combine(output,"report.json"),JsonSerializer.Serialize(new{result="PASS",checks,isolated=true,userClipboardUntouched=true,uiFailures=host.UiFailureCount,utc=DateTime.UtcNow},new JsonSerializerOptions{WriteIndented=true}));
             if(args.Contains("--interactive"))

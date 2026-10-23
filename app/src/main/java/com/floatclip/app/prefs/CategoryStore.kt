@@ -30,6 +30,20 @@ class CategoryStore(context: Context) {
         if(valid && name.isNotBlank()) prefs.edit().putString("icon:$name",key).apply()
     }
 
+    fun colorKey(name: String): String = prefs.getString("color:$name", "blue") ?: "blue"
+    fun saveColor(name: String, key: String) { if (key in listOf("blue","teal","purple","orange","red","neutral")) prefs.edit().putString("color:$name",key).apply() }
+    fun rename(old: String, value: String): Boolean {
+        val name=value.trim()
+        if(old==DEFAULT_CATEGORY || name.isEmpty() || name.length>MAX_LENGTH || name.any { it.isISOControl() } || name==DEFAULT_CATEGORY) return false
+        val current=categories().filterNot { it==DEFAULT_CATEGORY }
+        if(old !in current || name!=old && name in current) return false
+        if(name==old)return true
+        val icon=iconKey(old);val color=colorKey(old)
+        persist(current.map { if(it==old)name else it })
+        prefs.edit().remove("icon:$old").remove("color:$old").putString("icon:$name",icon).putString("color:$name",color).apply()
+        return true
+    }
+
     fun add(name: String): Boolean {
         val clean = name.trim().take(MAX_LENGTH)
         if (clean.isEmpty() || clean == DEFAULT_CATEGORY) return false
@@ -46,7 +60,7 @@ class CategoryStore(context: Context) {
         val changed = list.remove(name)
         if (changed) {
             persist(list)
-            prefs.edit().remove("icon:$name").apply()
+            prefs.edit().remove("icon:$name").remove("color:$name").apply()
         }
         return changed
     }

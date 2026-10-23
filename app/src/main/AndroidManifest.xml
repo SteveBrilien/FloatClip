@@ -46,6 +46,7 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
+        <activity android:name=".files.FilePreviewActivity" android:exported="false" />
         <activity android:name=".files.FileActivity" android:exported="false" android:configChanges="uiMode|orientation|screenSize" />
         <activity android:name=".DeviceActivity" android:exported="false" android:configChanges="uiMode|orientation|screenSize" />
         <activity android:name=".NodeActivity" android:exported="false" android:configChanges="uiMode|orientation|screenSize" android:windowSoftInputMode="adjustResize" />

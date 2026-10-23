@@ -55,14 +55,23 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
         val hasSource = entry.sourceDeviceId != "local"
         val markerWidth = if(hasSource || entry.pinned || entry.locked) 38 else 16
         if(entry.kind=="image") {
-            val image=ClipboardImages.thumbnail(ClipStore(context),entry)
+            val longImage=entry.imageHeight>entry.imageWidth*2.2f
+            val image=ClipboardImages.thumbnail(ClipStore(context),entry,if(longImage)1600 else 480)
+            val previewHeight=if(longImage)224 else 132
+            minimumHeight=dp(previewHeight)
+            val cropTop=android.graphics.Matrix()
             addView(ImageView(context).apply {
-                setImageBitmap(image);scaleType=ImageView.ScaleType.FIT_CENTER
+                setImageBitmap(image);scaleType=if(longImage)ImageView.ScaleType.MATRIX else ImageView.ScaleType.FIT_CENTER
+                if(longImage&&image!=null)addOnLayoutChangeListener { view,_,_,_,_,_,_,_,_ ->
+                    val width=(view.width-view.paddingLeft-view.paddingRight).coerceAtLeast(1)
+                    val factor=width.toFloat()/image.width
+                    cropTop.setScale(factor,factor);imageMatrix=cropTop
+                }
                 contentDescription=if(image==null)"图片暂不可用" else "图片 ${entry.imageWidth} × ${entry.imageHeight}"
                 setPadding(dp(12),dp(10),dp(markerWidth),dp(30))
-            },LayoutParams(-1,dp(132)))
+            },LayoutParams(-1,dp(previewHeight)))
             addView(TextView(context).apply {
-                text=if(image==null)"图片暂不可用" else "${entry.imageWidth} × ${entry.imageHeight} · PNG"
+                text=if(image==null)"图片暂不可用" else "${entry.imageWidth} × ${entry.imageHeight} · ${if(longImage) "长图 · 点击展开" else "点击预览"}"
                 textSize=12f;setTextColor(foreground);alpha=.72f;setPadding(dp(14),0,dp(markerWidth),dp(9))
             },LayoutParams(-1,-2,Gravity.BOTTOM))
         } else addView(TextView(context).apply {
@@ -74,12 +83,17 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
             setPadding(dp(16),dp(verticalPadding),dp(markerWidth),dp(verticalPadding))
         }, LayoutParams(-1,-2,Gravity.CENTER_VERTICAL))
         val marks = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
-        fun mark(resource: Int, label: String) {
+        fun mark(resource: Int, label: String, color: Int = accent) {
             marks.addView(ImageView(context).apply {
-                setImageResource(resource); imageTintList = ColorStateList.valueOf(accent)
+                setImageResource(resource); imageTintList = ColorStateList.valueOf(color)
                 alpha = .68f; contentDescription = label
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, LinearLayout.LayoutParams(dp(14),dp(14)).apply { bottomMargin = dp(6) })
+        }
+        if(entry.category!=com.floatclip.app.prefs.CategoryStore.DEFAULT_CATEGORY) {
+            val categories=com.floatclip.app.prefs.CategoryStore(context)
+            mark(com.floatclip.app.prefs.CategoryIcons.resource(categories.iconKey(entry.category)),entry.category,
+                com.floatclip.app.prefs.CategoryColors.color(categories.colorKey(entry.category),dark))
         }
         if(entry.locked) mark(R.drawable.ic_lock,"已保护")
         if(entry.pinned) mark(R.drawable.ic_pin,"已置顶")

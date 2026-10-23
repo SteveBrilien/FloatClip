@@ -282,7 +282,10 @@ class ClipboardSyncService: Service() {
             }}
             override fun sync(frame: ShareWire.Frame){if(!closing)actor.execute{if(!closing&&!paused&&prefs.enabled()&&(frame.type!=ClipboardSync.CLIP||prefs.receiving())&&authorized(peer)&&connectionTokens[peer]==token)runCatching{
                 configureEngine();engine.accept(peer,frame,System.currentTimeMillis());pendingOutgoingCount=engine.pendingPeers(System.currentTimeMillis()).size
-                if(frame.type==ClipboardSync.HELLO)engine.peerViews().firstOrNull{it.key==peer}?.let{credentials.rememberDevice(peer,it.device)}
+                if(frame.type==ClipboardSync.HELLO) {
+                    engine.peerViews().firstOrNull{it.key==peer}?.let{credentials.rememberDevice(peer,it.device)}
+                    FileRuntime.get(this@ClipboardSyncService).publish()
+                }
             }.onFailure{links.remove(peer)?.close();setStatus("设备授权或同步校验失败，请重新核对")}}}
             override fun text(id: UUID,value: String,outgoing: Boolean)=Unit
             override fun catalog(data:ByteArray){if(!closing)actor.execute{if(connectionTokens[peer]==token)runCatching{FileRuntime.get(this@ClipboardSyncService).catalog(peer,data)}.onFailure{links[peer]?.close();setStatus("文件清单校验失败，可重新连接后重试")}}}
@@ -347,6 +350,7 @@ class ClipboardSyncService: Service() {
     }
     override fun dump(fd:java.io.FileDescriptor,writer:java.io.PrintWriter,args:Array<out String>?) {
         writer.println("FloatClip sync: enabled=${prefs.enabled()} connectedPeers=${links.size} pendingOutgoing=$pendingOutgoingCount")
+        writer.println("File catalog: peers=${FileRuntime.get(this).connectedFilePeers()} local=${FileRuntime.get(this).snapshot().count{it.peer=="local"}} remote=${FileRuntime.get(this).snapshot().count{it.peer!="local"}}")
         writer.println("ADB capture: enabled=${prefs.backgroundCapture()} connected=${backgroundCaptureConnected}")
         writer.println("ADB capture frames=${backgroundCapture?.receivedFrames?:0} lastFrameAt=${backgroundCapture?.lastFrameAt?:0}")
     }

@@ -65,7 +65,7 @@ object ClipboardImages {
         val png=store.readImage(entry)
         val scale=maxOf(entry.imageWidth,entry.imageHeight)/maxDimension
         var sample=1
-        while(sample*2<=scale)sample*=2
+        while(sample*2<=scale || entry.imageWidth.toLong()/sample*(entry.imageHeight/sample)>8_000_000)sample*=2
         BitmapFactory.decodeByteArray(png,0,png.size,BitmapFactory.Options().apply { inSampleSize=sample })?.also { thumbnails.put(key,it) }
     }.getOrNull()
 
@@ -75,17 +75,10 @@ object ClipboardImages {
         com.floatclip.app.sync.SyncRuntime.unsupportedCopied(context)
     }
     fun preview(context:Context,store:ClipStore,entry:ClipEntry) {
-        val bitmap=thumbnail(store,entry,1600) ?: error("图片无法预览，请保留本机数据")
-        val image=ImageView(context).apply {
-            setImageBitmap(bitmap);adjustViewBounds=true;scaleType=ImageView.ScaleType.FIT_CENTER
-            contentDescription="图片 ${entry.imageWidth} × ${entry.imageHeight}"
-        }
-        val scroll=ScrollView(context).apply {
-            addView(image,ViewGroup.LayoutParams(-1,-2))
-            minimumHeight=(180*resources.displayMetrics.density).toInt()
-        }
+        val bitmap=thumbnail(store,entry,8192) ?: error("图片无法预览，请保留本机数据")
         val frame=FrameLayout(context).apply {
-            addView(scroll,FrameLayout.LayoutParams(-1,(resources.displayMetrics.heightPixels*.5f).toInt()))
+            addView(com.floatclip.app.ui.ZoomImageView(context).apply { setImageBitmap(bitmap) },
+                FrameLayout.LayoutParams(-1,(resources.displayMetrics.heightPixels*.6f).toInt()))
         }
         FloatDialog.show(context,"图片预览",custom=frame,negative="关闭",positive="复制图片",onPositive={copy(context,store,entry);true})
     }

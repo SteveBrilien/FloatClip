@@ -123,7 +123,7 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         fun property(name:String,value:String){val r=row();r.addView(label(name,13f,muted),LinearLayout.LayoutParams(dp(56),dp(32)));r.addView(label(value,13f).apply{maxLines=2},LinearLayout.LayoutParams(0,-2,1f));body.addView(r)}
         property("大小",size(file.size));property("来源",peer(file.peer));property("修改",time(file.modified));property("状态",if(repo.local(file)!=null)"本机已有" else if(file.online)"等待下载" else "来源离线")
         fun action(name:String,run:()->Unit){body.addView(View(this).apply{setBackgroundColor(line)},LinearLayout.LayoutParams(-1,dp(1)).apply{topMargin=dp(4)});body.addView(button(name){detailDialog?.dialog?.dismiss();run()}.apply{gravity=Gravity.CENTER_VERTICAL},LinearLayout.LayoutParams(-1,dp(48)))}
-        action("预览 / 打开"){prepare(listOf(file),"open",null)};action("下载到文件夹"){chooseFolder(listOf(file))};action("分享 / 转发"){prepare(listOf(file),"share",null)}
+        action("应用内预览"){prepare(listOf(file),"open",null)};action("下载到文件夹"){chooseFolder(listOf(file))};action("分享 / 转发"){prepare(listOf(file),"share",null)}
         if(SharedFileProvider.mime(file.name).startsWith("image/")&&repo.local(file)!=null)action("加入剪贴板"){startActivity(Intent(this,ImageImportActivity::class.java).setAction(Intent.ACTION_SEND).setType("image/*").putExtra(Intent.EXTRA_STREAM,SharedFileProvider.uri(packageName,file.key)))}
         action(if(file.kept)"取消保留" else "保留此文件"){repo.keep(file,!file.kept);render()}
         detailDialog=FloatDialog.show(this,file.name,custom=ScrollView(this).apply{addView(body);isFillViewport=false},negative="关闭",positive=null)
@@ -159,9 +159,10 @@ class FileActivity:Activity(),SyncRuntime.Observer {
     private fun finishBatch(){busy=false;active=null;batchDialog?.dialog?.dismiss();batchDialog=null;render()}
     private fun saveToTree(tree:Uri,row:SharedFile,file:File){val parent=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree));val target=DocumentsContract.createDocument(contentResolver,parent,SharedFileProvider.mime(row.name),row.name)?:throw IOException("文件夹无法写入");try{contentResolver.openOutputStream(target,"w")?.use{out->file.inputStream().use{it.copyTo(out)}}?:throw IOException("无法写入所选文件夹")}catch(e:Exception){runCatching{DocumentsContract.deleteDocument(contentResolver,target)};throw e}}
     private fun launchFiles(files:List<SharedFile>,mode:String){
-        val uris=files.map{SharedFileProvider.uri(packageName,it.key)};val intent=if(mode=="open")Intent(Intent.ACTION_VIEW).setDataAndType(uris.first(),SharedFileProvider.mime(files.first().name)) else Intent(if(files.size==1)Intent.ACTION_SEND else Intent.ACTION_SEND_MULTIPLE).apply{type=files.map{SharedFileProvider.mime(it.name)}.distinct().singleOrNull()?:"*/*";if(files.size==1)putExtra(Intent.EXTRA_STREAM,uris.first()) else putParcelableArrayListExtra(Intent.EXTRA_STREAM,ArrayList(uris))}
+        if(mode=="open") { startActivity(Intent(this,FilePreviewActivity::class.java).putExtra("key",files.first().key)); return }
+        val uris=files.map{SharedFileProvider.uri(packageName,it.key)};val intent=Intent(if(files.size==1)Intent.ACTION_SEND else Intent.ACTION_SEND_MULTIPLE).apply{type=files.map{SharedFileProvider.mime(it.name)}.distinct().singleOrNull()?:"*/*";if(files.size==1)putExtra(Intent.EXTRA_STREAM,uris.first()) else putParcelableArrayListExtra(Intent.EXTRA_STREAM,ArrayList(uris))}
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);intent.clipData=ClipData.newUri(contentResolver,files.first().name,uris.first()).apply{uris.drop(1).forEach{addItem(ClipData.Item(it))}}
-        runCatching{startActivity(if(mode=="open")intent else Intent.createChooser(intent,"分享文件"))}.onFailure{message("没有可处理此文件的应用，可先下载到文件夹")}
+        runCatching{startActivity(Intent.createChooser(intent,"分享文件"))}.onFailure{message("没有可处理此文件的应用，可先下载到文件夹")}
     }
     private fun message(value:String){Toast.makeText(this,value,Toast.LENGTH_LONG).show()}
     override fun changed(service:ClipboardSyncService){main.removeCallbacks(repaint);main.postDelayed(repaint,180)}

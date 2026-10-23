@@ -43,6 +43,7 @@ public sealed class FilePreviewWindow:Window
         previous=new Wpf.Ui.Controls.Button{Content="上一页"};next=new Wpf.Ui.Controls.Button{Content="下一页"};foreach(var button in new[]{previous,next}){DesignTokens.Button(button,"Toolbar");button.Margin=new(0,0,DesignTokens.Number("Space.8"),0);}
         previous.Click+=async(_,_)=>{if(pageIndex>0){pageIndex--;await RenderPdf();}};next.Click+=async(_,_)=>{if(pdf!=null&&pageIndex+1<pdf.PageCount){pageIndex++;await RenderPdf();}};
         pdfControls.Children.Add(previous);pdfControls.Children.Add(pageLabel);pdfControls.Children.Add(next);header.Children.Add(pdfControls);root.Children.Add(preview);
+        FloatClip.Desktop.Services.ClipboardBackgroundService.Configure(this,FloatClip.Desktop.Design.DesignPreferences.Load(ClipboardHost.Current?.PreferencesRoot??""),caption:true);
         SourceInitialized+=(_,_)=>{WindowAppearance.Apply(this);WindowAppearance.Theme(this,Wpf.Ui.Appearance.ApplicationThemeManager.GetAppTheme()==Wpf.Ui.Appearance.ApplicationTheme.Dark);};
         Loaded+=async(_,_)=>await LoadPreview();Closed+=(_,_)=>lifetime.Cancel();
     }

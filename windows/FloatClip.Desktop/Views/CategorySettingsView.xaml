@@ -1,12 +1,19 @@
 <UserControl x:Class="FloatClip.Desktop.Views.CategorySettingsView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:ui="clr-namespace:Wpf.Ui.Controls;assembly=Wpf.Ui">
   <StackPanel>
     <ItemsControl ItemsSource="{Binding Categories}"><ItemsControl.ItemTemplate><DataTemplate>
-      <Border Style="{StaticResource FloatClip.Setting.Row}"><Grid>
-        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-        <Border Tag="{Binding Color}" Style="{StaticResource FloatClip.Category.Swatch}" Margin="{DynamicResource FloatClip.Margin.End8}"/>
-        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource FloatClip.TextPrimary}"/>
-        <ComboBox Grid.Column="2" ItemsSource="{Binding Colors}" SelectedValuePath="Id" SelectedValue="{Binding Color,Mode=TwoWay}" AutomationProperties.Name="分类特征色"><ComboBox.ItemTemplate><DataTemplate><StackPanel Orientation="Horizontal"><Border Tag="{Binding Id}" Style="{StaticResource FloatClip.Category.Swatch}" Margin="{DynamicResource FloatClip.Margin.End8}"/><TextBlock Text="{Binding Label}"/></StackPanel></DataTemplate></ComboBox.ItemTemplate></ComboBox>
-      </Grid></Border>
+      <Border Style="{StaticResource FloatClip.Setting.Row}"><StackPanel>
+        <DockPanel LastChildFill="True">
+          <ui:Button DockPanel.Dock="Right" Content="保存" Command="{Binding SaveCommand}" Margin="{DynamicResource FloatClip.Margin.Start8}"/>
+          <TextBox Text="{Binding EditedName,UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanModify}" MaxLength="80" AutomationProperties.Name="分类名称"/>
+        </DockPanel>
+        <WrapPanel Margin="{DynamicResource FloatClip.Margin.Top8}">
+          <ComboBox ItemsSource="{Binding Icons}" SelectedValuePath="Id" SelectedValue="{Binding Icon,Mode=TwoWay}" AutomationProperties.Name="分类图标" Margin="{DynamicResource FloatClip.Margin.End8}"><ComboBox.ItemTemplate><DataTemplate><StackPanel Orientation="Horizontal"><ui:SymbolIcon Symbol="{Binding Symbol}" FontSize="{DynamicResource FloatClip.Icon.Small}" Margin="{DynamicResource FloatClip.Margin.End8}"/><TextBlock Text="{Binding Label}"/></StackPanel></DataTemplate></ComboBox.ItemTemplate></ComboBox>
+          <ComboBox ItemsSource="{Binding Colors}" SelectedValuePath="Id" SelectedValue="{Binding Color,Mode=TwoWay}" AutomationProperties.Name="分类特征色" Margin="{DynamicResource FloatClip.Margin.End8}"><ComboBox.ItemTemplate><DataTemplate><StackPanel Orientation="Horizontal"><Border Tag="{Binding Id}" Style="{StaticResource FloatClip.Category.Swatch}" Margin="{DynamicResource FloatClip.Margin.End8}"/><TextBlock Text="{Binding Label}"/></StackPanel></DataTemplate></ComboBox.ItemTemplate></ComboBox>
+          <ui:Button Content="{Binding DeleteLabel}" Command="{Binding DeleteCommand}" Style="{StaticResource FloatClip.Button.Danger}"/>
+          <ui:Button Content="取消" Command="{Binding CancelCommand}" Style="{StaticResource FloatClip.Button.Toolbar}"/>
+        </WrapPanel>
+        <TextBlock Text="{Binding Error}" Foreground="{DynamicResource FloatClip.Danger}" TextWrapping="Wrap"/>
+      </StackPanel></Border>
     </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
     <DockPanel Margin="{DynamicResource FloatClip.Margin.Top8}"><ui:Button DockPanel.Dock="Right" Content="添加分类" Command="{Binding AddCommand}" Margin="{DynamicResource FloatClip.Margin.Start8}"/><TextBox Text="{Binding NewName,UpdateSourceTrigger=PropertyChanged}" MaxLength="80" AutomationProperties.Name="新分类名称"/></DockPanel>
     <TextBlock Text="{Binding Error}" Foreground="{DynamicResource FloatClip.Danger}" TextWrapping="Wrap"/>

@@ -37,7 +37,7 @@ public sealed partial class LocalClipboardWindow:Window
     readonly StackPanel list=new(),header=new();readonly WrapPanel sources=new();readonly TextBox search;readonly TextBlock searchHint;
     readonly ClipboardSearchView searchView;readonly ClipboardPanelViewModel viewModel;readonly DesignPreferences designPreferences;
     readonly CategoryService categories;
-    Dictionary<string,string> categoryColors=new();
+    Dictionary<string,string> categoryColors=new(),categoryIcons=new();
     readonly Dictionary<string,TextBlock> copyBadges=new();
     readonly DispatcherTimer copyFeedbackTimer=new();
     bool pendingCopyRefresh;
@@ -63,6 +63,7 @@ public sealed partial class LocalClipboardWindow:Window
         Width=floating?520:760;Height=floating?650:760;MinWidth=420;MinHeight=420;
         ShowInTaskbar=!floating;
         if(floating){WindowStyle=WindowStyle.None;ResizeMode=ResizeMode.CanResize;ShowActivated=true;AllowsTransparency=designPreferences.ClipboardBackground=="transparent";}
+        ClipboardBackgroundService.Configure(this,designPreferences);
         UseLayoutRounding=true;SnapsToDevicePixels=true;
         WindowStartupLocation=WindowStartupLocation.CenterScreen;SetResourceReference(FontFamilyProperty,"FloatClip.FontFamily");SetResourceReference(FontSizeProperty,"FloatClip.Font.Body");
         Directory.CreateDirectory(prefsRoot);
@@ -73,7 +74,7 @@ public sealed partial class LocalClipboardWindow:Window
         root.Margin=(Thickness)Application.Current.FindResource("FloatClip.Padding.Page");
         if(floating) {
             var border=new Border{Child=root};
-            border.SetBinding(Border.BackgroundProperty,new System.Windows.Data.Binding("Background"){Source=this});
+            border.Background=Brushes.Transparent;
             Content=border;
             System.Windows.Shell.WindowChrome.SetWindowChrome(this,new System.Windows.Shell.WindowChrome{
                 CaptionHeight=0,ResizeBorderThickness=new(6),GlassFrameThickness=new(0),CornerRadius=new(0)});
@@ -117,12 +118,13 @@ public sealed partial class LocalClipboardWindow:Window
     }
     void ShowAuxiliary(string key,Window window)
     {
+        ClipboardBackgroundService.Configure(window,designPreferences,caption:true);
         window.Owner=this;window.ShowInTaskbar=false;window.FontFamily=FontFamily;window.FontSize=FontSize;
         window.WindowStartupLocation=WindowStartupLocation.CenterOwner;window.UseLayoutRounding=true;
-        window.SetResourceReference(BackgroundProperty,"FloatClip.Background");window.SetResourceReference(ForegroundProperty,"FloatClip.Text");
+        window.SetResourceReference(ForegroundProperty,"FloatClip.Text");
         auxiliaryWindows[key]=window;
         window.Closed+=(_,_)=>{if(auxiliaryWindows.TryGetValue(key,out var current)&&ReferenceEquals(current,window))auxiliaryWindows.Remove(key);};
-        window.SourceInitialized+=(_,_)=>{WindowAppearance.Apply(window);WindowAppearance.Theme(window,dark);};window.Show();window.Activate();
+        window.SourceInitialized+=(_,_)=>{WindowAppearance.Apply(window);WindowAppearance.Theme(window,dark);ClipboardBackgroundService.Apply(window,designPreferences);};window.Show();window.Activate();
     }
     void Sharing()=>Navigate(typeof(DevicesPage));
     void DismissAfterCopy(){if(floating&&!host.Pinned&&!OwnedWindows.Cast<Window>().Any(w=>w.IsVisible))Hide();}
@@ -141,7 +143,7 @@ public sealed partial class LocalClipboardWindow:Window
         WindowAppearance.Theme(this,dark);foreach(var window in auxiliaryWindows.Values)WindowAppearance.Theme(window,dark);
         ApplyClipboardBackground();
     }
-    string ApplyClipboardBackground()=>ClipboardBackgroundService.Apply(this,designPreferences,currentPage==typeof(ClipboardPage));
+    string ApplyClipboardBackground(){ClipboardBackgroundService.RefreshAll(designPreferences);return ClipboardBackgroundService.Apply(this,designPreferences);}
     FrameworkElement Glyph(string code,int size=18){var glyph=new TextBlock{Text=code,Tag="glyph",FontFamily=new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),FontSize=size,VerticalAlignment=VerticalAlignment.Center,HorizontalAlignment=HorizontalAlignment.Center};glyph.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Muted");return glyph;}
     Button IconButton(string code,string label,Action action)
     {
@@ -176,7 +178,7 @@ public sealed partial class LocalClipboardWindow:Window
     void Refresh(bool reloadDevices=true)
     {
         syncStatus.Text=host.Status+(host.HotkeyError.Length>0?" · "+host.HotkeyError:"");
-        var entries=vault.Load()["entries"]!.AsArray();string own=vault.Device()["id"]!.GetValue<string>();categoryColors=categories.List().ToDictionary(c=>c.Name,c=>c.Color);copyBadges.Clear();rendering=true;
+        var entries=vault.Load()["entries"]!.AsArray();string own=vault.Device()["id"]!.GetValue<string>();var definitions=categories.List();categoryColors=definitions.ToDictionary(c=>c.Name,c=>c.Color);categoryIcons=definitions.ToDictionary(c=>c.Name,c=>c.Icon);copyBadges.Clear();rendering=true;
         try{
             closeSwipe=null;
             if(reloadDevices){
@@ -244,6 +246,7 @@ public sealed partial class LocalClipboardWindow:Window
         string category=clip["category"]?.GetValue<string>()??"未分类";
         if(category!="未分类"){
             metadata.Children.Add(new Border{Tag=categoryColors.GetValueOrDefault(category,"blue"),Style=(Style)Application.Current.FindResource("FloatClip.Category.Swatch"),Margin=(Thickness)Application.Current.FindResource("FloatClip.Margin.Start8")});
+            metadata.Children.Add(new Wpf.Ui.Controls.SymbolIcon(CategorySymbols.For(categoryIcons.GetValueOrDefault(category,"folder"))){FontSize=DesignTokens.Number("Icon.Small"),Foreground=muted,Margin=(Thickness)Application.Current.FindResource("FloatClip.Margin.Start8")});
             metadata.Children.Add(new TextBlock{Text=category,Foreground=muted,FontSize=DesignTokens.Number("Font.Caption"),Margin=(Thickness)Application.Current.FindResource("FloatClip.Margin.Start8"),MaxWidth=DesignTokens.Number("Category.BadgeMaxWidth"),TextTrimming=TextTrimming.CharacterEllipsis});
         }
         body.Children.Add(metadata);
@@ -352,7 +355,7 @@ public sealed partial class LocalClipboardWindow:Window
         var backgroundChoice=new ComboBox{ItemsSource=new[]{"纯色","磨砂","透明（重启应用后生效）"},SelectedIndex=designPreferences.ClipboardBackground=="acrylic"?1:designPreferences.ClipboardBackground=="transparent"?2:0};StyleInput(backgroundChoice);
         var backgroundHint=MutedLabel("",(Thickness)Application.Current.FindResource("FloatClip.Margin.Top4"));
         backgroundChoice.SelectionChanged+=(_,_)=>Guard(()=>{designPreferences.ClipboardBackground=backgroundChoice.SelectedIndex switch{1=>"acrylic",2=>"transparent",_=>"solid"};designPreferences.Save(prefsRoot);backgroundHint.Text=ApplyClipboardBackground();});
-        panel.Children.Add(SettingRow("剪贴板背景","",backgroundChoice));panel.Children.Add(backgroundHint);
+        panel.Children.Add(SettingRow("应用背景","适用于剪贴板、文件、设备、设置及辅助窗口",backgroundChoice));panel.Children.Add(backgroundHint);
         panel.Children.Add(SliderSetting("背景不透明度","文字和卡片保持清晰",60,100,designPreferences.BackgroundOpacity*100,v=>{designPreferences.BackgroundOpacity=v/100;designPreferences.Save(prefsRoot);ApplyClipboardBackground();},"BackgroundOpacity"));
         Option("设备特征色",sourceColors,v=>sourceColors=v);Option("彩色卡片背景",translucent,v=>translucent=v);
         panel.Children.Add(MutedLabel("分类特征色",(Thickness)Application.Current.FindResource("FloatClip.Margin.Section")));

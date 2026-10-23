@@ -94,6 +94,10 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
         persist(entries().map { if (it.id == id) it.copy(category = clean) else it })
     }
 
+    fun renameCategory(category: String, name: String) = synchronized(LOCK) {
+        persist(entries().map { if(it.category==category)it.copy(category=name) else it })
+    }
+
     fun moveCategoryToDefault(category: String) = synchronized(LOCK) {
         persist(entries().map { if (it.category == category) it.copy(category = CategoryStore.DEFAULT_CATEGORY) else it })
     }

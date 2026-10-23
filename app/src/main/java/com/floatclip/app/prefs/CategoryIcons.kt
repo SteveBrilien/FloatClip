@@ -14,6 +14,11 @@ object CategoryIcons {
         Choice("code","代码",R.drawable.ic_code),
         Choice("work","工作",R.drawable.ic_work),
         Choice("lock","保护",R.drawable.ic_lock),
+        Choice("book","阅读",R.drawable.ic_book),
+        Choice("heart","收藏",R.drawable.ic_heart),
+        Choice("calendar","日程",R.drawable.ic_calendar),
+        Choice("document","文档",R.drawable.ic_document),
+        Choice("tag","标签",R.drawable.ic_tag),
     )
     fun resource(key:String?)=choices.firstOrNull{it.key==key}?.res ?: R.drawable.ic_folder
     fun defaultKey(category:String)=when(category) {

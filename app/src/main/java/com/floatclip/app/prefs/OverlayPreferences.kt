@@ -22,6 +22,8 @@ class OverlayPreferences(context: Context) {
     ).coerceIn(30, 120)
     fun keepAliveEnabled(): Boolean = prefs.getBoolean(KEY_KEEP_ALIVE_ENABLED, true)
     fun overlayEnabled(): Boolean = prefs.getBoolean(KEY_OVERLAY_ENABLED, false)
+    fun twoColumnClipboard(): Boolean = prefs.getBoolean("clipboard_two_columns", false)
+    fun saveTwoColumnClipboard(value: Boolean) { prefs.edit().putBoolean("clipboard_two_columns", value).apply() }
     fun sourceColors(): Boolean = prefs.getBoolean("source_colors", true)
     fun translucentCards(): Boolean = prefs.getBoolean("translucent_cards", true)
     fun saveSourceColors(value: Boolean) { prefs.edit().putBoolean("source_colors",value).apply() }

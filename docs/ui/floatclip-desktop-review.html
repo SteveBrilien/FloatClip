@@ -1,0 +1,226 @@
+<div id="floatclip-desktop-review" aria-label="FloatClip 桌面交互预览">
+  <div class="dr-stage"><div class="dr-app" data-theme="system" aria-label="FloatClip Windows">
+    <header class="dr-title"><span class="dr-logo"><i data-lucide="layers" aria-hidden="true"></i></span><span>FloatClip</span><span class="dr-drag"></span><button data-action="pin-window" class="dr-icon cursor-interaction" aria-label="固定面板" aria-pressed="false"><i data-lucide="pin" aria-hidden="true"></i></button><button data-action="hide" class="dr-icon cursor-interaction" aria-label="收起窗口"><i data-lucide="x" aria-hidden="true"></i></button></header>
+    <nav aria-label="主导航"><button data-action="nav" class="cursor-interaction" aria-label="展开导航"><i data-lucide="menu" aria-hidden="true"></i><span>导航</span></button><button data-page="clipboard" class="cursor-interaction" aria-label="剪贴板"><i data-lucide="clipboard" aria-hidden="true"></i><span>剪贴板</span></button><button data-page="files" class="cursor-interaction" aria-label="文件"><i data-lucide="folder" aria-hidden="true"></i><span>文件</span></button><button data-page="devices" class="cursor-interaction" aria-label="我的设备"><i data-lucide="smartphone" aria-hidden="true"></i><span>我的设备</span></button><div class="dr-spacer"></div><button data-page="settings" class="cursor-interaction" aria-label="设置"><i data-lucide="settings" aria-hidden="true"></i><span>设置</span></button><button data-page="updates" class="cursor-interaction" aria-label="版本与更新"><i data-lucide="download" aria-hidden="true"></i><span>版本与更新</span></button></nav>
+    <main></main><div class="dr-message" role="status" hidden></div><input type="file" multiple hidden aria-label="添加演示文件"/>
+  </div></div>
+</div>
+<style>
+#floatclip-desktop-review{width:100%;color-scheme:light dark}
+#floatclip-desktop-review [hidden]{display:none!important}
+#floatclip-desktop-review .dr-stage{padding:18px 14px 32px;display:flex;justify-content:center}
+#floatclip-desktop-review .dr-app{--dr-bg:light-dark(#f5f6f8,#181b20);--dr-surface:light-dark(#fff,#24282f);--dr-text:light-dark(#20252e,#eef1f6);--dr-muted:light-dark(#5e6a7d,#bdc6d6);--dr-line:light-dark(#e4e8ee,#3a424e);--dr-tint:light-dark(#eaf1fd,#293a52);--dr-accent:light-dark(#366ac7,#91bbff);--dr-danger:light-dark(#b62e48,#ffb5c2);width:920px;max-width:100%;height:700px;position:relative;display:grid;grid-template-columns:48px minmax(0,1fr);grid-template-rows:38px minmax(0,1fr);background:var(--dr-bg);color:var(--dr-text);border:1px solid var(--dr-line);border-radius:8px;overflow:clip;font:14px/1.45 "Segoe UI Variable","Segoe UI","Microsoft YaHei UI",sans-serif;box-shadow:0 12px 30px light-dark(#20252e15,#0005)}
+#floatclip-desktop-review .dr-app[data-theme=tokyo-night]{--dr-bg:#1a1b26;--dr-surface:#24283b;--dr-text:#e4e9ff;--dr-muted:#bbc4e5;--dr-line:#414868;--dr-tint:#283457;--dr-accent:#7aa2f7;--dr-danger:#ffb5c2}
+#floatclip-desktop-review .dr-app *{box-sizing:border-box}
+#floatclip-desktop-review button,#floatclip-desktop-review input,#floatclip-desktop-review select{font:inherit;color:inherit}
+#floatclip-desktop-review button{min-height:32px;border:1px solid transparent;padding:5px 10px;background:transparent;border-radius:5px;display:inline-flex;gap:7px;align-items:center;justify-content:center;white-space:nowrap}
+#floatclip-desktop-review button:hover{background:var(--dr-tint)}
+#floatclip-desktop-review button:disabled{opacity:.45}
+#floatclip-desktop-review svg{width:17px;height:17px;flex:none}
+#floatclip-desktop-review .dr-icon{width:30px;height:30px;min-height:30px;padding:5px;flex:none}
+#floatclip-desktop-review .dr-title{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:2px 6px 2px 10px;font-size:13px;user-select:none}
+#floatclip-desktop-review .dr-title:not(:has(button:hover)){cursor:grab}
+#floatclip-desktop-review .dr-drag{flex:1;align-self:stretch}
+#floatclip-desktop-review .dr-logo{width:23px;height:23px;background:#2d5be3;color:#fff;border-radius:6px;display:grid;place-items:center}
+#floatclip-desktop-review .dr-title button[aria-pressed=true] svg{fill:var(--dr-accent);color:var(--dr-accent)}
+#floatclip-desktop-review nav{display:flex;flex-direction:column;gap:4px;padding:4px;border-right:1px solid var(--dr-line)}
+#floatclip-desktop-review nav button{height:38px;padding:8px;justify-content:flex-start;position:relative;color:var(--dr-muted)}
+#floatclip-desktop-review nav button span{display:none}
+#floatclip-desktop-review .dr-expanded{grid-template-columns:150px minmax(0,1fr)}
+#floatclip-desktop-review .dr-expanded nav button span{display:inline}
+#floatclip-desktop-review nav [aria-current=page]{background:var(--dr-surface);color:var(--dr-text)}
+#floatclip-desktop-review nav [aria-current=page]::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:2px;background:var(--dr-accent)}
+#floatclip-desktop-review .dr-spacer{flex:1}
+#floatclip-desktop-review main{position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;padding:8px 18px 14px;gap:10px}
+#floatclip-desktop-review h2{margin:0;font-size:22px;font-weight:500;line-height:1.45}
+#floatclip-desktop-review h3{font-size:14px;font-weight:500;margin:14px 0 8px}
+#floatclip-desktop-review .dr-muted{color:var(--dr-muted);font-size:12px}
+#floatclip-desktop-review .dr-toolbar{display:flex;align-items:center;gap:2px;flex-wrap:wrap;flex:none}
+#floatclip-desktop-review select{height:32px;border:1px solid var(--dr-line);background:var(--dr-surface);border-radius:5px;padding:3px 7px;max-width:100%}
+#floatclip-desktop-review .dr-toolbar select{margin-left:auto;width:118px;font-size:12px}
+#floatclip-desktop-review .dr-file-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 2px}
+#floatclip-desktop-review .dr-connection{font-size:12px;color:light-dark(#14755f,#83d9be);display:flex;align-items:center;gap:6px}
+#floatclip-desktop-review .dr-file-toolbar{margin:0 -18px;padding:6px 12px;border-top:1px solid var(--dr-line);border-bottom:1px solid var(--dr-line);flex-wrap:nowrap;gap:2px}
+#floatclip-desktop-review .dr-command-separator{width:1px;height:22px;background:var(--dr-line);margin:0 5px}
+#floatclip-desktop-review .dr-file-toolbar .dr-properties{margin-left:auto}
+#floatclip-desktop-review .dr-file-table td{height:50px}
+#floatclip-desktop-review .dr-file-table th{border-bottom:1px solid var(--dr-line)}
+#floatclip-desktop-review .dr-file-table .dr-file-icon{width:28px;height:34px;--dr-type:#58718e;--dr-type-ink:light-dark(#58718e,#b8c9df);font-size:11px}
+#floatclip-desktop-review .dr-file-table .dr-file-icon[data-kind=pdf]{--dr-type:#c43e55;--dr-type-ink:light-dark(#bc354c,#ffb5c2)}
+#floatclip-desktop-review .dr-file-table .dr-file-icon[data-kind=docx]{--dr-type:#2863b9;--dr-type-ink:light-dark(#245dce,#9ab7ff)}
+#floatclip-desktop-review .dr-file-table .dr-file-icon[data-kind=xlsx]{--dr-type:#24754f;--dr-type-ink:light-dark(#14755f,#83d9be)}
+#floatclip-desktop-review .dr-file-table .dr-file-icon.dr-local{background:var(--dr-type);color:#fff}
+#floatclip-desktop-review .dr-file-table .dr-file-icon.dr-remote{background:transparent;color:var(--dr-type-ink)}
+#floatclip-desktop-review .dr-file-toolbar .dr-primary{color:light-dark(#fff,#172033)}
+#floatclip-desktop-review .dr-activity:empty{display:none}
+#floatclip-desktop-review .dr-bordered{border-color:var(--dr-line);background:var(--dr-surface)}
+#floatclip-desktop-review .dr-primary{background:var(--dr-accent);color:var(--dr-bg)}
+#floatclip-desktop-review .dr-table-wrap{min-height:90px;min-width:0;overflow:auto;flex:1;background:var(--dr-surface)}
+#floatclip-desktop-review table{border-collapse:collapse;text-align:left;width:100%;min-width:660px;font-size:13px;table-layout:fixed}
+#floatclip-desktop-review th{font-weight:400;color:var(--dr-muted);border-bottom:1px solid var(--dr-line);height:34px;white-space:nowrap}
+#floatclip-desktop-review th button{font-size:12px;justify-content:flex-start;padding:3px 6px;width:100%}
+#floatclip-desktop-review td{height:35px;padding:4px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#floatclip-desktop-review tbody tr:hover,#floatclip-desktop-review tbody tr[aria-selected=true]{background:var(--dr-tint)}
+#floatclip-desktop-review .dr-name{display:flex;align-items:center;gap:8px;min-width:0}
+#floatclip-desktop-review .dr-name input{flex:none;margin:0;accent-color:var(--dr-accent);width:16px;height:16px}
+#floatclip-desktop-review .dr-name span:last-child{overflow:hidden;text-overflow:ellipsis}
+#floatclip-desktop-review .dr-file-icon{width:22px;height:24px;display:grid;place-items:center;flex:none;color:var(--dr-accent);border-radius:3px}
+#floatclip-desktop-review .dr-file-icon[data-kind=pdf]{color:light-dark(#b62e48,#ffa8b8)}
+#floatclip-desktop-review .dr-file-icon[data-kind=docx]{color:light-dark(#245dce,#9ab7ff)}
+#floatclip-desktop-review .dr-file-icon[data-kind=xlsx]{color:light-dark(#14755f,#83d9be)}
+#floatclip-desktop-review .dr-file-icon.dr-remote{border:1px dashed currentColor}
+#floatclip-desktop-review .dr-file-icon.dr-local{background:var(--dr-tint)}
+#floatclip-desktop-review .dr-file-icon svg{width:18px;height:18px}
+#floatclip-desktop-review .dr-selection{height:22px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dr-muted);font-size:12px}
+#floatclip-desktop-review .dr-activity{height:126px;flex:none;border-top:1px solid var(--dr-line);padding:9px 0;display:flex;flex-direction:column;gap:10px;font-size:12px}
+#floatclip-desktop-review .dr-activity-head{display:flex;align-items:center;gap:14px}
+#floatclip-desktop-review .dr-task{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:8px;align-items:center;padding:5px 0}
+#floatclip-desktop-review .dr-task-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#floatclip-desktop-review .dr-track{height:4px;background:var(--dr-line);border-radius:2px;overflow:hidden;margin-top:8px}
+#floatclip-desktop-review .dr-fill{height:100%;background:var(--dr-accent);transition:width .2s}
+#floatclip-desktop-review .dr-scroll{overflow-y:auto;min-height:0;flex:1}
+#floatclip-desktop-review .dr-row-setting{padding:12px 14px;margin-bottom:5px;background:var(--dr-surface);border:1px solid var(--dr-line);border-radius:7px;display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:52px}
+#floatclip-desktop-review .dr-setting-label{min-width:0}
+#floatclip-desktop-review .dr-setting-label small{display:block;margin-top:3px;font-size:12px;color:var(--dr-muted)}
+#floatclip-desktop-review .dr-toggle{appearance:none;width:40px;height:21px;border-radius:12px;position:relative;background:var(--dr-line);border:1px solid var(--dr-muted);margin:0;flex:none}
+#floatclip-desktop-review .dr-toggle:checked{background:var(--dr-accent);border-color:var(--dr-accent)}
+#floatclip-desktop-review .dr-toggle::after{content:"";position:absolute;top:3px;left:3px;width:13px;height:13px;border-radius:50%;background:var(--dr-text)}
+#floatclip-desktop-review .dr-toggle:checked::after{left:22px;background:var(--dr-bg)}
+#floatclip-desktop-review .dr-peer{display:flex;gap:12px;align-items:center;padding:13px 12px;background:var(--dr-surface);border:1px solid var(--dr-line);border-radius:7px;margin-bottom:8px}
+#floatclip-desktop-review .dr-peer svg{width:22px;height:22px;color:var(--dr-muted)}
+#floatclip-desktop-review .dr-peer-info{flex:1;min-width:0}
+#floatclip-desktop-review .dr-peer .dr-icon svg{width:17px;height:17px}
+#floatclip-desktop-review details{border-bottom:1px solid var(--dr-line);padding:10px 0}
+#floatclip-desktop-review summary{min-height:30px;user-select:none}
+#floatclip-desktop-review .dr-inline{display:flex;align-items:center;gap:8px;justify-content:space-between}
+#floatclip-desktop-review .dr-search{display:flex;align-items:center;gap:8px;height:34px;flex:none;background:var(--dr-surface);border:1px solid var(--dr-line);border-radius:6px;padding:0 6px 0 10px}
+#floatclip-desktop-review .dr-search:focus-within{border-color:var(--dr-accent)}
+#floatclip-desktop-review .dr-search input{width:100%;min-width:0;border:0;background:transparent;height:30px;outline-offset:2px;font-size:13px}
+#floatclip-desktop-review .dr-clips{flex:1;min-height:0;overflow:auto}
+#floatclip-desktop-review .dr-clip-row{position:relative;overflow:hidden;margin-bottom:8px;border-radius:8px;background:var(--dr-tint)}
+#floatclip-desktop-review .dr-clip-front{background:var(--dr-surface);position:relative;padding:11px 14px;min-height:88px;user-select:none;touch-action:pan-y;transition:transform .15s}
+#floatclip-desktop-review .dr-clip-front p{margin:10px 0 0;max-height:66px;overflow:hidden;white-space:pre-wrap;font-size:var(--dr-copy-size,14px)}
+#floatclip-desktop-review .dr-clip-meta{display:flex;justify-content:space-between;color:var(--dr-muted);font-size:11px;gap:8px}
+#floatclip-desktop-review .dr-rail{position:absolute;inset:0 0 0 auto;display:flex;width:148px}
+#floatclip-desktop-review .dr-rail-left{left:0;right:auto;width:82px}
+#floatclip-desktop-review .dr-rail button{flex:1;display:flex;flex-direction:column;font-size:12px;border-radius:0;padding:5px 2px}
+#floatclip-desktop-review .dr-danger{color:var(--dr-danger)}
+#floatclip-desktop-review .dr-clip-row[data-swipe=right] .dr-clip-front{transform:translateX(82px)}
+#floatclip-desktop-review .dr-clip-row[data-swipe=left] .dr-clip-front{transform:translateX(-148px)}
+#floatclip-desktop-review .dr-active-filter{background:var(--dr-tint);color:var(--dr-accent)}
+#floatclip-desktop-review .dr-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:26px;flex:none}
+#floatclip-desktop-review .dr-overlay{position:absolute;inset:0;background:light-dark(#20252e25,#0006);display:flex;align-items:center;justify-content:center;padding:18px;z-index:6}
+#floatclip-desktop-review .dr-overlay.dr-modeless{background:transparent;pointer-events:none;align-items:flex-start;justify-content:flex-end;padding-top:44px}
+#floatclip-desktop-review .dr-modeless .dr-dialog{pointer-events:auto;width:390px}
+#floatclip-desktop-review .dr-dialog{width:520px;max-width:100%;max-height:100%;overflow:auto;background:var(--dr-surface);border:1px solid var(--dr-line);border-radius:8px;padding:18px;box-shadow:0 12px 30px #0003}
+#floatclip-desktop-review .dr-dialog-header{display:flex;align-items:center;gap:10px;justify-content:space-between;margin-bottom:14px}
+#floatclip-desktop-review .dr-dialog-header strong{font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis}
+#floatclip-desktop-review .dr-paper{background:#fff;color:#20252e;max-width:340px;min-height:270px;margin:14px auto;padding:30px 28px;font-size:13px;box-shadow:0 2px 10px #0002}
+#floatclip-desktop-review .dr-paper hr{border:0;border-top:1px solid #ddd;margin:16px 0}
+#floatclip-desktop-review .dr-property{display:grid;grid-template-columns:70px minmax(0,1fr);gap:8px;font-size:13px;word-break:break-word}
+#floatclip-desktop-review .dr-property dt{color:var(--dr-muted)}
+#floatclip-desktop-review .dr-property dd{margin:0}
+#floatclip-desktop-review .dr-message{position:absolute;bottom:16px;left:68px;right:18px;z-index:8;padding:9px 12px;border:1px solid var(--dr-line);background:var(--dr-surface);box-shadow:0 4px 16px #0002;border-radius:6px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px}
+@media(max-width:550px){#floatclip-desktop-review .dr-stage{padding:4px 0 20px}#floatclip-desktop-review .dr-app{height:740px}#floatclip-desktop-review main{padding:8px 10px 12px}#floatclip-desktop-review .dr-expanded{grid-template-columns:48px minmax(0,1fr)}#floatclip-desktop-review .dr-expanded nav button span{display:none}#floatclip-desktop-review .dr-toolbar{gap:0}#floatclip-desktop-review .dr-toolbar button{font-size:12px;padding:5px 6px;gap:4px}#floatclip-desktop-review .dr-toolbar select{width:103px;margin-left:0}#floatclip-desktop-review .dr-row-setting{padding:10px;gap:8px}#floatclip-desktop-review .dr-row-setting select{width:112px;font-size:12px}#floatclip-desktop-review .dr-dialog{padding:12px}#floatclip-desktop-review .dr-overlay{padding:8px}}
+@media(prefers-reduced-motion:reduce){#floatclip-desktop-review *{transition:none!important}}
+@media(max-width:650px){#floatclip-desktop-review .dr-file-toolbar button>span{display:none}#floatclip-desktop-review .dr-file-toolbar{margin-left:-10px;margin-right:-10px;padding:6px 10px}#floatclip-desktop-review .dr-connection{display:none}}
+</style>
+<script>
+(()=>{
+ const root=document.getElementById('floatclip-desktop-review'),app=root.querySelector('.dr-app'),main=app.querySelector('main'),message=app.querySelector('.dr-message'),picker=app.querySelector('input[type=file]');
+ const saved=window.openai?.widgetState?.privateContent||{};
+ const state={page:['files','clipboard','devices','settings','updates'].includes(saved.page)?saved.page:'files',theme:['system','light','dark','tokyo-night'].includes(saved.theme)?saved.theme:'system',width:Math.min(1000,Math.max(420,saved.width||920)),nav:false,pinned:false,sharing:true,peer:true,connected:false,connecting:false,query:'',filter:'all',selected:new Set(),sort:'name',descending:false,range:'all',dialog:'',clipSelected:'',undo:[],notice:'',task:null,update:'idle',font:14,capture:true,automatic:true};
+ let files=[{id:'pdf',name:'FloatClip 设计说明.pdf',ext:'pdf',size:2516582,modified:'2026/10/23 00:18',source:'V2115A',local:false,online:true,kept:false,demo:true},{id:'word',name:'会议纪要与下一步安排.docx',ext:'docx',size:63795,modified:'2026/10/22 16:26',source:'本机',local:true,online:true,kept:false,demo:true},{id:'excel',name:'项目进度与预算.xlsx',ext:'xlsx',size:184320,modified:'2026/10/22 15:46',source:'V2115A',local:true,online:true,kept:true,demo:true},{id:'image',name:'界面参考.png',ext:'png',size:1258291,modified:'2026/10/21 13:18',source:'V2115A',local:false,online:true,kept:false,demo:true},{id:'cad',name:'结构草图.dwg',ext:'dwg',size:61440,modified:'2026/10/20 23:36',source:'工作电脑',local:false,online:false,kept:false,demo:true}];
+ let clips=[{id:'a',text:'FloatClip：在同一个窗口里完成剪贴板、文件与设备管理。 😀 👍🏽',source:'本机',time:'00:42',locked:false,pinned:false},{id:'b',text:'会议纪要\n下周二核对进度与预算。',source:'V2115A',time:'00:38',locked:true,pinned:false},{id:'c',text:'https://clip.wmy-cloud.cn',source:'本机',time:'昨天 18:19',locked:false,pinned:true}];
+ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const icon=n=>'<i data-lucide="'+n+'" aria-hidden="true"></i>';
+ const button=(text,action,cls='',attrs='')=>'<button type="button" class="cursor-interaction '+cls+'" data-action="'+action+'" '+attrs+'>'+text+'</button>';
+ const size=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KiB':(n/1048576).toFixed(1)+' MiB';
+ const kind=f=>({pdf:'PDF 文档',docx:'Word 文档',xlsx:'Excel 表格',png:'PNG 图像',dwg:'DWG 图纸'}[f.ext]||f.ext.toUpperCase()+' 文件');
+ const fileIcon=f=>'<span class="dr-file-icon '+(f.local?'dr-local':'dr-remote')+'" data-kind="'+f.ext+'">'+({pdf:'P',docx:'W',xlsx:'X'}[f.ext]||icon(f.ext==='png'?'image':'file-text'))+'</span>';
+ const toggle=(key,label)=>'<input type="checkbox" class="dr-toggle cursor-interaction" data-setting="'+key+'" aria-label="'+label+'" '+(state[key]?'checked':'')+'/>';
+ function persist(){window.openai?.setWidgetState?.({modelContent:{product:'FloatClip 桌面重设计',page:state.page,theme:state.theme,width:state.width,fileLayout:'系统图标详细列表与固定传输底栏'},privateContent:{page:state.page,theme:state.theme,width:state.width}}).catch(()=>{});}
+ function paint(){app.dataset.theme=state.theme;app.style.colorScheme=state.theme==='system'?'light dark':state.theme==='light'?'light':'dark';app.style.width=state.width+'px';app.style.setProperty('--dr-copy-size',state.font+'px');app.classList.toggle('dr-expanded',state.nav);}
+ function visibleFiles(){return files.filter(f=>state.range==='all'||(state.range==='day'?f.modified.startsWith('2026/10/23'):state.range==='week'?f.modified>='2026/10/17':true)).sort((a,b)=>{let n=state.sort==='size'?a.size-b.size:String(a[state.sort]||'').localeCompare(String(b[state.sort]||''),'zh-CN');return state.descending?-n:n;});}
+ function filesPage(){
+  const rows=visibleFiles();
+  return '<div class="dr-file-heading"><h2>共享文件</h2><span class="dr-connection">'+icon('wifi')+'V2115A</span></div><div class="dr-toolbar dr-file-toolbar">'+button(icon('file-plus')+'<span>添加文件</span>','add-file','', 'aria-label="添加文件"')+'<span class="dr-command-separator"></span>'+button(icon('download')+'<span>下载</span>','download-files','dr-primary','aria-label="下载" '+(state.selected.size?'':'disabled'))+button(icon('panel-right')+'<span>预览</span>','preview-file','', 'aria-label="预览" '+(state.selected.size===1?'':'disabled'))+button(icon('save')+'<span>另存为</span>','download-files','', 'aria-label="另存为" '+(state.selected.size?'':'disabled'))+button(icon('forward')+'<span>转发</span>','forward-files','', 'aria-label="转发" '+(state.selected.size===1?'':'disabled'))+button(icon('ellipsis'),'file-more','dr-icon','aria-label="更多"')+button(icon('info')+'<span>属性</span>','properties','dr-properties','aria-label="属性" '+(state.selected.size===1?'':'disabled'))+'</div><div class="dr-table-wrap"><table class="dr-file-table" aria-label="共享文件"><colgroup><col style="width:40%"><col style="width:18%"><col style="width:13%"><col style="width:9%"><col style="width:10%"><col style="width:10%"></colgroup><thead><tr>'+[['name','名称'],['modified','修改时间'],['ext','类型'],['size','大小'],['source','来源'],['local','状态']].map(([k,t])=>'<th>'+button(t+(state.sort===k?(state.descending?' ↓':' ↑'):''),'sort','', 'data-sort="'+k+'"')+'</th>').join('')+'</tr></thead><tbody>'+rows.map(f=>'<tr data-file="'+f.id+'" aria-selected="'+state.selected.has(f.id)+'"><td><div class="dr-name"><input type="checkbox" data-file-select="'+f.id+'" aria-label="选择 '+esc(f.name)+'" '+(state.selected.has(f.id)?'checked':'')+'>'+fileIcon(f)+'<span>'+esc(f.name)+'</span></div></td><td class="dr-muted">'+f.modified+'</td><td class="dr-muted">'+kind(f)+'</td><td class="dr-muted">'+size(f.size)+'</td><td class="dr-muted">'+esc(f.source)+'</td><td class="dr-muted">'+esc(f.kept?'已保留':f.local?'本机文件':f.online?'未下载':'来源离线')+'</td></tr>').join('')+'</tbody></table></div>'+(state.task?activity():'')+'<div class="dr-selection">'+rows.length+' 个文件'+(state.selected.size?'  |  已选择 '+state.selected.size+' 个':'')+'</div>';
+ }
+ function activity(){const t=state.task;return '<section class="dr-activity" aria-label="传输活动"><div class="dr-activity-head"><span>传输活动</span><span class="dr-muted">'+(!t?'暂无传输活动':t.phase==='done'?'已完成':t.phase==='cancelled'?'已取消':'正在准备文件')+'</span></div>'+(t?'<div class="dr-task">'+icon('file-down')+'<div><div class="dr-task-name">'+esc(t.names.join('、'))+'</div><div class="dr-muted">'+(t.phase==='running'?size(t.total*t.progress/100)+' / '+size(t.total)+' · 预计 '+Math.max(1,Math.ceil((100-t.progress)/12))+' 秒':t.phase==='done'?'校验完成 · 保存位置：所选文件夹（演示）':'已完成项保留，未完成项可重试')+'</div><div class="dr-track" role="progressbar" aria-label="文件下载进度" aria-valuenow="'+t.progress+'" aria-valuemin="0" aria-valuemax="100"><div class="dr-fill" style="width:'+t.progress+'%"></div></div></div>'+button(t.phase==='running'?'取消':'清除','task-action')+'</div>':'')+'</section>';}
+ function clipboardPage(){const shown=clips.filter(c=>(!state.query||c.text.toLowerCase().includes(state.query.toLowerCase()))&&(state.filter==='all'||c.source==='本机'));return '<h2>剪贴板</h2><div class="dr-search">'+icon('search')+'<input type="search" aria-label="搜索剪贴板" placeholder="搜索剪贴板" value="'+esc(state.query)+'">'+button(icon('x'),'clear-search','dr-icon','aria-label="清空搜索"')+'</div><div class="dr-inline"><div>'+['全部','本机'].map((t,i)=>button(t,'filter',state.filter===(i?'local':'all')?'dr-active-filter':'','data-filter="'+(i?'local':'all')+'"')).join('')+'</div>'+button('全部清除','clear-clips','dr-bordered')+'</div><div class="dr-clips">'+shown.map(c=>'<div class="dr-clip-row" data-clip="'+c.id+'" data-swipe=""><div class="dr-rail dr-rail-left">'+button(icon(c.locked?'lock-open':'lock')+(c.locked?'取消固定':'固定'),'lock-clip','','data-id="'+c.id+'"')+'</div><div class="dr-rail">'+button(icon('pin')+(c.pinned?'取消置顶':'置顶'),'pin-clip','','data-id="'+c.id+'"')+button(icon('trash-2')+'删除','delete-clip','dr-danger','data-id="'+c.id+'"')+'</div><div class="dr-clip-front" data-clip-front="'+c.id+'"><div class="dr-clip-meta"><span>'+esc(c.source)+' · '+c.time+'</span><span>'+(c.locked?icon('lock'):'')+(c.pinned?icon('pin'):'')+'</span></div><p>'+esc(c.text)+'</p></div></div>').join('')+(shown.length?'':'<div class="dr-muted">没有匹配的记录</div>')+'</div><div class="dr-foot dr-muted"><span>'+(state.connected?'蓝牙同步就绪':'等待已授权设备自动连接')+'</span>'+button('操作说明','clip-help')+'</div>';}
+ function devicesPage(){return '<div class="dr-inline"><h2>我的设备</h2>'+toggle('sharing','共享剪贴板')+'</div><div class="dr-muted">'+(!state.sharing?'共享已关闭':state.connecting?'正在完成同步握手…':state.connected?'蓝牙同步就绪':'等待已授权设备自动连接')+'</div><div class="dr-scroll"><div class="dr-inline"><h3>已配对设备</h3>'+button('重新连接','reconnect')+'</div><div class="dr-peer">'+icon('smartphone')+'<div class="dr-peer-info"><div>V2115A</div><div class="dr-muted">'+(!state.sharing?'共享已关闭，配对已保留':!state.peer?'此设备已暂停':state.connected?'蓝牙同步就绪':'已授权 · 等待同步握手')+'</div></div>'+toggle('peer','与 V2115A 同步')+button(icon('ellipsis'),'peer-menu','dr-icon','aria-label="设备选项"')+'</div><details><summary class="cursor-interaction">添加设备</summary><div class="dr-muted">手机开启共享并允许添加设备，再核对两端识别码。</div><div class="dr-toolbar">'+button('通过蓝牙添加','pair-bluetooth','dr-bordered')+button('通过局域网添加','pair-lan','dr-bordered')+'</div></details><details><summary class="cursor-interaction">同步选项</summary>'+setting('自动连接已授权设备','',toggle('automatic','自动连接'))+setting('发送新复制的文字','',toggle('sending','发送文字'))+setting('接收文字到历史','',toggle('receiving','接收文字'))+setting('接收后写入系统剪贴板','',toggle('applying','自动写入剪贴板'))+'</details></div>';}
+ state.sending=state.receiving=state.applying=true;
+ function setting(title,detail,control){return '<div class="dr-row-setting"><div class="dr-setting-label">'+title+(detail?'<small>'+detail+'</small>':'')+'</div>'+control+'</div>';}
+ function settingsPage(){return '<h2>设置</h2><div class="dr-scroll"><h3>外观</h3>'+setting('应用主题','','<select data-setting="theme" aria-label="应用主题"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option><option value="tokyo-night">东京夜色</option></select>')+setting('展开导航文字','',toggle('nav','展开导航文字'))+setting('文字大小','剪贴板正文 · '+state.font+'','<input type="range" min="12" max="18" step="1" value="'+state.font+'" aria-label="文字大小" data-setting="font" style="width:132px;accent-color:var(--dr-accent)">')+setting('面板宽度','切换页面保持当前宽度','<input type="range" min="420" max="1000" step="10" value="'+state.width+'" aria-label="面板宽度" data-setting="width" style="width:132px;accent-color:var(--dr-accent)">')+'<h3>收录与启动</h3>'+setting('收录文字和图片','',toggle('capture','收录文字和图片'))+setting('启动时检查更新','',toggle('checkOnStart','启动时检查更新'))+setting('调出剪贴板的快捷键','Ctrl + Alt + V',button('更改','shortcut','dr-bordered'))+'</div>';}
+ state.checkOnStart=true;
+ function updatesPage(){return '<h2>版本与更新</h2><div class="dr-muted">当前试用候选 0.7.7  |  build 22</div><div class="dr-row-setting"><div class="dr-setting-label">'+({idle:'检查可用版本',checking:'正在检查…',available:'可用演示版本 0.7.8',ready:'演示安装包已就绪',done:'更新流程演示已完成'}[state.update])+'<small>此处演示交互，不访问更新服务器或安装程序</small></div>'+button(state.update==='ready'?'更新并重启':state.update==='available'?'下载更新':'检查更新',state.update==='ready'?'install-update':state.update==='available'?'download-update':'check-update','dr-bordered',state.update==='checking'?'disabled':'')+'</div>'+setting('启动时检查更新','使用同页提示，可稍后处理',toggle('checkOnStart','启动时检查更新'));}
+ function dialog(){const f=files.find(x=>state.selected.has(x.id));if(!state.dialog)return '';let title='文件选项',body='';
+  if(state.dialog==='preview'&&f){title=f.name;body=!f.local?'<div class="dr-muted">'+(f.online?'文件尚未下载，选中或预览不会自动传输。':'来源设备离线。')+'</div>'+button('下载到文件夹','download-files','dr-bordered',f.online?'':'disabled'):f.demo&&f.ext==='pdf'?'<div class="dr-muted">PDF · 第 1 页（示例文档）</div><div class="dr-paper"><strong>FloatClip</strong><hr><div>桌面文件页</div><p>文件以详细列表展示，内容仅在选择下载后传输。</p><hr><div>示例预览</div></div>':'<div class="dr-inline">'+fileIcon(f)+'<div>'+esc(f.name)+'<div class="dr-muted">'+kind(f)+' · '+size(f.size)+'</div></div></div><p class="dr-muted">该类型显示图标与元信息，不伪造文档正文。</p>';}
+  else if(state.dialog==='properties'&&f){title='属性';body='<dl class="dr-property"><dt>名称</dt><dd>'+esc(f.name)+'</dd><dt>类型</dt><dd>'+kind(f)+'</dd><dt>大小</dt><dd>'+f.size.toLocaleString()+' 字节</dd><dt>修改时间</dt><dd>'+f.modified+'</dd><dt>来源</dt><dd>'+esc(f.source)+'</dd><dt>本机状态</dt><dd>'+(f.local?'本机已有':f.online?'未下载':'来源离线')+'</dd></dl>';}
+  else if(state.dialog==='save'){title='保存到文件夹';body='<div class="dr-muted">保存位置演示</div><div class="dr-row-setting">下载 / FloatClip</div><div class="dr-toolbar">'+button('开始下载','start-files','dr-bordered')+button('取消','close-dialog')+'</div>';}
+  else if(state.dialog==='pair'){title='核对识别码';body='<div class="dr-muted">配对流程演示</div><p style="font-size:24px;letter-spacing:5px">842 196</p><div>两端显示一致后允许连接。</div>'+button('一致，允许连接','confirm-pair','dr-bordered');}
+  else if(state.dialog==='more'){body='<div style="display:flex;flex-direction:column;align-items:flex-start">'+button('保留 / 取消保留','keep-files')+button('清理所选下载缓存','clear-cache')+button('移除所选记录','remove-files')+'<label>按时间筛选 <select aria-label="文件时间筛选" data-setting="range"><option value="all">全部时间</option><option value="day">最近24小时</option><option value="week">最近7天</option><option value="month">最近30天</option></select></label></div>';}
+  else if(state.dialog==='forward'){title='转发到设备';body=button('发送到 V2115A（演示）','send-forward','dr-bordered');}
+  else if(state.dialog==='peer'){title='V2115A';body='<div class="dr-muted">系统蓝牙配对与应用同步握手分别显示。只有完成同步握手才显示“同步就绪”。</div>'+button('移除配对（演示）','forget-peer','dr-bordered');}
+  else {title='剪贴板操作';body='<div>向右滑动：固定 / 取消固定<br>向左滑动：置顶 / 删除<br>右键：打开同一组操作<br>全部清除会保留固定与置顶记录。</div>';}
+  const modeless=state.dialog==='preview'||state.dialog==='properties';
+  return '<div class="dr-overlay '+(modeless?'dr-modeless':'')+'"><section role="dialog" aria-modal="'+!modeless+'" aria-label="'+esc(title)+'" class="dr-dialog"><div class="dr-dialog-header"><strong>'+esc(title)+'</strong>'+button(icon('x'),'close-dialog','dr-icon','aria-label="关闭详情"')+'</div>'+body+'</section></div>';
+ }
+ function render(){paint();main.innerHTML=({files:filesPage,clipboard:clipboardPage,devices:devicesPage,settings:settingsPage,updates:updatesPage}[state.page])()+dialog();app.querySelectorAll('[data-page]').forEach(b=>b.setAttribute('aria-current',b.dataset.page===state.page?'page':'false'));const theme=main.querySelector('select[data-setting=theme]');if(theme)theme.value=state.theme;const range=main.querySelector('select[data-setting=range]');if(range)range.value=state.range;message.hidden=!state.notice;message.innerHTML='<span>'+esc(state.notice)+'</span>'+(state.undo.length?button('撤销','undo'):'')+button(icon('x'),'dismiss','dr-icon','aria-label="关闭提示"');if(globalThis.lucide)lucide.createIcons({attrs:{width:17,height:17}});}
+ let progressTimer=null;function startDownload(){const picked=files.filter(f=>state.selected.has(f.id));if(picked.some(f=>!f.local&&!f.online)){state.dialog='';state.notice='来源设备离线，未开始传输';render();return;}const remote=picked.filter(f=>!f.local);state.dialog='';if(!remote.length){state.notice='文件已在本机，可另存为（演示）';render();return;}state.task={names:remote.map(f=>f.name),ids:remote.map(f=>f.id),total:remote.reduce((a,f)=>a+f.size,0),progress:0,phase:'running'};clearInterval(progressTimer);progressTimer=setInterval(()=>{if(state.task?.phase!=='running'){clearInterval(progressTimer);return;}state.task.progress=Math.min(100,state.task.progress+9);if(state.task.progress===100){state.task.phase='done';files.forEach(f=>{if(state.task.ids.includes(f.id))f.local=true;});clearInterval(progressTimer);}render();},260);render();}
+ function reconnect(){if(!state.sharing||!state.peer){state.notice='先开启共享和设备同步';render();return;}state.connecting=true;state.connected=false;render();setTimeout(()=>{state.connecting=false;state.connected=state.sharing&&state.peer;render();},1200);}
+ app.addEventListener('click',e=>{const b=e.target.closest('button');if(b){if(b.dataset.page){state.page=b.dataset.page;state.dialog='';state.notice='';render();persist();return;}const a=b.dataset.action,f=files.find(x=>state.selected.has(x.id)),c=clips.find(x=>x.id===b.dataset.id);
+  if(a==='nav')state.nav=!state.nav;
+  else if(a==='pin-window'){state.pinned=!state.pinned;b.setAttribute('aria-pressed',state.pinned);b.setAttribute('aria-label',state.pinned?'取消固定面板':'固定面板');return;}
+  else if(a==='hide')state.notice='窗口收起操作（演示）';
+  else if(a==='add-file'){picker.click();return;}
+  else if(a==='download-files')state.dialog=state.selected.size?'save':'';
+  else if(a==='start-files'){startDownload();return;}
+  else if(a==='preview-file')state.dialog='preview';
+  else if(a==='forward-files')state.dialog='forward';
+  else if(a==='send-forward'){state.dialog='';state.notice='转发流程演示，未发送真实文件';}
+  else if(a==='file-more')state.dialog='more';
+  else if(a==='properties')state.dialog=f?'properties':'';
+  else if(a==='keep-files'){files.forEach(x=>{if(state.selected.has(x.id))x.kept=!x.kept;});state.dialog='';state.notice='所选文件保留标记已更新（演示）';}
+  else if(a==='clear-cache'){files.forEach(x=>{if(state.selected.has(x.id)&&!x.kept&&x.source!=='本机')x.local=false;});state.dialog='';state.notice='已跳过保留文件与本机原文件（演示）';}
+  else if(a==='remove-files'){files=files.filter(x=>!state.selected.has(x.id)||x.kept);state.selected.clear();state.dialog='';state.notice='已移除普通记录，保留项目未移除（演示）';}
+  else if(a==='sort'){state.descending=state.sort===b.dataset.sort?!state.descending:false;state.sort=b.dataset.sort;}
+  else if(a==='task-action'){if(state.task?.phase==='running'){state.task.phase='cancelled';clearInterval(progressTimer);}else state.task=null;}
+  else if(a==='close-dialog')state.dialog='';
+  else if(a==='reconnect'){reconnect();return;}
+  else if(a==='pair-bluetooth'||a==='pair-lan')state.dialog='pair';
+  else if(a==='confirm-pair'){state.dialog='';reconnect();return;}
+  else if(a==='peer-menu')state.dialog='peer';
+  else if(a==='forget-peer'){state.connected=false;state.peer=false;state.dialog='';state.notice='移除配对流程演示；未操作真实手机';}
+  else if(a==='clear-search')state.query='';
+  else if(a==='filter')state.filter=b.dataset.filter;
+  else if(a==='clear-clips'){state.undo=clips.filter(x=>!x.locked&&!x.pinned);clips=clips.filter(x=>x.locked||x.pinned);state.notice='普通记录已清除，固定和置顶记录已保留';}
+  else if(a==='undo'){clips.push(...state.undo);state.undo=[];state.notice='已撤销清除';}
+  else if(a==='lock-clip'&&c)c.locked=!c.locked;
+  else if(a==='pin-clip'&&c)c.pinned=!c.pinned;
+  else if(a==='delete-clip'&&c){state.undo=[{...c}];clips=clips.filter(x=>x.id!==c.id);state.notice='记录已删除（演示）';}
+  else if(a==='clip-help')state.dialog='help';
+  else if(a==='dismiss')state.notice='';
+  else if(a==='shortcut')state.notice='快捷键录制流程在原生程序中操作';
+  else if(a==='check-update'){state.update='checking';render();setTimeout(()=>{state.update='available';render();},700);return;}
+  else if(a==='download-update'){state.update='ready';state.notice='更新下载流程演示，不下载真实安装包';}
+  else if(a==='install-update'){state.update='done';state.notice='更新流程演示完成，未替换程序';}
+  render();persist();return;
+ }
+ const tr=e.target.closest('tr[data-file]');if(tr&&!e.target.closest('input')){if(!e.ctrlKey&&!e.metaKey)state.selected.clear();state.selected.add(tr.dataset.file);render();}
+ });
+ app.addEventListener('dblclick',e=>{const tr=e.target.closest('tr[data-file]');if(tr){state.selected=new Set([tr.dataset.file]);state.dialog='preview';render();}});
+ app.addEventListener('change',e=>{if(e.target.dataset.fileSelect){const id=e.target.dataset.fileSelect;e.target.checked?state.selected.add(id):state.selected.delete(id);render();return;}const key=e.target.dataset.setting;if(!key||e.target.type==='range')return;state[key]=e.target.type==='checkbox'?e.target.checked:e.target.value;if(key==='range')state.selected.clear();if((key==='sharing'||key==='peer')&&!state[key])state.connected=false;render();persist();});
+ app.addEventListener('input',e=>{const key=e.target.dataset.setting;if(e.target.type==='search'){const cursor=e.target.selectionStart;state.query=e.target.value;render();const input=main.querySelector('input[type=search]');input.focus();try{input.setSelectionRange(cursor,cursor);}catch{}}else if(key==='width'||key==='font'){state[key]=Number(e.target.value);paint();persist();}});
+ picker.addEventListener('change',()=>{for(const file of picker.files||[]){if(file.size>64*1048576){state.notice='单个文件上限 64 MiB';continue;}files.unshift({id:'user-'+Math.random(),name:file.name,ext:file.name.split('.').pop().toLowerCase(),size:file.size,modified:new Date(file.lastModified).toLocaleString('zh-CN',{hour12:false}),source:'本机',local:true,online:true,kept:false,demo:false});}picker.value='';render();});
+ let swipe=null;app.addEventListener('pointerdown',e=>{const front=e.target.closest('[data-clip-front]');if(front&&e.button===0)swipe={id:front.dataset.clipFront,x:e.clientX,y:e.clientY};});
+ app.addEventListener('pointerup',e=>{if(!swipe)return;const row=main.querySelector('[data-clip="'+swipe.id+'"]');if(row){const dx=e.clientX-swipe.x,dy=e.clientY-swipe.y;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy))row.dataset.swipe=dx>0?'right':'left';else if(Math.abs(dx)<8&&Math.abs(dy)<8){if(row.dataset.swipe)row.dataset.swipe='';else{state.notice='已复制文字（演示）';render();}}}swipe=null;});
+ app.addEventListener('contextmenu',e=>{const row=e.target.closest('[data-clip]');if(row){e.preventDefault();row.dataset.swipe='left';}});
+ let drag=null;app.querySelector('.dr-title').addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;drag={x:e.clientX,y:e.clientY};e.currentTarget.setPointerCapture(e.pointerId);});
+ app.querySelector('.dr-title').addEventListener('pointermove',e=>{if(drag)app.style.transform='translate('+Math.max(-10,Math.min(10,e.clientX-drag.x))+'px,'+Math.max(0,Math.min(18,e.clientY-drag.y))+'px)';});
+ app.querySelector('.dr-title').addEventListener('pointerup',()=>{drag=null;});
+ app.addEventListener('keydown',e=>{if(e.key==='Escape'){state.dialog='';main.querySelectorAll('[data-swipe]').forEach(x=>x.dataset.swipe='');render();}if(e.ctrlKey&&e.key==='a'&&state.page==='files'&&!e.target.matches('input,textarea')){e.preventDefault();state.selected=new Set(visibleFiles().map(f=>f.id));render();}});
+ window.addEventListener('openai:set_globals',e=>{const saved=e.detail?.globals?.widgetState?.privateContent;if(!saved)return;if(['light','dark','system','tokyo-night'].includes(saved.theme))state.theme=saved.theme;if(['files','clipboard','devices','settings','updates'].includes(saved.page))state.page=saved.page;render();});
+ render();if(globalThis.Tweak){const tweak=new Tweak({container:app,onChange:()=>{paint();persist();}});tweak.addSlider(state,'width',{label:'窗口宽度',min:420,max:1000,step:10,unit:'px'});}
+})();
+</script>

@@ -1,0 +1,60 @@
+<UserControl x:Class="FloatClip.Desktop.ClipboardSharingView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:ui="clr-namespace:Wpf.Ui.Controls;assembly=Wpf.Ui" Background="{DynamicResource FloatClip.Background}" Foreground="{DynamicResource FloatClip.TextPrimary}" FontFamily="{DynamicResource FloatClip.FontFamily}" FontSize="{DynamicResource FloatClip.Font.Body}" UseLayoutRounding="True" SnapsToDevicePixels="True" TextOptions.TextFormattingMode="Display">
+  <UserControl.Resources>
+    <BooleanToVisibilityConverter x:Key="VisibleWhen"/>
+    <Style x:Key="BodyLabel" TargetType="TextBlock"><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/></Style>
+    <Style x:Key="Detail" TargetType="TextBlock" BasedOn="{StaticResource BodyLabel}"><Setter Property="Foreground" Value="{DynamicResource FloatClip.TextSecondary}"/><Setter Property="FontSize" Value="{DynamicResource FloatClip.Font.Caption}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+  </UserControl.Resources>
+  <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False">
+    <StackPanel Margin="{DynamicResource FloatClip.Padding.Page}">
+      <TextBlock Text="我的设备" FontSize="{DynamicResource FloatClip.Font.Title}" FontWeight="Medium"/>
+      <TextBlock Text="{Binding Status}" Style="{StaticResource Detail}" TextWrapping="NoWrap" Margin="{DynamicResource FloatClip.Margin.Bottom12}"/>
+      <Border Style="{StaticResource FloatClip.Setting.OptionRow}">
+        <DockPanel LastChildFill="True"><ui:ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding Enabled,Mode=TwoWay}" Style="{StaticResource FloatClip.ToggleSwitch}" AutomationProperties.Name="共享剪贴板"/><TextBlock Text="共享剪贴板" Style="{StaticResource BodyLabel}"/></DockPanel>
+      </Border>
+      <DockPanel Margin="{DynamicResource FloatClip.Margin.Section}" LastChildFill="True">
+        <ui:Button DockPanel.Dock="Right" Content="重新连接" Command="{Binding ReconnectCommand}" Style="{StaticResource FloatClip.Button.Toolbar}" HorizontalAlignment="Right"/>
+        <TextBlock Text="已配对设备" FontSize="{DynamicResource FloatClip.Font.Section}" VerticalAlignment="Center"/>
+      </DockPanel>
+      <ItemsControl x:Name="PeerList" ItemsSource="{Binding Peers}" AutomationProperties.AutomationId="PairedDeviceList">
+        <ItemsControl.ItemTemplate><DataTemplate>
+          <Border Style="{StaticResource FloatClip.Setting.Row}" Height="{DynamicResource FloatClip.Device.RowHeight}">
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <StackPanel VerticalAlignment="Center" Margin="{DynamicResource FloatClip.Margin.End8}"><TextBlock Text="{Binding Name}" Style="{StaticResource BodyLabel}"/><TextBlock Text="{Binding Status}" Style="{StaticResource Detail}" TextWrapping="NoWrap"/></StackPanel>
+              <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding Enabled,Mode=TwoWay}" IsEnabled="{Binding CanConfigure}" Style="{StaticResource FloatClip.ToggleSwitch}" AutomationProperties.Name="设备同步开关" ToolTip="暂停或恢复此设备的剪贴板同步" Margin="{DynamicResource FloatClip.Margin.End8}"/>
+              <ui:Button Grid.Column="2" Style="{StaticResource FloatClip.Button.Toolbar}" Width="{DynamicResource FloatClip.Hit.Control}" Padding="0" HorizontalAlignment="Right" Click="PeerMenuClicked" ToolTip="设备选项" AutomationProperties.Name="设备选项"><ui:SymbolIcon Symbol="MoreHorizontal24" FontSize="{DynamicResource FloatClip.Icon.Standard}"/>
+                <ui:Button.ContextMenu><ContextMenu DataContext="{Binding PlacementTarget.DataContext,RelativeSource={RelativeSource Self}}"><MenuItem Header="移除配对…" Command="{Binding ForgetCommand}" Foreground="{DynamicResource FloatClip.Danger}"><MenuItem.Icon><ui:SymbolIcon Symbol="Delete24" FontSize="{DynamicResource FloatClip.Icon.Small}" Foreground="{DynamicResource FloatClip.Danger}"/></MenuItem.Icon></MenuItem></ContextMenu></ui:Button.ContextMenu>
+              </ui:Button>
+            </Grid>
+          </Border>
+        </DataTemplate></ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <TextBlock Text="尚未配对设备"><TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource Detail}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Peers.Count}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+      <ui:Button Content="重置设备授权" Command="{Binding ResetCommand}" HorizontalAlignment="Left" Visibility="{Binding Corrupt,Converter={StaticResource VisibleWhen}}"/>
+      <Border Style="{StaticResource FloatClip.Setting.Row}" Margin="{DynamicResource FloatClip.Margin.Top8}">
+        <StackPanel>
+          <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBlock Text="添加设备" Style="{StaticResource BodyLabel}"/>
+            <ComboBox x:Name="ConnectionMethod" Grid.Column="1" ItemsSource="{Binding ConnectionModes}" SelectedIndex="{Binding ConnectionMode,Mode=TwoWay}" IsEnabled="{Binding CanConnect}" Width="{DynamicResource FloatClip.Device.MethodWidth}" AutomationProperties.Name="连接方式" AutomationProperties.AutomationId="ConnectionMethod"/>
+          </Grid>
+          <StackPanel Visibility="{Binding IsBluetooth,Converter={StaticResource VisibleWhen}}" Margin="{DynamicResource FloatClip.Margin.Top8}">
+            <TextBlock Style="{StaticResource Detail}" Text="1  在 Windows 和手机的系统设置中完成蓝牙配对。&#x0a;2  手机打开 FloatClip 的添加设备页面。&#x0a;3  查找设备，并核对两端识别码。"/>
+            <WrapPanel Margin="{DynamicResource FloatClip.Margin.Top8}"><ui:Button Content="查找蓝牙设备" Command="{Binding PairBluetoothCommand}" IsEnabled="{Binding CanConnect}" Style="{StaticResource FloatClip.Button.Accent}" HorizontalAlignment="Left" AutomationProperties.AutomationId="PairBluetooth" Margin="{DynamicResource FloatClip.Margin.End8}"/><ui:Button Content="蓝牙设置" Click="OpenBluetoothSettings" Style="{StaticResource FloatClip.Button.Toolbar}" HorizontalAlignment="Left"/></WrapPanel>
+          </StackPanel>
+          <StackPanel Visibility="{Binding IsLan,Converter={StaticResource VisibleWhen}}" Margin="{DynamicResource FloatClip.Margin.Top8}">
+            <TextBlock Style="{StaticResource Detail}" Text="1  两端连接同一 Wi-Fi 或手机热点。&#x0a;2  手机打开添加设备页面。&#x0a;3  选择网络、查找手机并核对识别码。"/>
+            <ComboBox ItemsSource="{Binding Networks}" SelectedItem="{Binding SelectedNetwork,Mode=TwoWay}" IsEnabled="{Binding CanConnect}" HorizontalAlignment="Stretch" Margin="{DynamicResource FloatClip.Margin.Top8}" AutomationProperties.Name="局域网网络"/>
+            <WrapPanel Margin="{DynamicResource FloatClip.Margin.Top8}"><ui:Button Content="查找手机" Command="{Binding DiscoverCommand}" IsEnabled="{Binding CanConnect}" Style="{StaticResource FloatClip.Button.Accent}" HorizontalAlignment="Left" AutomationProperties.AutomationId="PairLan" Margin="{DynamicResource FloatClip.Margin.End8}"/><ui:Button Content="刷新网络" Command="{Binding RefreshNetworksCommand}" IsEnabled="{Binding CanConnect}" Style="{StaticResource FloatClip.Button.Toolbar}" HorizontalAlignment="Left"/></WrapPanel>
+            <ItemsControl ItemsSource="{Binding NearbyDevices}"><ItemsControl.ItemTemplate><DataTemplate><ui:Button Content="{Binding Name}" Command="{Binding DataContext.PairLanCommand,RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" HorizontalAlignment="Left" Margin="{DynamicResource FloatClip.Margin.Top4}"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+          </StackPanel>
+          <TextBlock Text="{Binding PairingStatus}" Margin="{DynamicResource FloatClip.Margin.Top4}"><TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource Detail}"><Style.Triggers><Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed"/></Trigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+          <ui:Button Content="取消添加" Command="{Binding CancelCommand}" HorizontalAlignment="Left" Visibility="{Binding Busy,Converter={StaticResource VisibleWhen}}"/>
+        </StackPanel>
+      </Border>
+      <TextBlock Text="同步选项" FontSize="{DynamicResource FloatClip.Font.Section}" Margin="{DynamicResource FloatClip.Margin.Section}"/>
+      <Border Style="{StaticResource FloatClip.Setting.OptionRow}"><DockPanel><ui:ToggleSwitch DockPanel.Dock="Right" Style="{StaticResource FloatClip.ToggleSwitch}" IsChecked="{Binding Automatic,Mode=TwoWay}" AutomationProperties.Name="自动连接已授权设备"/><TextBlock Text="自动连接已授权设备" Style="{StaticResource BodyLabel}"/></DockPanel></Border>
+      <Border Style="{StaticResource FloatClip.Setting.OptionRow}"><DockPanel><ui:ToggleSwitch DockPanel.Dock="Right" Style="{StaticResource FloatClip.ToggleSwitch}" IsChecked="{Binding Send,Mode=TwoWay}" AutomationProperties.Name="发送新复制的文字"/><TextBlock Text="发送新复制的文字" Style="{StaticResource BodyLabel}"/></DockPanel></Border>
+      <Border Style="{StaticResource FloatClip.Setting.OptionRow}"><DockPanel><ui:ToggleSwitch DockPanel.Dock="Right" Style="{StaticResource FloatClip.ToggleSwitch}" IsChecked="{Binding Receive,Mode=TwoWay}" AutomationProperties.Name="接收文字到历史"/><TextBlock Text="接收文字到历史" Style="{StaticResource BodyLabel}"/></DockPanel></Border>
+      <Border Style="{StaticResource FloatClip.Setting.OptionRow}"><DockPanel><ui:ToggleSwitch DockPanel.Dock="Right" Style="{StaticResource FloatClip.ToggleSwitch}" IsChecked="{Binding Apply,Mode=TwoWay}" AutomationProperties.Name="接收后写入系统剪贴板"/><TextBlock Text="接收后写入系统剪贴板" Style="{StaticResource BodyLabel}"/></DockPanel></Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

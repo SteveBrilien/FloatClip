@@ -47,7 +47,7 @@ final class LanTls {
         return address;
     }
 
-    private static KeyStore identity() throws Exception {
+    private static synchronized KeyStore identity() throws Exception {
         KeyStore keys = KeyStore.getInstance("AndroidKeyStore");
         keys.load(null);
         if (!keys.containsAlias(ALIAS)) {

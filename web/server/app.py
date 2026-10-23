@@ -48,11 +48,13 @@ class Store:
           CREATE TABLE IF NOT EXISTS rooms(code TEXT PRIMARY KEY, mode TEXT NOT NULL,
             host_hash TEXT NOT NULL, guest_hash TEXT, offer TEXT NOT NULL, answer TEXT,
             expires REAL NOT NULL);
+          CREATE TABLE IF NOT EXISTS trusted(tag TEXT PRIMARY KEY, pairing_room TEXT NOT NULL,
+            host_hash TEXT, guest_hash TEXT, expires REAL NOT NULL);
         ''')
 
     def cleanup(self):
         now = time.time()
-        for table in ('sessions', 'limits', 'rooms'):
+        for table in ('sessions', 'limits', 'rooms', 'trusted'):
             self.db.execute(f'DELETE FROM {table} WHERE expires < ?', (now,))
 
     def limit(self, key, maximum, interval=60):
@@ -205,7 +207,7 @@ def create_app(config, state_path, static_path):
         if not isinstance(token, str) or not re.fullmatch(r'[a-f0-9]{64}', token):
             raise web.HTTPForbidden(text='配对凭据无效')
         hashed = digest(token)
-        if hmac.compare_digest(r['host_hash'], hashed):
+        if r['host_hash'] and hmac.compare_digest(r['host_hash'], hashed):
             return 'host'
         if r['guest_hash'] and hmac.compare_digest(r['guest_hash'], hashed):
             return 'guest'
@@ -251,8 +253,39 @@ def create_app(config, state_path, static_path):
             if not changed:
                 raise web.HTTPConflict(text='配对码已被使用，请生成新的配对码')
             return web.json_response({'code': r['code'], 'mode': r['mode'], 'token': token, 'offer': r['offer'], 'expires': int(r['expires'] * 1000)})
+        if op in ('resume-forget',):
+            tag = data.get('tag')
+            if not isinstance(tag, str) or not re.fullmatch(r'[a-f0-9]{64}', tag):
+                raise ValueError()
+            trusted = store.db.execute('SELECT * FROM trusted WHERE tag=? AND expires>?', (tag,time.time())).fetchone()
+            if trusted is None:
+                raise web.HTTPNotFound(text='设备授权不存在')
+            role(trusted, req.headers.get('Authorization','').removeprefix('Bearer '))
+            store.db.execute('DELETE FROM trusted WHERE tag=?', (tag,))
+            for peer in list(slots.get('trusted:'+tag, {}).values()):
+                await peer.close(code=1008, message=b'Authorization revoked')
+            return web.json_response({'ok':True})
         r = room(data.get('code'))
         who = role(r, req.headers.get('Authorization', '').removeprefix('Bearer '))
+        if op == 'remember' and r['mode']=='relay':
+            tag,token = data.get('tag'),data.get('resumeToken')
+            if not isinstance(tag,str) or not re.fullmatch(r'[a-f0-9]{64}',tag) or not isinstance(token,str) or not re.fullmatch(r'[a-f0-9]{64}',token):
+                raise ValueError()
+            store.limit('remember:'+s['token'],20)
+            store.cleanup()
+            prior=store.db.execute('SELECT * FROM trusted WHERE tag=?',(tag,)).fetchone()
+            if prior is None:
+                if store.db.execute('SELECT count(*) FROM trusted').fetchone()[0]>=32:
+                    raise web.HTTPTooManyRequests(text='已配对设备过多，请先移除旧配对')
+                store.db.execute('INSERT INTO trusted VALUES (?,?,NULL,NULL,?)',(tag,r['code'],time.time()+365*86400))
+                prior=store.db.execute('SELECT * FROM trusted WHERE tag=?',(tag,)).fetchone()
+            if prior['pairing_room']!=r['code'] or prior[who+'_hash'] and not hmac.compare_digest(prior[who+'_hash'],digest(token)):
+                raise web.HTTPConflict(text='已配对设备凭据不一致')
+            store.db.execute('UPDATE trusted SET '+who+'_hash=? WHERE tag=?',(digest(token),tag))
+            saved=store.db.execute('SELECT * FROM trusted WHERE tag=?',(tag,)).fetchone()
+            if saved['host_hash'] and saved['guest_hash']:
+                relay_deadlines[r['code']]=time.time()+365*86400
+            return web.json_response({'ok':True})
         if op == 'answer' and who == 'guest' and r['mode'] == 'direct':
             answer = sdp(data.get('sdp'), 'answer')
             changed = store.db.execute('UPDATE rooms SET answer=? WHERE code=? AND answer IS NULL AND expires>?', (answer, r['code'], time.time())).rowcount
@@ -273,27 +306,47 @@ def create_app(config, state_path, static_path):
         ws = web.WebSocketResponse(heartbeat=20, max_msg_size=40000, receive_timeout=70)
         pending[ip] = pending.get(ip, 0) + 1
         code = who = None
+        resuming = False
         admitted = False
         try:
             await ws.prepare(req)
             first = await asyncio.wait_for(ws.receive_json(), 5)
-            r = room(first.get('code'))
-            if r['mode'] != 'relay':
-                raise ValueError()
-            who = role(r, first.get('token'))
-            code = r['code']
+            resuming = 'resume' in first
+            if resuming:
+                tag = first.get('resume')
+                if not isinstance(tag,str) or not re.fullmatch(r'[a-f0-9]{64}',tag):
+                    raise ValueError()
+                r=store.db.execute('SELECT * FROM trusted WHERE tag=? AND expires>?',(tag,time.time())).fetchone()
+                if r is None:
+                    raise ValueError()
+                who=role(r,first.get('token'))
+                public_key(first.get('key'))
+                code='trusted:'+tag
+            else:
+                r = room(first.get('code'))
+                if r['mode'] != 'relay':
+                    raise ValueError()
+                who = role(r, first.get('token'))
+                code = r['code']
             peers = slots.setdefault(code, {})
             if who in peers:
                 raise ValueError()
             peers[who] = ws
+            if resuming:
+                ws._floatclip_public=first['key']
             sockets.setdefault(s['token'], set()).add(ws)
             pending[ip] = max(0, pending.get(ip, 1) - 1)
             admitted = True
             if len(peers) == 2:
-                if not r['answer']:
-                    raise ValueError()
-                message = {'t': 'paired', 'hostKey': r['offer'], 'guestKey': r['answer']}
-                relay_deadlines[code] = time.time() + 600
+                if resuming:
+                    message={'t':'paired','hostKey':peers['host']._floatclip_public,'guestKey':peers['guest']._floatclip_public,'nonce':secrets.token_hex(16)}
+                    relay_deadlines[code]=time.time()+365*86400
+                    store.db.execute('UPDATE trusted SET expires=? WHERE tag=?',(time.time()+365*86400,tag))
+                else:
+                    if not r['answer']:
+                        raise ValueError()
+                    message = {'t': 'paired', 'hostKey': r['offer'], 'guestKey': r['answer']}
+                    relay_deadlines[code] = time.time() + 600
                 for peer in list(peers.values()):
                     await peer.send_json(message)
             else:
@@ -337,7 +390,8 @@ def create_app(config, state_path, static_path):
                 for peer in group.values():
                     if peer is not ws:
                         await peer.close(code=1000, message=b'Peer disconnected')
-                store.db.execute('DELETE FROM rooms WHERE code=?', (code,))
+                if not resuming:
+                    store.db.execute('DELETE FROM rooms WHERE code=?', (code,))
             await ws.close(code=1000)
         return ws
 

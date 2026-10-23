@@ -18,11 +18,11 @@ internal object ShareDesign {
         val line: Int, val blue: Int, val tint: Int, val primary: Int)
     private fun color(value: String) = Color.parseColor(value)
     fun palette(dark: Boolean) = if (dark) Palette(
-        color("#0C1422"), color("#162235"), color("#EDF3FC"), color("#A9B8CD"),
-        color("#2D3C52"), color("#8DBBFF"), color("#243B5A"), color("#2563EB")
+        color("#1A1B26"), color("#24283B"), color("#C0CAF5"), color("#9AA5CE"),
+        color("#414868"), color("#7AA2F7"), color("#292E42"), color("#7AA2F7")
     ) else Palette(
         color("#F4F7FC"), Color.WHITE, color("#19283F"), color("#596C85"),
-        color("#DFE7F2"), color("#245DCE"), color("#EBF2FF"), color("#2563EB")
+        color("#DFE7F2"), color("#245DCE"), color("#EBF2FF"), color("#245DCE")
     )
 }
 

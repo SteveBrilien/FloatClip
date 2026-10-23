@@ -4,6 +4,7 @@ data class ClipEntry(
     val id: Long,
     val text: String,
     val pinned: Boolean = false,
+    val locked: Boolean = false,
     val category: String = "未分类",
     val createdAt: Long = System.currentTimeMillis(),
     val key: String = id.toString(),
@@ -11,4 +12,10 @@ data class ClipEntry(
     val sourceDeviceId: String = "local",
     val sourceDeviceName: String = "本机",
     val sourcePlatform: String = "android",
+    val kind: String = "text",
+    val imageRef: String = "",
+    val imageSha256: String = "",
+    val imageBytes: Int = 0,
+    val imageWidth: Int = 0,
+    val imageHeight: Int = 0,
 )

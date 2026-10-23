@@ -2,10 +2,13 @@ package com.floatclip.app
 
 import android.view.View
 import android.view.ViewGroup
+import android.content.Context
 import android.webkit.WebView
 import android.widget.EditText
+import com.floatclip.app.clipboard.ClipStore
 import com.floatclip.app.clipboard.ClipboardQuery
 import com.floatclip.app.model.ClipEntry
+import com.floatclip.app.security.VaultCipher
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,6 +23,30 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.LEGACY)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 class ClipboardScreenTest {
+    @Test fun bulkClearButtonPreservesProtectionWithoutUndo() {
+        val controller=Robolectric.buildActivity(UnifiedActivity::class.java).setup()
+        val activity=controller.get()
+        val codec=object:VaultCipher {
+            override fun encrypt(plain:ByteArray)=plain
+            override fun decrypt(payload:ByteArray)=payload
+        }
+        java.io.File(activity.filesDir,"floatclip_vault.bin").delete()
+        activity.getSharedPreferences("floatclip_store",Context.MODE_PRIVATE).edit().clear().commit()
+        val store=ClipStore(activity,codec)
+        store.toggleLocked(store.addText("fixed")!!.id)
+        store.togglePinned(store.addText("pinned")!!.id)
+        store.addText("ordinary one");store.addText("ordinary two")
+        MainActivity::class.java.getDeclaredField("clipStore").apply { isAccessible=true }.set(activity,store)
+        try {
+            activity.findViewById<View>(R.id.clipboard_clear).performClick()
+            assertEquals(setOf("fixed","pinned"),ClipStore(activity,codec).entries().map { it.text }.toSet())
+            store.addText("new after clear")
+            assertTrue(activity.findViewById<View>(R.id.clipboard_undo)?.isShown!=true)
+            assertEquals(setOf("fixed","pinned","new after clear"),ClipStore(activity,codec).entries().map { it.text }.toSet())
+            assertTrue(store.entries().first { it.text=="fixed" }.locked)
+            assertTrue(store.entries().first { it.text=="pinned" }.pinned)
+        } finally { controller.pause().stop().destroy() }
+    }
     @Test fun android11LaunchesWithoutNetworkOrWebViewAndKeepsSearchFocus() {
         val controller=Robolectric.buildActivity(UnifiedActivity::class.java).setup()
         val activity=controller.get()

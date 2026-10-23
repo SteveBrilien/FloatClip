@@ -4,7 +4,7 @@ export const MAX_FILE = 64 * 1024 * 1024;
 export const CHUNK = 16 * 1024;
 export const RATE = 1024 * 1024;
 export const encoder = new TextEncoder();
-export type Control = { t: string; id?: string; text?: string; name?: string; size?: number; hash?: string; label?: string; version?: number; part?: number; total?: number; deviceId?:string; platform?:string };
+export type Control = { t: string; id?: string; text?: string; name?: string; size?: number; hash?: string; label?: string; version?: number; part?: number; total?: number; deviceId?:string; platform?:string; sync?:number; epoch?:string; sending?:boolean; receiving?:boolean };
 export function filename(value: unknown): string {
   if (typeof value !== 'string') throw new Error('文件名称无效');
   const clean = value.replace(/[\\/\u0000-\u001f\u007f]/g, '_').replace(/[\u202a-\u202e\u2066-\u2069]/g, '').trim();
@@ -14,10 +14,13 @@ export function filename(value: unknown): string {
 export function parseControl(input: string): Control {
   if (encoder.encode(input).length > 100000) throw new Error('消息过大');
   const m = JSON.parse(input) as Control;
-  if (!m || typeof m !== 'object' || !['hello','verified','text','ack','offer','accept','reject','end','cancel'].includes(m.t)) throw new Error('消息格式不受支持');
+  if (!m || typeof m !== 'object' || !['hello','policy','verified','text','ack','offer','accept','reject','end','cancel'].includes(m.t)) throw new Error('消息格式不受支持');
   if (['text','ack','offer','accept','reject','end','cancel'].includes(m.t) && (typeof m.id!=='string' || !/^[a-zA-Z0-9-]{1,64}$/.test(m.id))) throw new Error('消息编号无效');
   if (m.t==='hello' && (m.version!==1 || typeof m.label!=='string' || m.label.length>40)) throw new Error('设备版本不兼容');
   if(m.t==='hello' && ((m.deviceId!==undefined&&(typeof m.deviceId!=='string'||!/^[-a-zA-Z0-9_:]{1,100}$/.test(m.deviceId))) || (m.platform!==undefined&&!['android','windows','ipad','web'].includes(m.platform))))throw Error('设备来源信息无效');
+  if(m.t==='policy' && (typeof m.sending!=='boolean'||typeof m.receiving!=='boolean'||typeof m.epoch!=='string'||!/^[-a-f0-9]{36}$/i.test(m.epoch)))throw Error('共享权限无效');
+  if(m.epoch!==undefined&&(typeof m.epoch!=='string'||!/^[-a-f0-9]{36}$/i.test(m.epoch)))throw Error('共享授权标识无效');
+  if(m.t==='hello'&&m.sync!==undefined&&m.sync!==1)throw Error('共享协议不兼容');
   if (m.t==='text' && (typeof m.text!=='string' || encoder.encode(m.text).length>8192 || !Number.isInteger(m.part) || !Number.isInteger(m.total) || m.total!<1 || m.total!>32 || m.part!<0 || m.part!>=m.total!)) throw new Error('文字分片无效');
   if (m.t==='offer') {
     m.name=filename(m.name);

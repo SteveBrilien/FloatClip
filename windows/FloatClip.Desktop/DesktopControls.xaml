@@ -1,0 +1,25 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Retain Fluent templates, focus states, popups and scroll behavior. -->
+  <Style x:Key="ClipboardSearchInput" TargetType="{x:Type TextBox}">
+    <Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Padding" Value="0"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type TextBox}">
+      <ScrollViewer x:Name="PART_ContentHost" Margin="0" VerticalAlignment="Center" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
+    </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="{x:Type Button}" BasedOn="{StaticResource DefaultButtonStyle}">
+    <Setter Property="MinHeight" Value="32"/><Setter Property="Padding" Value="12,5"/>
+  </Style>
+  <Style TargetType="{x:Type ComboBox}" BasedOn="{StaticResource DefaultComboBoxStyle}">
+    <Setter Property="MinHeight" Value="32"/><Setter Property="Foreground" Value="{DynamicResource FloatClip.Text}"/>
+  </Style>
+  <Style TargetType="{x:Type TextBox}" BasedOn="{StaticResource DefaultTextBoxStyle}">
+    <Setter Property="Foreground" Value="{DynamicResource FloatClip.Text}"/><Setter Property="CaretBrush" Value="{DynamicResource FloatClip.Text}"/>
+    <Setter Property="SelectionBrush" Value="{DynamicResource FloatClip.Accent}"/>
+  </Style>
+  <Style TargetType="{x:Type RichTextBox}" BasedOn="{StaticResource DefaultRichTextBoxStyle}">
+    <Setter Property="Background" Value="{DynamicResource FloatClip.Surface}"/><Setter Property="Foreground" Value="{DynamicResource FloatClip.Text}"/>
+    <Setter Property="CaretBrush" Value="{DynamicResource FloatClip.Text}"/><Setter Property="SelectionBrush" Value="{DynamicResource FloatClip.Accent}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource FloatClip.Line}"/>
+  </Style>
+</ResourceDictionary>

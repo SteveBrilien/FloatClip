@@ -23,6 +23,13 @@ class CategoryStore(context: Context) {
         return listOf(DEFAULT_CATEGORY) + custom.filterNot { it == DEFAULT_CATEGORY }.distinct()
     }
 
+    fun iconKey(name: String): String = prefs.getString("icon:$name", null) ?: CategoryIcons.defaultKey(name)
+
+    fun saveIcon(name: String, key: String) {
+        val valid=CategoryIcons.choices.any { it.key==key }
+        if(valid && name.isNotBlank()) prefs.edit().putString("icon:$name",key).apply()
+    }
+
     fun add(name: String): Boolean {
         val clean = name.trim().take(MAX_LENGTH)
         if (clean.isEmpty() || clean == DEFAULT_CATEGORY) return false
@@ -37,7 +44,10 @@ class CategoryStore(context: Context) {
         if (name == DEFAULT_CATEGORY) return false
         val list = categories().filterNot { it == DEFAULT_CATEGORY }.toMutableList()
         val changed = list.remove(name)
-        if (changed) persist(list)
+        if (changed) {
+            persist(list)
+            prefs.edit().remove("icon:$name").apply()
+        }
         return changed
     }
 

@@ -78,6 +78,98 @@ class UnifiedVaultTest {
         assertTrue(UnifiedActivity.isTrusted("https://clip.wmy-cloud.cn/"));assertTrue(UnifiedActivity.isTrusted("https://clip.wmy-cloud.cn:443/path"))
         listOf("http://clip.wmy-cloud.cn","https://clip.wmy-cloud.cn:444/","https://clip.wmy-cloud.cn.evil.example/","https://clip.wmy-cloud.cn@evil.example/","file:///clip.wmy-cloud.cn").forEach { assertFalse(it,UnifiedActivity.isTrusted(it)) }
     }
+    @Test fun protectedEntriesSurviveBulkClearAndRoundTrip() {
+        val ctx=context()
+        val store=ClipStore(ctx,codec)
+        val keep=store.addText("keep")!!
+        store.toggleLocked(keep.id)
+        val pinned=store.addText("pinned")!!
+        store.togglePinned(pinned.id)
+        store.addText("remove")
+        val removed=store.clearAll()
+        assertEquals(listOf("remove"),removed.map { it.text })
+        val reloaded=ClipStore(ctx,codec)
+        assertEquals(setOf("keep","pinned"),reloaded.entries().map { it.text }.toSet())
+        assertTrue(reloaded.entries().first { it.text=="keep" }.locked)
+        assertTrue(reloaded.entries().first { it.text=="pinned" }.pinned)
+        val exported=reloaded.exportJson()
+        val restored=ClipStore(context(),codec)
+        assertTrue(restored.importJson(exported))
+        assertTrue(restored.entries().first { it.text=="keep" }.locked)
+        assertTrue(restored.entries().first { it.text=="pinned" }.pinned)
+    }
+
+    @Test fun localCapacityEvictsOnlyUnprotectedHistory() {
+        val store = ClipStore(context(), codec)
+        val seed = JSONArray()
+        for (id in 1L..500L) seed.put(JSONObject()
+            .put("id", id).put("text", "item-$id").put("createdAt", id).put("updatedAt", id)
+            .put("locked", id == 1L).put("pinned", id == 2L))
+        assertTrue(store.importJson(seed.toString()))
+        assertNotNull(store.addText("new copy"))
+        val items = store.entries()
+        assertEquals(500, items.size)
+        assertTrue(items.any { it.text == "item-1" && it.locked })
+        assertTrue(items.any { it.text == "item-2" && it.pinned })
+        assertFalse(items.any { it.text == "item-3" })
+    }
+
+    @Test fun fullProtectedVaultRejectsNewTextWithoutLosingData() {
+        val store = ClipStore(context(), codec)
+        val seed = JSONArray()
+        for (id in 1L..500L) seed.put(JSONObject()
+            .put("id", id).put("text", "protected-$id").put("createdAt", id).put("locked", true))
+        assertTrue(store.importJson(seed.toString()))
+        val before = store.exportJson()
+        assertNull(store.addText("overflow"))
+        assertEquals(before, store.exportJson())
+        assertNotNull(store.addText("protected-1"))
+        assertEquals(500, store.entries().size)
+        assertTrue(store.entries().all { it.locked })
+    }
+
+    @Test fun clearUnpinnedRetainsProtectedAndPinnedEntriesIndependently() {
+        val store = ClipStore(context(), codec)
+        store.toggleLocked(store.addText("locked")!!.id)
+        store.togglePinned(store.addText("pinned")!!.id)
+        store.addText("ordinary")
+        store.clearUnpinned()
+        assertEquals(setOf("locked", "pinned"), store.entries().map { it.text }.toSet())
+        store.clearAll()
+        assertEquals(setOf("locked", "pinned"), store.entries().map { it.text }.toSet())
+    }
+
+    @Test fun bulkUndoRetainsMetadataAndNewCopiesWithoutOverwritingAnExistingRow() {
+        val ctx=context()
+        val store=ClipStore(ctx,codec)
+        val first=store.addText("first")!!
+        store.updateCategory(first.id,"研究")
+        val original=store.entries().single()
+        store.addText("second")
+        val removed=store.clearAll()
+        store.addText("copied after clear")
+        assertTrue(store.restoreAll(removed).isEmpty())
+        assertEquals(original,ClipStore(ctx,codec).entries().first { it.key==original.key })
+        store.toggleLocked(first.id)
+        assertTrue(store.restoreAll(removed).isEmpty())
+        assertEquals(3,store.entries().size)
+        assertTrue(store.entries().first { it.key==first.key }.locked)
+        assertTrue(store.entries().any { it.text=="copied after clear" })
+    }
+
+    @Test fun bulkUndoKeepsPendingRowsWhenCapacityFillsWithProtectedContent() {
+        val store=ClipStore(context(),codec)
+        store.addText("removed")
+        val removed=store.clearAll()
+        val seed=JSONArray()
+        for(id in 1L..500L)seed.put(JSONObject().put("id",id).put("text","new-$id")
+            .put("pinned",id%2L==0L).put("locked",id%2L!=0L).put("createdAt",id))
+        assertTrue(store.importJson(seed.toString()))
+        val before=store.exportJson()
+        assertEquals(removed,store.restoreAll(removed))
+        assertEquals(before,store.exportJson())
+    }
+
     @Test fun deleteUndoRetainsOriginPinAndNewlyCopiedText() {
         val store=ClipStore(context(),codec);val first=store.addText("first")!!
         store.togglePinned(first.id);val saved=store.entries().single()

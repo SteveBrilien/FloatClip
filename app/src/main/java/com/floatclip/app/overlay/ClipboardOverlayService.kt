@@ -38,16 +38,21 @@ import android.widget.Toast
 import com.floatclip.app.R
 import com.floatclip.app.accessibility.PasteAccessibilityService
 import com.floatclip.app.clipboard.ClipStore
+import com.floatclip.app.clipboard.ClipboardSources
 import com.floatclip.app.clipboard.ClipboardRepository
+import com.floatclip.app.clipboard.ClipboardImages
 import com.floatclip.app.integration.AccessibilityPasteBridge
 import com.floatclip.app.integration.IntegrationRegistry
 import com.floatclip.app.model.ClipEntry
+import com.floatclip.probe.FloatClipAccent
 import com.floatclip.app.prefs.CategoryStore
+import com.floatclip.app.prefs.CategoryIcons
 import com.floatclip.app.prefs.OverlayPreferences
 import com.floatclip.app.overlay.ui.BorderDragFrameLayout
 import com.floatclip.app.overlay.ui.BubbleMotionController
 import com.floatclip.app.overlay.ui.EntrySwipeActions
 import com.floatclip.app.overlay.ui.EntryGestureRow
+import com.floatclip.app.overlay.ui.EntryLockAction
 import com.floatclip.app.theme.AdaptiveOverlayThemeProvider
 import com.floatclip.app.theme.OverlayPalette
 import com.floatclip.app.theme.OverlayThemeProvider
@@ -74,6 +79,7 @@ class ClipboardOverlayService : Service() {
     private var entryActionLayer: View? = null
     private var listContainer: LinearLayout? = null
     private var categoryBar: LinearLayout? = null
+    private var sourceBar: LinearLayout? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
     private var panelParams: WindowManager.LayoutParams? = null
     private var panelPinnedMode = false
@@ -81,12 +87,18 @@ class ClipboardOverlayService : Service() {
     private var panelTransitionAnimator: ValueAnimator? = null
     private var foregroundStarted = false
     private var accessibilityHosted = false
+    private val sharedHistoryChanged=object: BroadcastReceiver(){override fun onReceive(context: Context?,intent: Intent?){if(panelOpen&&!panelCollapsing){renderSourceBar();renderCategoryBar();renderEntries()}}}
     private val localBinder = LocalBinder()
     private var panelOpen = false
     private var panelCollapsing = false
     private var clipboardCaptureGeneration = 0
     private var activeCategory = ALL_CATEGORY
+    private var activeSource = ""
     private var lastCapturedClipboard: String? = null
+    private var lastCapturedImage=""
+    private val undoOwner="overlay:"+java.util.UUID.randomUUID()
+    private var captureFocusPending=false
+    private val releaseCaptureFocus=Runnable { releaseClipboardFocus() }
 
     private val edgeHideRunnable = Runnable { hideBubbleAtEdge() }
     private val clipboardPollRunnable = object : Runnable {
@@ -115,6 +127,9 @@ class ClipboardOverlayService : Service() {
     @SuppressLint("UnspecifiedRegisterReceiverFlag") // registration requires a package-scoped signature permission
     override fun onCreate() {
         super.onCreate()
+        val historyFilter=IntentFilter(com.floatclip.app.sync.ClipboardSyncService.HISTORY_CHANGED)
+        if(android.os.Build.VERSION.SDK_INT>=33)registerReceiver(sharedHistoryChanged,historyFilter,"$packageName.permission.INTERNAL",null,Context.RECEIVER_NOT_EXPORTED)
+        else registerReceiver(sharedHistoryChanged,historyFilter,"$packageName.permission.INTERNAL",null)
         windowManager = getSystemService(WindowManager::class.java)
         store = ClipStore(this)
         clipboard = ClipboardRepository(this)
@@ -194,6 +209,8 @@ class ClipboardOverlayService : Service() {
     }
 
     override fun onDestroy() {
+        if(::store.isInitialized)store.retainUndoImages(undoOwner,emptyList())
+        releaseClipboardFocus()
         clipboardCaptureGeneration++
         handler.removeCallbacksAndMessages(null)
         bubbleMotion.cancel()
@@ -202,6 +219,7 @@ class ClipboardOverlayService : Service() {
         panelTransitionAnimator?.cancel()
         panelTransitionAnimator = null
         bubbleView?.animate()?.cancel()
+        panelView?.animate()?.cancel()
         panelSurfaceView?.animate()?.cancel()
         bubbleView?.let { runCatching { windowManager.removeView(it) } }
         panelView?.let { runCatching { windowManager.removeView(it) } }
@@ -215,6 +233,7 @@ class ClipboardOverlayService : Service() {
         panelPinButton = null
         entryActionLayer = null
         runCatching { unregisterReceiver(appearanceReceiver) }
+        runCatching { unregisterReceiver(sharedHistoryChanged) }
         runCatching { unregisterReceiver(systemAppearanceReceiver) }
         if (OverlayKeepAliveScheduler.shouldRun(this)) OverlayKeepAliveScheduler.schedule(this)
         super.onDestroy()
@@ -238,6 +257,7 @@ class ClipboardOverlayService : Service() {
     }
 
     private fun rebuildVisibleOverlay() {
+        releaseClipboardFocus()
         val reopenPanel = panelOpen && !panelCollapsing
         clipboardCaptureGeneration++
         handler.removeCallbacks(edgeHideRunnable)
@@ -248,6 +268,7 @@ class ClipboardOverlayService : Service() {
         panelTransitionAnimator?.cancel()
         panelTransitionAnimator = null
         bubbleView?.animate()?.cancel()
+        panelView?.animate()?.cancel()
         panelSurfaceView?.animate()?.cancel()
         bubbleView?.let { runCatching { windowManager.removeView(it) } }
         panelView?.let { runCatching { windowManager.removeView(it) } }
@@ -263,7 +284,8 @@ class ClipboardOverlayService : Service() {
         listContainer = null
         panelCollapsing = false
         showBubble()
-        if (reopenPanel) handler.postDelayed({ expandPanel() }, 20L)
+        if (foregroundStarted) getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, createNotification())
+        if (reopenPanel) handler.postDelayed({ expandPanel(false) }, 20L)
     }
 
     private fun showBubble(clearPanelWindows: Boolean = true, deferAppearance: Boolean = false) {
@@ -281,6 +303,7 @@ class ClipboardOverlayService : Service() {
             entryActionLayer = null
             listContainer = null
             categoryBar = null
+            sourceBar = null
             panelCollapsing = false
         }
         handler.removeCallbacks(edgeHideRunnable)
@@ -328,7 +351,7 @@ class ClipboardOverlayService : Service() {
                 .alpha(1f)
                 .scaleX(1f)
                 .scaleY(1f)
-                .setDuration(BUBBLE_APPEAR_MS)
+                .setDuration(overlayPreferences.transitionDurationMs().toLong())
                 .setInterpolator(PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
                 .withEndAction { scheduleEdgeHide() }
                 .start()
@@ -360,9 +383,9 @@ class ClipboardOverlayService : Service() {
                     velocityTracker?.recycle()
                     velocityTracker = VelocityTracker.obtain().also { addRawMovement(it, event) }
                     view.animate()
-                        .scaleX(0.965f)
-                        .scaleY(0.965f)
-                        .setDuration(85L)
+                        .scaleX(if (ValueAnimator.areAnimatorsEnabled()) overlayPreferences.bubblePressScalePercent()/100f else 1f)
+                        .scaleY(if (ValueAnimator.areAnimatorsEnabled()) overlayPreferences.bubblePressScalePercent()/100f else 1f)
+                        .setDuration((overlayPreferences.transitionDurationMs()*0.35f).toLong().coerceIn(55,160))
                         .setInterpolator(PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
                         .start()
                     true
@@ -393,7 +416,7 @@ class ClipboardOverlayService : Service() {
                     view.animate()
                         .scaleX(1f)
                         .scaleY(1f)
-                        .setDuration(120L)
+                        .setDuration((overlayPreferences.transitionDurationMs()*0.55f).toLong().coerceIn(80,240))
                         .setInterpolator(PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
                         .start()
                     if (moved && event.actionMasked == MotionEvent.ACTION_UP) {
@@ -461,7 +484,7 @@ class ClipboardOverlayService : Service() {
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun expandPanel() {
+    private fun expandPanel(captureOnOpen:Boolean=true) {
         if (panelOpen || panelCollapsing) return
         val bubble = bubbleView ?: return
         bubbleParams?.let { current ->
@@ -478,7 +501,7 @@ class ClipboardOverlayService : Service() {
         bubble.animate().cancel()
 
         if (panelView != null) {
-            showRetainedPanel()
+            showRetainedPanel(captureOnOpen)
             return
         }
         val palette = themeProvider.palette()
@@ -512,14 +535,24 @@ class ClipboardOverlayService : Service() {
         panelParams = params
 
         val panelAlpha = percentAlpha(overlayPreferences.panelAlphaPercent())
+        val frost=overlayPreferences.frostStrengthPercent()/100f
+        val frostedPanel=if(palette.isDark) blendColor(palette.panelBackground,Color.WHITE,0.07f*frost)
+            else blendColor(palette.panelBackground,Color.WHITE,0.22f*frost)
+        val borderAlpha=percentAlpha(overlayPreferences.borderAlphaPercent())
         val panel = BorderDragFrameLayout(this).apply {
             isClickable = true
             background = roundedBackground(
-                withAlpha(palette.panelBackground, panelAlpha),
+                withAlpha(frostedPanel, panelAlpha),
                 palette.panelCornerRadiusDp,
-                if (palette.isDark) Color.argb(92, 255, 255, 255) else Color.argb(46, 0, 0, 0),
+                if(!overlayPreferences.borderEnabled()) null else if (palette.isDark) Color.argb(borderAlpha,255,255,255) else Color.argb(borderAlpha,25,40,63),
             )
             elevation = dp(palette.elevationDp).toFloat()
+            windowFocusChanged={focused->
+                if(focused&&captureFocusPending)handler.post {
+                    if(captureFocusPending&&panelOpen&&!panelCollapsing)captureCurrentClipboard(false)
+                    releaseClipboardFocus()
+                }
+            }
             setPadding(dp(8), dp(8), dp(8), dp(8))
             alpha = 1f
         }
@@ -547,14 +580,30 @@ class ClipboardOverlayService : Service() {
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }, LinearLayout.LayoutParams(0, dp(40), 1f))
 
+        header.addView(iconButton(R.drawable.ic_delete, "全部清除，保留固定和置顶记录", palette.secondaryText) {
+            clearHistory()
+        }.apply { id=R.id.clipboard_clear; tooltipText="全部清除（保留固定和置顶）" }, LinearLayout.LayoutParams(dp(40),dp(40)))
+
         val pinButton = iconButton(
             R.drawable.ic_pin,
             if (panelPinnedMode) "退出固定模式" else "固定模式",
-            if (panelPinnedMode) ACCENT_BLUE else palette.secondaryText,
+            if (panelPinnedMode) accentColor(palette) else palette.secondaryText,
         ) { togglePanelPinnedMode() }
         panelPinButton = pinButton
         header.addView(pinButton, LinearLayout.LayoutParams(dp(40), dp(40)))
         content.addView(header)
+
+        val sourceScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            setPadding(dp(2), dp(2), dp(2), dp(5))
+        }
+        sourceBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        sourceScroll.addView(sourceBar, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42)))
+        content.addView(sourceScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(47)))
 
         val scroll = ScrollView(this).apply {
             isFillViewport = true
@@ -613,26 +662,36 @@ class ClipboardOverlayService : Service() {
         windowManager.addView(scrim, scrimParams)
         windowManager.addView(panel, params)
 
-        showRetainedPanel()
+        showRetainedPanel(captureOnOpen)
     }
 
     /** Keep all three WindowManager surfaces attached; open/close never reallocates them. */
-    private fun showRetainedPanel() {
+    private fun showRetainedPanel(captureOnOpen:Boolean=true) {
         val panel = panelView ?: return
         val params = panelParams ?: return
         panelOpen = true
         panel.interactionBlocked = false
         panel.isEnabled = true
         panel.animate().cancel()
-        panel.alpha = 1f
-        panel.scaleX = 1f
-        panel.scaleY = 1f
+        val animations=ValueAnimator.areAnimatorsEnabled()
+        val duration=overlayPreferences.transitionDurationMs().toLong()
+        panel.alpha = if(animations) 0f else 1f
+        panel.scaleX = if(animations) 0.92f else 1f
+        panel.scaleY = if(animations) 0.92f else 1f
         panel.translationX = 0f
+        renderSourceBar()
         renderCategoryBar()
         renderEntries()
         params.alpha = 1f
         params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
         windowManager.updateViewLayout(panel, params)
+        if(animations) {
+            panel.animate()
+                .alpha(1f).scaleX(1f).scaleY(1f)
+                .setDuration(duration)
+                .setInterpolator(PathInterpolator(0.2f,0.8f,0.2f,1f))
+                .start()
+        }
         panelScrimView?.let { scrim ->
             panelScrimParams?.let {
                 it.alpha = 1f
@@ -643,17 +702,61 @@ class ClipboardOverlayService : Service() {
         }
         bubbleView?.let { bubble ->
             bubble.animate().cancel()
-            bubble.alpha = 1f
-            bubble.scaleX = 1f
-            bubble.scaleY = 1f
             bubbleParams?.let {
-                it.alpha = 0f
+                it.alpha = 1f
                 it.flags = it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                 windowManager.updateViewLayout(bubble, it)
             }
+            if(animations) {
+                bubble.alpha=1f; bubble.scaleX=1f; bubble.scaleY=1f
+                bubble.animate().alpha(0f).scaleX(0.76f).scaleY(0.76f)
+                    .setDuration(duration)
+                    .setInterpolator(PathInterpolator(0.2f,0.8f,0.2f,1f))
+                    .withEndAction {
+                        bubbleParams?.let {
+                            it.alpha=0f
+                            windowManager.updateViewLayout(bubble,it)
+                        }
+                    }.start()
+            } else {
+                bubble.alpha=1f; bubble.scaleX=1f; bubble.scaleY=1f
+                bubbleParams?.let {
+                    it.alpha=0f
+                    windowManager.updateViewLayout(bubble,it)
+                }
+            }
         }
-        handler.removeCallbacks(clipboardPollRunnable)
-        handler.postDelayed(clipboardPollRunnable, 120L)
+        if(captureOnOpen)beginClipboardFocus()
+    }
+
+    /** Only an explicit open takes a short focus lease; idle/background never steals focus. */
+    private fun beginClipboardFocus() {
+        val panel=panelView?:return
+        val params=panelParams?:return
+        captureFocusPending=true
+        panel.isFocusableInTouchMode=true
+        params.flags=(params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()) or
+            WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
+        windowManager.updateViewLayout(panel,params)
+        panel.requestFocus()
+        handler.removeCallbacks(releaseCaptureFocus)
+        handler.postDelayed(releaseCaptureFocus,800L)
+        if(panel.hasWindowFocus())handler.post {
+            if(captureFocusPending&&panelOpen&&!panelCollapsing)captureCurrentClipboard(false)
+            releaseClipboardFocus()
+        }
+    }
+
+    private fun releaseClipboardFocus() {
+        captureFocusPending=false
+        handler.removeCallbacks(releaseCaptureFocus)
+        val panel=panelView?:return
+        val params=panelParams?:return
+        params.flags=(params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) and
+            WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM.inv()
+        runCatching{windowManager.updateViewLayout(panel,params)}
+        panel.clearFocus()
+        panel.isFocusableInTouchMode=false
     }
 
     private fun installPanelDrag(
@@ -664,7 +767,7 @@ class ClipboardOverlayService : Service() {
     ) {
         panel.borderDragPx = dp(14)
         panel.topDragHeightPx = dp(50)
-        panel.topActionReservePx = dp(50)
+        panel.topActionReservePx = dp(90)
         var downX = 0f
         var downY = 0f
         var startX = 0
@@ -679,7 +782,9 @@ class ClipboardOverlayService : Service() {
                 startY = windowParams.y
                 moved = false
                 panel.animate().cancel()
-                panel.animate().scaleX(0.995f).scaleY(0.995f).setDuration(70L).start()
+                val pressScale=if (ValueAnimator.areAnimatorsEnabled()) overlayPreferences.panelPressScalePercent()/100f else 1f
+                panel.animate().scaleX(pressScale).scaleY(pressScale)
+                    .setDuration((overlayPreferences.transitionDurationMs()*0.3f).toLong().coerceIn(50,150)).start()
             }
 
             override fun onDragMove(rawX: Float, rawY: Float) {
@@ -696,7 +801,7 @@ class ClipboardOverlayService : Service() {
                 panel.animate()
                     .scaleX(1f)
                     .scaleY(1f)
-                    .setDuration(135L)
+                    .setDuration((overlayPreferences.transitionDurationMs()*0.6f).toLong().coerceIn(90,260))
                     .setInterpolator(PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
                     .start()
                 if (moved && !cancelled) overlayPreferences.savePanelPosition(windowParams.x, windowParams.y)
@@ -704,46 +809,103 @@ class ClipboardOverlayService : Service() {
         }
     }
 
-    private var lastDeletedEntry: ClipEntry? = null
+    private var lastDeletedEntries: List<ClipEntry> = emptyList()
     private fun appendUndo(container: LinearLayout) {
-        val removed=lastDeletedEntry ?: return
+        store.retainUndoImages(undoOwner,lastDeletedEntries)
+        if(lastDeletedEntries.isEmpty()) return
         val palette=themeProvider.palette()
         container.addView(TextView(this).apply {
-            text="记录已删除 · 撤销";textSize=14f;gravity=Gravity.CENTER;minimumHeight=dp(48)
+            id=R.id.clipboard_undo
+            text=if(lastDeletedEntries.size==1) "记录已删除 · 撤销" else "已清除 ${lastDeletedEntries.size} 条 · 撤销"
+            textSize=14f;gravity=Gravity.CENTER;minimumHeight=dp(48)
             setTextColor(palette.primaryText)
             setOnClickListener {
-                runCatching { store.restore(removed) }.onSuccess { lastDeletedEntry=null;renderEntries() }
+                runCatching { store.restoreAll(lastDeletedEntries) }.onSuccess { remaining ->
+                    lastDeletedEntries=remaining;renderSourceBar();renderCategoryBar();renderEntries();notifyHistoryChanged()
+                    if(remaining.isNotEmpty()) Toast.makeText(this@ClipboardOverlayService,"空间不足，尚有 ${remaining.size} 条待恢复；新记录和受保护记录已保留",Toast.LENGTH_LONG).show()
+                }
                     .onFailure { Toast.makeText(this@ClipboardOverlayService,"暂时无法恢复",Toast.LENGTH_SHORT).show() }
             }
         })
     }
     private fun deleteClip(entry: ClipEntry) {
-        store.delete(entry.id);lastDeletedEntry=entry;dismissEntryActionLayer(animated=false);renderEntries()
+        store.delete(entry.id);lastDeletedEntries=listOf(entry);dismissEntryActionLayer(animated=false);renderEntries();notifyHistoryChanged()
+    }
+    private fun clearHistory() {
+        runCatching { store.clearAll() }.onSuccess { removed ->
+            lastDeletedEntries=emptyList();store.retainUndoImages(undoOwner,emptyList());dismissEntryActionLayer(animated=false);renderEntries()
+            if(removed.isEmpty()) Toast.makeText(this,"没有可清除的普通记录；固定和置顶记录已保留",Toast.LENGTH_SHORT).show()
+            else {
+                dismissEntryActionLayer(animated=false)
+                renderSourceBar();renderCategoryBar();renderEntries();notifyHistoryChanged()
+                Toast.makeText(this,"已清除 ${removed.size} 条普通记录，固定和置顶记录已保留",Toast.LENGTH_SHORT).show()
+            }
+        }.onFailure { Toast.makeText(this,"清除未完成，请保留本机数据并重试",Toast.LENGTH_LONG).show() }
+    }
+    private fun notifyHistoryChanged() {
+        sendBroadcast(Intent(com.floatclip.app.sync.ClipboardSyncService.HISTORY_CHANGED).setPackage(packageName),"$packageName.permission.INTERNAL")
     }
     private fun renderEntries() {
         if (!panelOpen || panelCollapsing) return
         val container = listContainer ?: return
         val palette = themeProvider.palette()
         container.removeAllViews()
+        appendUndo(container)
         val allItems = store.entries()
+        val sourceItems = if(activeSource.isEmpty()) allItems else allItems.filter { it.sourceDeviceId == activeSource }
         val items = if (activeCategory == ALL_CATEGORY) {
-            allItems
+            sourceItems
         } else {
-            allItems.filter { it.category == activeCategory }
+            sourceItems.filter { it.category == activeCategory }
         }
         if (items.isEmpty()) {
+            val sourceName=ClipboardSources.tabs(this,allItems).firstOrNull{it.id==activeSource}?.name
             container.addView(TextView(this).apply {
-                text = if (allItems.isEmpty()) getString(R.string.empty_history_hint) else "这个分类还没有内容"
+                text = when {
+                    allItems.isEmpty() -> getString(R.string.empty_history_hint)
+                    activeSource.isNotEmpty() -> "${sourceName ?: "此设备"}还没有同步内容"
+                    else -> "这个分类还没有内容"
+                }
                 textSize = 14f
                 gravity = Gravity.CENTER
                 setTextColor(palette.secondaryText)
                 setPadding(dp(10), dp(28), dp(10), dp(28))
             })
-            appendUndo(container)
             return
         }
         items.forEach { container.addView(createClipRow(it)) }
-        appendUndo(container)
+    }
+
+    private fun renderSourceBar() {
+        val bar=sourceBar ?: return
+        val palette=themeProvider.palette()
+        val tabs=ClipboardSources.tabs(this,store.entries())
+        if(activeSource !in tabs.map { it.id })activeSource=""
+        bar.removeAllViews()
+        tabs.forEachIndexed { index,source ->
+            val selected=source.id==activeSource
+            bar.addView(TextView(this).apply {
+                text=source.name
+                textSize=13f
+                gravity=Gravity.CENTER
+                maxLines=1
+                ellipsize=android.text.TextUtils.TruncateAt.END
+                setPadding(dp(14),0,dp(14),0)
+                setTextColor(if(selected) accentColor(palette) else palette.secondaryText)
+                val chipAlpha=if(overlayPreferences.translucentCards()) { if(palette.isDark) 145 else 155 } else { if(palette.isDark) 190 else 220 }
+                background=roundedBackground(if(selected) withAlpha(accentColor(palette),if(palette.isDark)70 else 34) else withAlpha(palette.rowBackground,chipAlpha),12f)
+                contentDescription="剪贴板来源：${source.name}"
+                setOnClickListener {
+                    if(activeSource!=source.id){
+                        activeSource=source.id
+                        activeCategory=ALL_CATEGORY
+                        renderSourceBar();renderCategoryBar();renderEntries()
+                    }
+                }
+            },LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,dp(36)).apply{
+                if(index>0)marginStart=dp(6)
+            })
+        }
     }
 
     private fun renderCategoryBar() {
@@ -760,9 +922,10 @@ class ClipboardOverlayService : Service() {
                     textSize = 12f
                     gravity = Gravity.CENTER
                     setPadding(dp(13), 0, dp(13), 0)
-                    setTextColor(if (selected) if (palette.isDark) Color.rgb(20, 27, 43) else Color.WHITE else palette.secondaryText)
+                    setTextColor(if (selected) accentColor(palette) else palette.secondaryText)
+                    val chipAlpha=if(overlayPreferences.translucentCards()) { if(palette.isDark) 145 else 155 } else { if(palette.isDark) 190 else 220 }
                     background = roundedBackground(
-                        if (selected) ACCENT_BLUE else withAlpha(palette.rowBackground, if (palette.isDark) 175 else 205),
+                        if (selected) withAlpha(accentColor(palette), if (palette.isDark) 70 else 34) else withAlpha(palette.rowBackground, chipAlpha),
                         12f,
                     )
                     setOnClickListener {
@@ -784,15 +947,30 @@ class ClipboardOverlayService : Service() {
         val palette = themeProvider.palette()
         val wrapper = EntryGestureRow(this)
         val front=com.floatclip.app.overlay.ui.ClipboardCard(this,entry,palette.isDark,palette.primaryText,palette.rowBackground,true)
-        wrapper.contentDescription=entry.text+"，来源："+entry.sourceDeviceName+(if(entry.pinned) "，已置顶" else "")
+        wrapper.contentDescription=entry.text+"，来源："+entry.sourceDeviceName+(if(entry.pinned) "，已置顶" else "")+(if(entry.locked) "，已保护" else "")
 
-        wrapper.bind(front, EntrySwipeActions(this, entry.pinned, palette.isDark,
-            onPin = { store.togglePinned(entry.id); renderEntries() },
-            onDelete = { deleteClip(entry) },
-        ), dp(148))
-        wrapper.onSingleTap = {
+        wrapper.bind(
+            front,
+            EntrySwipeActions(this, entry.pinned, palette.isDark,
+                onPin = { store.togglePinned(entry.id); renderEntries() },
+                onDelete = { deleteClip(entry) },
+            ),
+            dp(148),
+            EntryLockAction(this,entry.locked,palette.isDark,overlayPreferences.accentTheme()) {
+                store.toggleLocked(entry.id); renderEntries()
+            },
+            dp(78),
+        )
+        wrapper.onSingleTap = tap@{
+            if(entry.kind=="image") {
+                runCatching { ClipboardImages.copy(this,store,entry) }
+                    .onSuccess { Toast.makeText(this,"已复制图片",Toast.LENGTH_SHORT).show();if(!panelPinnedMode)collapsePanel() }
+                    .onFailure { Toast.makeText(this,it.message ?: "图片复制未完成",Toast.LENGTH_LONG).show() }
+                return@tap
+            }
             val pasted=PasteAccessibilityService.paste(entry.text)
             if(!pasted) clipboard.writeText(entry.text)
+            else com.floatclip.app.sync.SyncRuntime.userCopied(this,entry.text)
             Toast.makeText(this, if(pasted) "已粘贴" else "已复制", Toast.LENGTH_SHORT).show()
             if (!panelPinnedMode) collapsePanel()
         }
@@ -832,8 +1010,10 @@ class ClipboardOverlayService : Service() {
             val icon = when {
                 label == "复制" || label == "粘贴" -> R.drawable.ic_copy_paste
                 label.contains("置顶") -> R.drawable.ic_pin
+                label.contains("保护") -> R.drawable.ic_lock
                 label == "删除" || label == "确认删除" -> R.drawable.ic_delete
                 label.contains("返回") || label == "取消" -> R.drawable.ic_chevron_left
+                choosingCategory && label in categoryStore.categories() -> CategoryIcons.resource(categoryStore.iconKey(label))
                 else -> R.drawable.ic_folder
             }
             sheet.addView(LinearLayout(this).apply {
@@ -842,7 +1022,7 @@ class ClipboardOverlayService : Service() {
                 setPadding(dp(10), 0, dp(12), 0)
                 minimumHeight = dp(48)
                 background = android.graphics.drawable.StateListDrawable().apply {
-                    addState(intArrayOf(android.R.attr.state_pressed), roundedBackground(withAlpha(ACCENT_BLUE, 35), 9f))
+                    addState(intArrayOf(android.R.attr.state_pressed), roundedBackground(withAlpha(accentColor(palette), 35), 9f))
                     addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
                 }
                 addView(ImageView(this@ClipboardOverlayService).apply {
@@ -868,16 +1048,12 @@ class ClipboardOverlayService : Service() {
                 setPadding(dp(14), dp(10), dp(10), dp(6))
             })
             row("取消") { dismissEntryActionLayer() }
-            row("确认删除", Color.rgb(218, 78, 78)) {
-                store.delete(entry.id)
-                dismissEntryActionLayer(animated = false)
-                renderEntries()
-            }
+            row("确认删除", Color.rgb(218, 78, 78)) { deleteClip(entry) }
         } else if (choosingCategory) {
-            row("‹ 返回") { showEntryMenu(entry, anchor = anchor) }
+            row("返回") { showEntryMenu(entry, anchor = anchor) }
             categoryStore.categories().distinct().forEach { category ->
                 row(if (category == entry.category) "✓  $category" else category,
-                    if (category == entry.category) ACCENT_BLUE else palette.primaryText) {
+                    if (category == entry.category) accentColor(palette) else palette.primaryText) {
                     store.updateCategory(entry.id, category)
                     dismissEntryActionLayer(animated = false)
                     renderCategoryBar()
@@ -885,12 +1061,14 @@ class ClipboardOverlayService : Service() {
                 }
             }
         } else {
-            row("复制") {
-                clipboard.writeText(entry.text)
-                Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
+            if(entry.kind=="image")row("查看图片") { showImagePreview(entry) }
+            row(if(entry.kind=="image") "复制图片" else "复制") {
+                runCatching { if(entry.kind=="image")ClipboardImages.copy(this,store,entry) else clipboard.writeText(entry.text) }
+                    .onSuccess { Toast.makeText(this,"已复制",Toast.LENGTH_SHORT).show() }
+                    .onFailure { Toast.makeText(this,it.message ?: "复制未完成",Toast.LENGTH_LONG).show() }
                 dismissEntryActionLayer()
             }
-            if (PasteAccessibilityService.isConnected()) row("粘贴") {
+            if (entry.kind=="text" && PasteAccessibilityService.isConnected()) row("粘贴") {
                 dismissEntryActionLayer(animated = false)
                 pasteEntry(entry)
             }
@@ -899,7 +1077,12 @@ class ClipboardOverlayService : Service() {
                 dismissEntryActionLayer(animated = false)
                 renderEntries()
             }
-            row("更改分类  ›") { showEntryMenu(entry, choosingCategory = true, anchor = anchor) }
+            row(if (entry.locked) "取消保护" else "保护") {
+                store.toggleLocked(entry.id)
+                dismissEntryActionLayer(animated = false)
+                renderEntries()
+            }
+            row("更改分类") { showEntryMenu(entry, choosingCategory = true, anchor = anchor) }
             row("删除", Color.rgb(218, 78, 78)) {
                 showEntryMenu(entry, confirmingDelete = true, anchor = anchor)
             }
@@ -932,6 +1115,40 @@ class ClipboardOverlayService : Service() {
         entryActionLayer = layer
     }
 
+    private fun showImagePreview(entry:ClipEntry) {
+        val panel=panelView ?: return
+        val bitmap=ClipboardImages.thumbnail(store,entry,1600)
+        if(bitmap==null) { Toast.makeText(this,"图片暂不可用，请保留本机数据",Toast.LENGTH_LONG).show();return }
+        dismissEntryActionLayer(animated=false)
+        val palette=themeProvider.palette()
+        val layer=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL;isClickable=true
+            background=roundedBackground(palette.panelBackground,16f)
+            setPadding(dp(10),dp(6),dp(10),dp(8))
+        }
+        val header=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL }
+        header.addView(TextView(this).apply {
+            text="图片 ${entry.imageWidth} × ${entry.imageHeight}";textSize=14f;setTextColor(palette.primaryText)
+        },LinearLayout.LayoutParams(0,dp(44),1f))
+        header.addView(iconButton(R.drawable.ic_close,"关闭图片预览",palette.secondaryText) { dismissEntryActionLayer() },LinearLayout.LayoutParams(dp(44),dp(44)))
+        layer.addView(header)
+        layer.addView(ImageView(this).apply {
+            setImageBitmap(bitmap);scaleType=ImageView.ScaleType.FIT_CENTER;contentDescription="剪贴板图片预览"
+        },LinearLayout.LayoutParams(-1,0,1f))
+        layer.addView(TextView(this).apply {
+            text="复制图片";textSize=15f;gravity=Gravity.CENTER;minimumHeight=dp(48);setTextColor(accentColor(palette))
+            background=roundedBackground(withAlpha(accentColor(palette),if(palette.isDark)45 else 24),12f)
+            setOnClickListener {
+                runCatching { ClipboardImages.copy(this@ClipboardOverlayService,store,entry) }
+                    .onSuccess { Toast.makeText(this@ClipboardOverlayService,"已复制图片",Toast.LENGTH_SHORT).show() }
+                    .onFailure { Toast.makeText(this@ClipboardOverlayService,it.message ?: "复制未完成",Toast.LENGTH_LONG).show() }
+            }
+        })
+        panel.dragEnabled=false
+        panel.addView(layer,FrameLayout.LayoutParams(-1,-1))
+        entryActionLayer=layer
+    }
+
     private fun dismissEntryActionLayer(animated: Boolean = true) {
         val layer = entryActionLayer ?: return
         entryActionLayer = null
@@ -949,7 +1166,9 @@ class ClipboardOverlayService : Service() {
     }
 
     private fun pasteEntry(entry: ClipEntry) {
+        if(entry.kind!="text")return
         val pasted = AccessibilityPasteBridge.pasteText(entry.text)
+        if(pasted)com.floatclip.app.sync.SyncRuntime.userCopied(this,entry.text)
         if (!pasted) {
             clipboard.writeText(entry.text)
             Toast.makeText(this, "已复制；启用一键粘贴后可直接粘贴", Toast.LENGTH_SHORT).show()
@@ -961,6 +1180,25 @@ class ClipboardOverlayService : Service() {
         if (!panelOpen || panelCollapsing) return
         val panel = panelView ?: return
         val generation = ++clipboardCaptureGeneration
+        val imageClip=runCatching { clipboard.currentImageForCapture() }.getOrNull()
+        if(imageClip!=null) {
+            val event=ClipboardImages.event(imageClip)
+            if(event==lastCapturedImage)return
+            lastCapturedImage=event
+            ClipboardImages.captureAsync(applicationContext,imageClip,store) { result ->
+                result.onSuccess { entry ->
+                    if(entry!=null) {
+                        if(panelOpen&&!panelCollapsing){renderCategoryBar();renderEntries()}
+                        notifyHistoryChanged()
+                        if(showFeedback)Toast.makeText(this,"已收录图片",Toast.LENGTH_SHORT).show()
+                    }
+                }.onFailure {
+                    lastCapturedImage=""
+                    if(showFeedback)Toast.makeText(this,it.message ?: "图片未收录，请在前台重试",Toast.LENGTH_LONG).show()
+                }
+            }
+            return
+        }
         val text = runCatching { clipboard.readCurrentText(forCapture = true) }.getOrNull()
         if (generation != clipboardCaptureGeneration || panelView !== panel) return
         if (!text.isNullOrBlank() && text != lastCapturedClipboard) {
@@ -991,7 +1229,7 @@ class ClipboardOverlayService : Service() {
         runCatching { windowManager.updateViewLayout(scrim, scrimParams) }
 
         button?.apply {
-            imageTintList = ColorStateList.valueOf(if (panelPinnedMode) ACCENT_BLUE else palette.secondaryText)
+            imageTintList = ColorStateList.valueOf(if (panelPinnedMode) accentColor(palette) else palette.secondaryText)
             contentDescription = if (panelPinnedMode) "退出固定模式" else "固定模式"
         }
     }
@@ -1016,6 +1254,7 @@ class ClipboardOverlayService : Service() {
     private fun collapsePanel() {
         if (!panelOpen || panelCollapsing) return
         val panel = panelView ?: return
+        releaseClipboardFocus()
         panelCollapsing = true
         panelOpen = false
         panel.interactionBlocked = true
@@ -1030,12 +1269,8 @@ class ClipboardOverlayService : Service() {
             for (i in 0 until list.childCount) (list.getChildAt(i) as? EntryGestureRow)?.cancelPendingGestures()
         }
         dismissEntryActionLayer(animated = false)
-        // No root transform, delayed callback, removeView or destination-window allocation.
-        panelParams?.let {
-            it.alpha = 0f
-            it.flags = it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-            windowManager.updateViewLayout(panel, it)
-        }
+        val animations=ValueAnimator.areAnimatorsEnabled()
+        val duration=overlayPreferences.transitionDurationMs().toLong()
         panelScrimView?.let { scrim ->
             panelScrimParams?.let {
                 it.alpha = 0f
@@ -1045,16 +1280,36 @@ class ClipboardOverlayService : Service() {
         }
         bubbleView?.let { bubble ->
             bubble.animate().cancel()
-            bubble.alpha = 1f
-            bubble.scaleX = 1f
-            bubble.scaleY = 1f
             bubbleParams?.let {
                 it.alpha = 1f
                 it.flags = it.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
                 windowManager.updateViewLayout(bubble, it)
             }
+            if(animations) {
+                bubble.alpha=0f; bubble.scaleX=0.76f; bubble.scaleY=0.76f
+                bubble.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                    .setDuration(duration)
+                    .setInterpolator(PathInterpolator(0.2f,0.8f,0.2f,1f))
+                    .start()
+            } else {
+                bubble.alpha=1f; bubble.scaleX=1f; bubble.scaleY=1f
+            }
         }
-        panelCollapsing = false
+        fun finishCollapse() {
+            panelParams?.let {
+                it.alpha = 0f
+                it.flags = it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                windowManager.updateViewLayout(panel, it)
+            }
+            panel.alpha=1f;panel.scaleX=1f;panel.scaleY=1f
+            panelCollapsing=false
+        }
+        if(animations) {
+            panel.animate().alpha(0f).scaleX(0.92f).scaleY(0.92f)
+                .setDuration(duration)
+                .setInterpolator(PathInterpolator(0.2f,0.8f,0.2f,1f))
+                .withEndAction { finishCollapse() }.start()
+        } else finishCollapse()
         // Keep the exact pre-open dock coordinate. Edge-hide runs only after a real ball drag.
     }
 
@@ -1075,7 +1330,7 @@ class ClipboardOverlayService : Service() {
         return Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_copy_paste)
             .setContentTitle("FloatClip")
-            .setContentText("")
+            .setContentText(if(overlayPreferences.detailedNotification()) "悬浮剪贴板正在后台运行" else "")
             .setCategory(Notification.CATEGORY_SERVICE)
             .setShowWhen(false)
             .setOnlyAlertOnce(true)
@@ -1085,6 +1340,9 @@ class ClipboardOverlayService : Service() {
     }
 
     private fun percentAlpha(percent: Int): Int = (255f * percent.coerceIn(0, 100) / 100f).toInt().coerceIn(0, 255)
+
+    private fun accentColor(palette: OverlayPalette): Int =
+        FloatClipAccent.color(overlayPreferences.accentTheme(), palette.isDark)
 
     private fun withAlpha(color: Int, alpha: Int): Int = Color.argb(
         alpha.coerceIn(0, 255),
@@ -1137,6 +1395,6 @@ class ClipboardOverlayService : Service() {
         private const val MENU_PIN = 2
         private const val MENU_DELETE = 3
         private const val MENU_CATEGORY_BASE = 1000
-        private val ACCENT_BLUE = Color.rgb(92, 132, 247)
+
     }
 }

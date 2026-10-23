@@ -9,7 +9,7 @@ import java.util.*;
 /** Bounded application framing inside an authenticated TLS connection. */
 public final class ShareWire {
     private ShareWire() { }
-    public static final int TEXT=1, ACK=2, OFFER=3, ACCEPT=4, REJECT=5, CHUNK=6, END=7;
+    public static final int TEXT=1, ACK=2, OFFER=3, ACCEPT=4, REJECT=5, CHUNK=6, END=7, CATALOG=13;
     public static final int MAX_TEXT=65536, CHUNK_SIZE=32768;
     public static final long MAX_FILE=64L*1024*1024;
     public static final class Frame {
@@ -48,11 +48,15 @@ public final class ShareWire {
         return new Frame(type,id,data);
     }
     private static void validate(int type,int length) throws IOException {
-        if(type<TEXT || type>END || length<0 || length>MAX_TEXT) throw new IOException("Frame limit exceeded");
+        if(type<TEXT || type>CATALOG || length<0 || length>MAX_TEXT) throw new IOException("Frame limit exceeded");
         if((type==ACK || type==END) && length!=32) throw new IOException("Invalid digest frame");
         if((type==ACCEPT || type==REJECT) && length!=0) throw new IOException("Invalid decision frame");
         if(type==CHUNK && (length<4 || length>CHUNK_SIZE+4)) throw new IOException("Invalid chunk");
         if(type==OFFER && (length<43 || length>282)) throw new IOException("Invalid file offer");
+        if(type==ClipboardSync.CLIP && (length<54 || length>ClipboardSync.MAX_BYTES+53)) throw new IOException("Invalid clipboard envelope");
+        if(type==ClipboardSync.HELLO && (length<39 || length>512)) throw new IOException("Invalid sync greeting");
+        if((type==ClipboardSync.PING || type==ClipboardSync.PONG) && length!=0) throw new IOException("Invalid keepalive");
+        if(type==ClipboardSync.ACK && length!=32) throw new IOException("Invalid sync acknowledgment");
     }
     public static String safeName(String name) throws IOException {
         byte[] bytes=name.getBytes(StandardCharsets.UTF_8);

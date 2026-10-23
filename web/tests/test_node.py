@@ -117,6 +117,36 @@ class NodeTests(unittest.IsolatedAsyncioTestCase):
         await a.close()
         await b.close()
 
+    async def test_remembered_pair_persists_hashed_grants_and_revokes_both_roles(self):
+        headers,_=await self.login()
+        host=await self.create(headers)
+        key=base64.b64encode(b'\x04'+b'\x02'*64).decode()
+        response=await self.client.post('/api/pair',json={'op':'join','mode':'relay','code':host['code'],'key':key},headers=headers)
+        guest=await response.json()
+        tag='a'*64
+        for who,token in ((host,'b'*64),(guest,'c'*64)):
+            result=await self.client.post('/api/pair',json={'op':'remember','code':host['code'],'tag':tag,'resumeToken':token},headers={**headers,'Authorization':'Bearer '+who['token']})
+            self.assertEqual(result.status,200)
+        from server.app import Store,digest
+        restored=Store(self.root/'state'/'node.sqlite3')
+        saved=restored.db.execute('SELECT * FROM trusted WHERE tag=?',(tag,)).fetchone()
+        self.assertEqual(saved['host_hash'],digest('b'*64));self.assertEqual(saved['guest_hash'],digest('c'*64))
+        self.assertNotIn('b'*64,str(tuple(saved)));self.assertNotIn('c'*64,str(tuple(saved)));restored.db.close()
+        wrong=await self.client.post('/api/pair',json={'op':'remember','code':host['code'],'tag':tag,'resumeToken':'d'*64},headers={**headers,'Authorization':'Bearer '+host['token']})
+        self.assertEqual(wrong.status,409)
+        a=await self.client.ws_connect('/api/relay',headers=headers)
+        await a.send_json({'resume':tag,'token':'b'*64,'key':key})
+        self.assertEqual((await a.receive_json())['t'],'waiting')
+        b=await self.client.ws_connect('/api/relay',headers=headers)
+        await b.send_json({'resume':tag,'token':'c'*64,'key':base64.b64encode(b'\x04'+b'\x03'*64).decode()})
+        first,second=await asyncio.gather(a.receive_json(),b.receive_json())
+        self.assertEqual(first,second);self.assertEqual(len(first['nonce']),32)
+        packet=b'\x01'*26;await a.send_bytes(packet);self.assertEqual((await b.receive()).data,packet)
+        revoked=await self.client.post('/api/pair',json={'op':'resume-forget','tag':tag},headers={**headers,'Authorization':'Bearer '+'b'*64})
+        self.assertEqual(revoked.status,200)
+        self.assertEqual(self.app['store'].db.execute('SELECT count(*) FROM trusted').fetchone()[0],0)
+        await a.close();await b.close()
+
     async def test_static_sandbox_headers_and_body_limits(self):
         r = await self.client.get('/')
         self.assertEqual(r.status,200)

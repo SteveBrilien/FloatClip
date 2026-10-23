@@ -28,7 +28,7 @@ class NodeActivity : Activity() {
     }
     fun applyBars(mode: OverlayThemeMode) {
         val dark = mode == OverlayThemeMode.DARK || mode == OverlayThemeMode.SYSTEM && resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        window.statusBarColor = Color.parseColor(if (dark) "#0C1422" else "#F4F7FC")
+        window.statusBarColor = Color.parseColor(if (dark) "#1A1B26" else "#F4F7FC")
         window.navigationBarColor = Color.parseColor(if (dark) "#162235" else "#FFFFFF")
         window.decorView.systemUiVisibility = if (dark) 0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
     }
@@ -41,7 +41,7 @@ class NodeActivity : Activity() {
             allowFileAccess = false; allowContentAccess = true
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             setSupportMultipleWindows(false); javaScriptCanOpenWindowsAutomatically = false
-            userAgentString = userAgentString + " FloatClipNative/1 Android/0.7.1"
+            userAgentString = userAgentString + " FloatClipNative/1 Android/0.7.2"
         }
         CookieManager.getInstance().setAcceptThirdPartyCookies(view, false)
         view.webViewClient = object : WebViewClient() {
@@ -81,17 +81,17 @@ class NodeActivity : Activity() {
         trusted = false
         val mode = OverlayPreferences(this).themeMode()
         val dark = mode == OverlayThemeMode.DARK || mode == OverlayThemeMode.SYSTEM && resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(40, 40, 40, 40); setBackgroundColor(Color.parseColor(if (dark) "#0C1422" else "#F4F7FC")) }
-        root.addView(TextView(this).apply { text = "FloatClip"; textSize = 27f; setTextColor(Color.parseColor(if (dark) "#EDF3FC" else "#19283F")) })
-        root.addView(TextView(this).apply { text = message; textSize = 15f; setPadding(0, 25, 0, 25); setTextColor(Color.parseColor(if (dark) "#A9B8CD" else "#596C85")) })
-        listOf("重新打开共享" to { openWeb() }, "返回剪贴板" to { openLegacy("clipboard") }, "局域网设备" to { openLegacy("lan") }).forEach { (label, action) ->
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(40, 40, 40, 40); setBackgroundColor(Color.parseColor(if (dark) "#1A1B26" else "#F4F7FC")) }
+        root.addView(TextView(this).apply { text = "FloatClip"; textSize = 27f; setTextColor(Color.parseColor(if (dark) "#C0CAF5" else "#19283F")) })
+        root.addView(TextView(this).apply { text = message; textSize = 15f; setPadding(0, 25, 0, 25); setTextColor(Color.parseColor(if (dark) "#9AA5CE" else "#596C85")) })
+        listOf("重新打开跨网设备" to { openWeb() }, "返回剪贴板" to { openLegacy("clipboard") }).forEach { (label, action) ->
             root.addView(Button(this).apply { text = label; setOnClickListener { runCatching { action() }.onFailure { Toast.makeText(this@NodeActivity, "暂时无法打开，请稍后重试", Toast.LENGTH_LONG).show() } } })
         }
         setContentView(root)
     }
     private fun openLegacy(page: String) {
-        val target = if (page == "lan") DeviceActivity::class.java else MainActivity::class.java
-        startActivity(Intent(this, target))
+        require(page == "clipboard") { "旧连接页面已移除" }
+        startActivity(Intent(this, MainActivity::class.java))
     }
     @Deprecated("Fixed Android 11 activity results")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

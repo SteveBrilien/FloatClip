@@ -12,21 +12,28 @@ import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewConfiguration
 import android.widget.FrameLayout
+import com.floatclip.app.prefs.OverlayPreferences
 import java.lang.ref.WeakReference
 import kotlin.math.abs
 
-/** Own the front's complete touch stream; covered action buttons never receive DOWN. */
+/**
+ * Owns the full gesture stream.
+ * Left swipe reveals trailing actions; right swipe reveals the independent protection action.
+ */
 class EntryGestureRow(context: Context) : FrameLayout(context) {
     private val config = ViewConfiguration.get(context)
+    private val appearance = OverlayPreferences(context)
     private var front: View? = null
-    private var actions: View? = null
-    private var actionWidth = 0
+    private var trailingActions: View? = null
+    private var leadingActions: View? = null
+    private var trailingWidth = 0
+    private var leadingWidth = 0
     private var downX = 0f
     private var downY = 0f
     private var startTranslation = 0f
     private var horizontal = false
     private var vertical = false
-    private var opened = false
+    private var openedSide = 0 // -1 trailing, +1 leading, 0 closed
     private var beganOpen = false
     private var tracker: VelocityTracker? = null
     private var settling: ValueAnimator? = null
@@ -55,18 +62,31 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
         isClickable=true; isFocusable=true; isLongClickable=true
         setOnLongClickListener { onLongPress?.invoke(); true }
     }
+
     private fun press(down: Boolean) {
         front?.animate()?.cancel()
-        val scale=if(down && ValueAnimator.areAnimatorsEnabled()) .98f else 1f
-        front?.animate()?.scaleX(scale)?.scaleY(scale)?.setDuration(if(down) 90L else 160L)?.start()
+        val scale=if(down && ValueAnimator.areAnimatorsEnabled()) appearance.cardPressScalePercent()/100f else 1f
+        val duration=if(down) (appearance.transitionDurationMs()*0.38f).toLong().coerceIn(55,180)
+            else (appearance.transitionDurationMs()*0.68f).toLong().coerceIn(90,260)
+        front?.animate()?.scaleX(scale)?.scaleY(scale)?.setDuration(duration)?.start()
     }
 
-    fun bind(frontView: View, actionsView: View? = null, revealWidthPx: Int = 0) {
+    fun bind(
+        frontView: View,
+        actionsView: View? = null,
+        revealWidthPx: Int = 0,
+        leadingActionsView: View? = null,
+        leadingRevealWidthPx: Int = 0,
+    ) {
         removeAllViews()
         front = frontView
-        actions = actionsView
-        actionWidth = revealWidthPx
+        trailingActions = actionsView
+        leadingActions = leadingActionsView
+        trailingWidth = revealWidthPx
+        leadingWidth = leadingRevealWidthPx
         actionsView?.visibility = INVISIBLE
+        leadingActionsView?.visibility = INVISIBLE
+        if (leadingActionsView != null) addView(leadingActionsView, LayoutParams(leadingRevealWidthPx, LayoutParams.MATCH_PARENT, Gravity.START))
         if (actionsView != null) addView(actionsView, LayoutParams(revealWidthPx, LayoutParams.MATCH_PARENT, Gravity.END))
         addView(frontView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         clipChildren = true
@@ -74,28 +94,36 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
 
     private fun translate(value: Float) {
         front?.translationX = value
-        val revealed = (-value).toInt().coerceIn(0, actionWidth)
-        actions?.apply {
-            visibility = if (revealed == 0) INVISIBLE else VISIBLE
-            // Clip even while moving: translucent front must never reveal covered buttons.
-            clipBounds = Rect(actionWidth - revealed, 0, actionWidth, height)
+        val trailingRevealed = (-value).toInt().coerceIn(0, trailingWidth)
+        trailingActions?.apply {
+            visibility = if (trailingRevealed == 0) INVISIBLE else VISIBLE
+            clipBounds = Rect(trailingWidth - trailingRevealed, 0, trailingWidth, height)
+        }
+        val leadingRevealed = value.toInt().coerceIn(0, leadingWidth)
+        leadingActions?.apply {
+            visibility = if (leadingRevealed == 0) INVISIBLE else VISIBLE
+            clipBounds = Rect(0, 0, leadingRevealed, height)
         }
     }
 
-    fun close(animated: Boolean = true) = settle(false, animated)
+    fun close(animated: Boolean = true) = settle(0, animated)
 
-    private fun settle(open: Boolean, animated: Boolean = true) {
+    private fun settle(side: Int, animated: Boolean = true) {
         removeCallbacks(autoClose)
         settling?.cancel()
-        opened = open
-        if (open) {
+        openedSide = side
+        if (side != 0) {
             active?.get()?.takeIf { it !== this }?.close()
             active = WeakReference(this)
         } else if (active?.get() === this) active = null
-        val target = if (open) -actionWidth.toFloat() else 0f
+        val target = when(side) {
+            -1 -> -trailingWidth.toFloat()
+            1 -> leadingWidth.toFloat()
+            else -> 0f
+        }
         if (!animated) { translate(target); return }
         settling = ValueAnimator.ofFloat(front?.translationX ?: 0f, target).apply {
-            duration = if(ValueAnimator.areAnimatorsEnabled()) 180L else 0L
+            duration = if(ValueAnimator.areAnimatorsEnabled()) appearance.transitionDurationMs().toLong().coerceIn(120,480) else 0L
             addUpdateListener { translate(it.animatedValue as Float) }
             start()
         }
@@ -105,17 +133,15 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
         if (event.actionMasked != MotionEvent.ACTION_DOWN) return false
         active?.get()?.takeIf { it !== this }?.close()
         val pass = touchPassthrough
-        if (pass != null && !opened) {
+        if (pass != null && openedSide == 0) {
             val pos = IntArray(2)
             pass.getLocationOnScreen(pos)
             if (event.rawX >= pos[0] && event.rawX < pos[0] + pass.width &&
                 event.rawY >= pos[1] && event.rawY < pos[1] + pass.height) return false
         }
-        // Only a fully revealed action can handle its own gesture.
-        if (opened && event.x >= width + (front?.translationX ?: 0f)) {
-            removeCallbacks(autoClose)
-            return false
-        }
+        val tx=front?.translationX ?: 0f
+        if (openedSide < 0 && event.x >= width + tx) { removeCallbacks(autoClose); return false }
+        if (openedSide > 0 && event.x <= tx) { removeCallbacks(autoClose); return false }
         return true
     }
 
@@ -125,31 +151,32 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
             MotionEvent.ACTION_DOWN -> {
                 settling?.cancel()
                 removeCallbacks(autoClose)
-                downX = event.x
-                downY = event.y
+                downX = event.x; downY = event.y
                 startTranslation = front?.translationX ?: 0f
-                beganOpen = opened || startTranslation < -1f
+                beganOpen = openedSide != 0 || abs(startTranslation) > 1f
                 if(!beganOpen) press(true)
-                horizontal = false
-                vertical = false
-                tracker?.recycle()
-                tracker = VelocityTracker.obtain()
+                horizontal = false; vertical = false
+                tracker?.recycle(); tracker = VelocityTracker.obtain()
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.x - downX
                 val dy = event.y - downY
-                if (actionWidth > 0 && !horizontal && !vertical && abs(dx) > config.scaledTouchSlop && abs(dx) > abs(dy) * 1.2f) {
+                val canMove=(dx<0 && trailingWidth>0)||(dx>0 && leadingWidth>0)||beganOpen
+                if (canMove && !horizontal && !vertical && abs(dx) > config.scaledTouchSlop && abs(dx) > abs(dy) * 1.2f) {
                     horizontal = true
                     press(false)
                     cancelDetector(event)
                     parent?.requestDisallowInterceptTouchEvent(true)
                     active?.get()?.takeIf { it !== this }?.close()
                 } else if (!horizontal && abs(dy) > config.scaledTouchSlop && abs(dy) > abs(dx)) {
-                    vertical = true
-                    press(false)
-                    cancelDetector(event)
+                    vertical = true; press(false); cancelDetector(event)
                 }
-                if (horizontal) translate((startTranslation + dx).coerceIn(-actionWidth.toFloat(), 0f))
+                if (horizontal) {
+                    // A reverse swipe closes the open side before a new gesture opens the other.
+                    val min = if (startTranslation > 1f) 0f else -trailingWidth.toFloat()
+                    val max = if (startTranslation < -1f) 0f else leadingWidth.toFloat()
+                    translate((startTranslation + dx).coerceIn(min, max))
+                }
             }
         }
         tracker?.addMovement(event)
@@ -159,15 +186,17 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
             if (horizontal) {
                 tracker?.computeCurrentVelocity(1000)
                 val vx = tracker?.xVelocity ?: 0f
-                val open = event.actionMasked != MotionEvent.ACTION_CANCEL && when {
-                    vx < -config.scaledMinimumFlingVelocity -> true
-                    vx > config.scaledMinimumFlingVelocity -> false
-                    else -> (front?.translationX ?: 0f) < -actionWidth * 0.45f
+                val tx=front?.translationX ?: 0f
+                val side = if(event.actionMasked==MotionEvent.ACTION_CANCEL) 0 else when {
+                    vx < -config.scaledMinimumFlingVelocity -> if (tx < -1f && trailingWidth > 0) -1 else 0
+                    vx > config.scaledMinimumFlingVelocity -> if (tx > 1f && leadingWidth > 0) 1 else 0
+                    tx < -trailingWidth*0.45f && trailingWidth>0 -> -1
+                    tx > leadingWidth*0.45f && leadingWidth>0 -> 1
+                    else -> 0
                 }
-                settle(open)
+                settle(side)
             } else if (beganOpen) close()
-            tracker?.recycle()
-            tracker = null
+            tracker?.recycle(); tracker = null
             parent?.requestDisallowInterceptTouchEvent(false)
         }
         return true
@@ -188,20 +217,15 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
 
     fun cancelPendingGestures() {
         val event = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_CANCEL, 0f, 0f, 0)
-        cancelDetector(event)
-        event.recycle()
-        close(false)
-        press(false)
+        cancelDetector(event); event.recycle()
+        close(false); press(false)
     }
 
     override fun onDetachedFromWindow() {
-        removeCallbacks(autoClose)
-        settling?.cancel()
+        removeCallbacks(autoClose); settling?.cancel()
         val cancel = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_CANCEL, 0f, 0f, 0)
-        cancelDetector(cancel)
-        cancel.recycle()
-        tracker?.recycle()
-        tracker = null
+        cancelDetector(cancel); cancel.recycle()
+        tracker?.recycle(); tracker = null
         if (active?.get() === this) active = null
         super.onDetachedFromWindow()
     }

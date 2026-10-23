@@ -1,4 +1,12 @@
-# 当前状态：0.7.1 交互测试版（2026-10-20）
+# 当前开发状态：Windows 0.7.7 修订 / Android 0.7.6 试用候选（2026-10-23）
+
+最新状态见 [Windows 0.7.7 修订验收](WINDOWS_0.7.7_REVIEW_2026-10-23.md) 与 [云端续接资料](CLOUD_CONTINUATION_2026-10-23.md)。已按确认稿修订原生文件页，并恢复个人手机后台采集辅助，实际蓝牙双向 CLIP/ACK 与手机标记自动写入 Windows 已核验。文件 LAN 真机互通、跨端图片自动同步、自托管更新等仍见文档待办；线上版本与更新源未切换。上一批双端候选详情保留在 [0.7.6 交接](CANDIDATE_0.7.6_2026-10-23.md)。
+
+此前 Windows 专项 UI/图片/emoji/更新检查记录见 [Windows 交接](WINDOWS_REVIEW_2026-10-22.md)。Android 候选通过隔离目录构建，不覆盖小主机主工作区继承的未提交修改。
+
+当前接手与验证以 [剪贴板功能续接](CLIPBOARD_POLISH_2026-10-22.md) 和 [同步/宿主交接](REALTIME_SYNC_AND_WINDOWS_SHELL_2026-10-21.md) 为准。以下 0.7.1 为正式发布与旧版历史记录，不能视作候选已发布。
+
+# 正式发布：0.7.1 交互测试版（2026-10-20）
 
 Android build 14 / Windows / PWA 0.7.1 已发布，原生主入口为本机剪贴板，本机及原生 LAN 无网页登录门槛。下载与证据见 [发布记录](RELEASE_0.7.1.md)，后续以 [产品重整方案](FloatClip-Product-Brief.md) 为准。vivo Android 11、Win10/Win11、iPad Safari 真机验收及后台持续接续仍未完成。
 

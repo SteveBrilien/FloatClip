@@ -69,13 +69,13 @@ class AdaptiveOverlayThemeProvider(
         } else {
             blend(panelBackground, Color.BLACK, 0.025f)
         }
-        val primaryText = if (darkSurface) Color.rgb(246, 247, 249) else Color.rgb(24, 26, 30)
-        val secondaryText = if (darkSurface) Color.rgb(188, 191, 199) else Color.rgb(96, 101, 111)
+        val primaryText = fallback.primaryText
+        val secondaryText = fallback.secondaryText
 
         return OverlayPalette(
             bubbleBackground = bubbleBackground,
             panelBackground = panelBackground,
-            rowBackground = rowBackground,
+            rowBackground = if (mode == OverlayThemeMode.SYSTEM && system != null) rowBackground else fallback.rowBackground,
             primaryText = primaryText,
             secondaryText = secondaryText,
             isDark = darkSurface,
@@ -93,20 +93,20 @@ class AdaptiveOverlayThemeProvider(
 
     private fun fallbackPalette(dark: Boolean): OverlayPalette = if (dark) {
         OverlayPalette(
-            bubbleBackground = Color.rgb(46, 48, 54),
-            panelBackground = Color.rgb(32, 33, 38),
-            rowBackground = Color.rgb(44, 45, 51),
-            primaryText = Color.rgb(246, 247, 249),
-            secondaryText = Color.rgb(188, 191, 199),
+            bubbleBackground = Color.rgb(36, 40, 59),
+            panelBackground = Color.rgb(26, 27, 38),
+            rowBackground = Color.rgb(36, 40, 59),
+            primaryText = Color.rgb(192, 202, 245),
+            secondaryText = Color.rgb(154, 165, 206),
             isDark = true,
         )
     } else {
         OverlayPalette(
-            bubbleBackground = Color.rgb(250, 250, 252),
-            panelBackground = Color.rgb(248, 249, 251),
+            bubbleBackground = Color.WHITE,
+            panelBackground = Color.rgb(244, 247, 252),
             rowBackground = Color.WHITE,
-            primaryText = Color.rgb(24, 26, 30),
-            secondaryText = Color.rgb(96, 101, 111),
+            primaryText = Color.rgb(25, 40, 63),
+            secondaryText = Color.rgb(89, 108, 133),
             isDark = false,
         )
     }

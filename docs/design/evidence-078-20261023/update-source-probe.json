@@ -1,0 +1,29 @@
+{
+  "utc": 1792714510,
+  "checks": [
+    {
+      "source": "primary",
+      "status": "200",
+      "exit": 0
+    },
+    {
+      "source": "fallback",
+      "status": "200",
+      "exit": 0
+    },
+    {
+      "platform": "android",
+      "status": "HTTP/1.1 200 OK",
+      "bytes": 3078476,
+      "expectedBytes": 3078476,
+      "exit": 0
+    },
+    {
+      "platform": "windows",
+      "status": "HTTP/1.1 200 OK",
+      "bytes": 69688590,
+      "expectedBytes": 69688590,
+      "exit": 0
+    }
+  ]
+}

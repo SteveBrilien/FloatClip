@@ -13,6 +13,8 @@ import android.widget.TextView
 import com.floatclip.app.R
 import com.floatclip.app.model.ClipEntry
 import com.floatclip.app.prefs.OverlayPreferences
+import com.floatclip.app.clipboard.ClipStore
+import com.floatclip.app.clipboard.ClipboardImages
 
 /** The content owns the row; provenance never consumes a second line. */
 class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foreground: Int,
@@ -21,8 +23,8 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
         fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
         val prefs = OverlayPreferences(context)
         val accent = Color.parseColor(when {
-            !prefs.sourceColors() -> if(dark) "#9BBEFF" else "#2563EB"
-            entry.sourcePlatform == "windows" -> if(dark) "#9BBEFF" else "#2563EB"
+            !prefs.sourceColors() -> if(dark) "#8DBBFF" else "#245DCE"
+            entry.sourcePlatform == "windows" -> if(dark) "#8DBBFF" else "#245DCE"
             entry.sourcePlatform == "ipad" -> if(dark) "#C8ACEF" else "#7650A3"
             else -> if(dark) "#83D9BE" else "#14755F"
         })
@@ -30,19 +32,46 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
             (Color.red(a)*(1-amount)+Color.red(b)*amount).toInt(),
             (Color.green(a)*(1-amount)+Color.green(b)*amount).toInt(),
             (Color.blue(a)*(1-amount)+Color.blue(b)*amount).toInt())
-        minimumHeight = dp(if(compact) 76 else 88)
+        val lines = prefs.entryLineCount()
+        val minHeight = when(lines) {
+            1 -> if(compact) 54 else 58
+            2 -> if(compact) 72 else 78
+            else -> if(compact) 90 else 98
+        }
+        minimumHeight = dp(if(entry.kind=="image")132 else minHeight)
         background = GradientDrawable().apply {
-            setColor(if(prefs.translucentCards()) mix(surface,accent,if(dark) .12f else .075f) else surface)
-            cornerRadius = dp(15).toFloat()
+            val tinted = if(prefs.translucentCards()) mix(surface,accent,if(dark) .10f else .055f) else surface
+            val cardColor = if(prefs.translucentCards()) {
+                val alpha=(255f*prefs.cardAlphaPercent()/100f).toInt().coerceIn(0,255)
+                Color.argb(alpha, Color.red(tinted), Color.green(tinted), Color.blue(tinted))
+            } else tinted
+            setColor(cardColor)
+            if(prefs.borderEnabled()) {
+                val alpha=(255f*prefs.borderAlphaPercent()/100f).toInt().coerceIn(0,255)
+                setStroke(dp(1), if(dark) Color.argb(alpha,255,255,255) else Color.argb(alpha,25,40,63))
+            }
+            cornerRadius = dp(16).toFloat()
         }
         val hasSource = entry.sourceDeviceId != "local"
-        val markerWidth = if(hasSource || entry.pinned) 38 else 16
-        addView(TextView(context).apply {
+        val markerWidth = if(hasSource || entry.pinned || entry.locked) 38 else 16
+        if(entry.kind=="image") {
+            val image=ClipboardImages.thumbnail(ClipStore(context),entry)
+            addView(ImageView(context).apply {
+                setImageBitmap(image);scaleType=ImageView.ScaleType.FIT_CENTER
+                contentDescription=if(image==null)"图片暂不可用" else "图片 ${entry.imageWidth} × ${entry.imageHeight}"
+                setPadding(dp(12),dp(10),dp(markerWidth),dp(30))
+            },LayoutParams(-1,dp(132)))
+            addView(TextView(context).apply {
+                text=if(image==null)"图片暂不可用" else "${entry.imageWidth} × ${entry.imageHeight} · PNG"
+                textSize=12f;setTextColor(foreground);alpha=.72f;setPadding(dp(14),0,dp(markerWidth),dp(9))
+            },LayoutParams(-1,-2,Gravity.BOTTOM))
+        } else addView(TextView(context).apply {
             text = entry.text; textSize = if(compact) 15f else 16f
-            setTextColor(foreground); includeFontPadding = false; setLineSpacing(dp(3).toFloat(),1f)
-            gravity = Gravity.CENTER_VERTICAL; maxLines = 3
+            setTextColor(foreground); includeFontPadding = false; setLineSpacing(dp(2).toFloat(),1f)
+            gravity = Gravity.CENTER_VERTICAL; maxLines = lines
             ellipsize = android.text.TextUtils.TruncateAt.END
-            setPadding(dp(16),dp(19),dp(markerWidth),dp(19))
+            val verticalPadding = when(lines) { 1 -> 13; 2 -> 14; else -> 15 }
+            setPadding(dp(16),dp(verticalPadding),dp(markerWidth),dp(verticalPadding))
         }, LayoutParams(-1,-2,Gravity.CENTER_VERTICAL))
         val marks = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
         fun mark(resource: Int, label: String) {
@@ -52,6 +81,7 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, LinearLayout.LayoutParams(dp(14),dp(14)).apply { bottomMargin = dp(6) })
         }
+        if(entry.locked) mark(R.drawable.ic_lock,"已保护")
         if(entry.pinned) mark(R.drawable.ic_pin,"已置顶")
         if(hasSource) mark(when(entry.sourcePlatform) {
             "windows" -> R.drawable.ic_device_computer

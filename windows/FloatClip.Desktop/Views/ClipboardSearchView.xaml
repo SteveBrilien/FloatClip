@@ -1,0 +1,12 @@
+<UserControl x:Class="FloatClip.Desktop.Views.ClipboardSearchView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:ui="clr-namespace:Wpf.Ui.Controls;assembly=Wpf.Ui">
+  <Border x:Name="Field" Background="{DynamicResource FloatClip.Surface}" CornerRadius="{DynamicResource FloatClip.Radius.Control}" BorderThickness="1" MinHeight="{DynamicResource FloatClip.Hit.Title}">
+    <Border.Style><Style TargetType="Border"><Setter Property="BorderBrush" Value="{DynamicResource FloatClip.Border}"/><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource FloatClip.TextSecondary}"/></Trigger><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource FloatClip.Accent}"/></Trigger></Style.Triggers></Style></Border.Style>
+    <DockPanel LastChildFill="True">
+      <ui:Button DockPanel.Dock="Right" Command="{Binding ClearSearchCommand}" Click="ClearClicked" Style="{StaticResource FloatClip.Button.Toolbar}" Width="{DynamicResource FloatClip.Hit.Control}" Padding="0" ToolTip="清空搜索" AutomationProperties.Name="清空搜索"><ui:SymbolIcon Symbol="Dismiss24" FontSize="{DynamicResource FloatClip.Icon.Small}"/></ui:Button>
+      <ui:SymbolIcon DockPanel.Dock="Left" Symbol="Search24" FontSize="{DynamicResource FloatClip.Icon.Small}" Width="{DynamicResource FloatClip.Hit.Control}" Foreground="{DynamicResource FloatClip.TextSecondary}"/>
+      <Grid><TextBox x:Name="Input" Style="{StaticResource ClipboardSearchInput}" Text="{Binding SearchText,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}" MinHeight="{DynamicResource FloatClip.Hit.Control}" FontFamily="{DynamicResource FloatClip.FontFamily}" FontSize="{DynamicResource FloatClip.Font.Body}" Foreground="{DynamicResource FloatClip.TextPrimary}" CaretBrush="{DynamicResource FloatClip.TextPrimary}" SelectionBrush="{DynamicResource FloatClip.Accent}" AutomationProperties.Name="搜索剪贴板" AutomationProperties.AutomationId="ClipboardSearch"/>
+        <TextBlock x:Name="Placeholder" Text="搜索剪贴板" IsHitTestVisible="False" VerticalAlignment="Center" Foreground="{DynamicResource FloatClip.TextSecondary}" FontSize="{DynamicResource FloatClip.Font.Body}"/>
+      </Grid>
+    </DockPanel>
+  </Border>
+</UserControl>

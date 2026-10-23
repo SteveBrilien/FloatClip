@@ -1,0 +1,15 @@
+{
+  "channel": "development",
+  "platforms": {
+    "android": {
+      "version": "0.7.8",
+      "build": 23,
+      "review": "docs/CANDIDATE_0.7.8_2026-10-23.md"
+    },
+    "windows": {
+      "version": "0.7.8",
+      "build": 24,
+      "review": "docs/WINDOWS_078_HOTFIX_2026-10-23.md"
+    }
+  }
+}

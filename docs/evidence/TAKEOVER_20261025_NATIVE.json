@@ -1,0 +1,21 @@
+{
+  "windowsBuild": 34,
+  "androidBuild": 31,
+  "windowsNativeChecks": 225,
+  "uiFailures": 0,
+  "nativeOpacityChecks": 21,
+  "windowsUpdateChecks": 45,
+  "androidUnitTests": 71,
+  "androidLintErrors": 0,
+  "androidLintWarnings": 18,
+  "actualDpiScale": 1.5,
+  "realPowerToysShortcutSequenceVerified": false,
+  "windowsInstalled": true,
+  "androidInstalled": true,
+  "physicalFourDpiVerified": false,
+  "radioFileRoundTripVerifiedThisRun": false,
+  "liveBackgroundSwitchVerified": true,
+  "residentHostPreserved": true,
+  "auxiliaryWindowPreserved": true,
+  "compactSettingsVerified": true
+}

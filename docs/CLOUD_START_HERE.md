@@ -1,4 +1,7 @@
-# FloatClip 当前续接入口（2026-10-24）
+# FloatClip 当前续接入口（2026-10-25）
+
+当前候选为 Windows build34 / Android build31。先读 [本轮续接](TAKEOVER_2026-10-25.md)：包括上一会话未提交工作与 PowerToys 整窗透明兼容。Windows Remote 和正式 ADB25555 已恢复；Windows build34 / Android build31均已安装，Windows原生225、UpdateChecks45、Android单测71通过。实际PowerToys按键序列未稳定验收；下文build29设备状态是历史记录。候选未更新正式签名feed。
+
 
 实际源码：Codex MCP Dev 项目 floatclip-cloud，路径 /home/codex/workspace/Android/FloatClip/analysis/cloud-workspace-build25；独立 Git 仓库，分支 codex/wpf-design-system-077。原 floatclip 根目录仍有其他历史未提交改动，不要重置或覆盖。
 

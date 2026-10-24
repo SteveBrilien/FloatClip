@@ -32,7 +32,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
 import java.util.function.Consumer
 
-/** The native file shelf shares the clipboard service's authorized LAN session. */
+/** File metadata and selected downloads share the clipboard service's authenticated transport. */
 class FileActivity:Activity(),SyncRuntime.Observer {
     private val repo by lazy{FileRuntime.get(this)}
     private val main=Handler(Looper.getMainLooper())
@@ -40,6 +40,7 @@ class FileActivity:Activity(),SyncRuntime.Observer {
     private val selected=linkedSetOf<String>()
     private var selecting=false
     private var range=0
+    private var menu:PopupWindow?=null
     private var treeSelection=emptyList<SharedFile>()
     private var active:CompletableFuture<File>?=null
     @Volatile private var canceled=false
@@ -62,9 +63,9 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         render()
     }
     override fun onSaveInstanceState(out:Bundle){out.putInt("range",range);out.putBoolean("selecting",selecting);out.putStringArrayList("selected",ArrayList(selected));super.onSaveInstanceState(out)}
-    override fun onResume(){super.onResume();resumed=true;SyncRuntime.setObserver(this);worker.execute{repo.publish()};render();pendingHandoff?.let{pendingHandoff=null;it()}}
-    override fun onPause(){resumed=false;SyncRuntime.clearObserver(this);super.onPause()}
-    override fun onDestroy(){canceled=true;active?.cancel(true);batchDialog?.dialog?.dismiss();detailDialog?.dialog?.dismiss();main.removeCallbacksAndMessages(null);unregisterReceiver(receiver);worker.shutdownNow();super.onDestroy()}
+    override fun onResume(){super.onResume();resumed=true;SyncRuntime.setObserver(this);worker.execute{repo.publish();SyncRuntime.current()?.requestFileConnection()};render();pendingHandoff?.let{pendingHandoff=null;it()}}
+    override fun onPause(){menu?.dismiss();resumed=false;SyncRuntime.clearObserver(this);super.onPause()}
+    override fun onDestroy(){menu?.dismiss();canceled=true;active?.cancel(true);batchDialog?.dialog?.dismiss();detailDialog?.dialog?.dismiss();main.removeCallbacksAndMessages(null);unregisterReceiver(receiver);worker.shutdownNow();super.onDestroy()}
     override fun onConfigurationChanged(config:Configuration){super.onConfigurationChanged(config);if(!busy)render()}
     override fun dispatchTouchEvent(event:android.view.MotionEvent):Boolean{if(event.actionMasked==android.view.MotionEvent.ACTION_DOWN)EntryGestureRow.closeOutside(event.rawX,event.rawY);return super.dispatchTouchEvent(event)}
     private fun palette(){
@@ -91,12 +92,21 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         val shell=column().apply{setPadding(dp(16),dp(8),dp(16),dp(12));setBackgroundColor(page)}
         val title=row();title.addView(icon(R.drawable.ic_chevron_left,"返回"){finish()},LinearLayout.LayoutParams(dp(48),dp(48)))
         title.addView(label("文件",24f).apply{typeface=Typeface.DEFAULT_BOLD},LinearLayout.LayoutParams(0,dp(52),1f))
-        title.addView(button("添加"){pickFiles()});title.addView(button("管理"){manage()});shell.addView(title)
+        title.addView(icon(R.drawable.ic_add,"添加文件"){pickFiles()},LinearLayout.LayoutParams(dp(48),dp(48)))
+        val manageButton=button("管理"){}
+        manageButton.setOnClickListener{manage(manageButton)}
+        title.addView(manageButton);shell.addView(title)
         val peers=repo.connectedFilePeers()
-        val connection=if(peers>0)"$peers 台设备可接收文件" else if((SyncRuntime.current()?.connectedCount?:0)>0)"蓝牙仅同步文字，连接 Wi-Fi 后共享文件" else "连接同一 Wi-Fi 或手机热点以共享文件"
-        shell.addView(button(connection){devices()}.apply{textSize=12f;gravity=Gravity.CENTER_VERTICAL;maxLines=2},LinearLayout.LayoutParams(-1,-2))
+        val connection=if(peers>0)"$peers 台设备已连接 · 可浏览与下载" else "设备暂未连接 · 查看连接方式"
+        val connectionRow=row().apply{background=shape(tint,tint);setPadding(dp(12),dp(4),dp(4),dp(4))}
+        connectionRow.addView(ImageView(this).apply{setImageResource(R.drawable.ic_device_computer);imageTintList=android.content.res.ColorStateList.valueOf(if(peers>0)colors.success else muted)},LinearLayout.LayoutParams(dp(20),dp(20)).apply{marginEnd=dp(10)})
+        connectionRow.addView(label(connection,12f,muted).apply{maxLines=2},LinearLayout.LayoutParams(0,-2,1f))
+        connectionRow.addView(button("连接"){devices()});shell.addView(connectionRow,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(8);bottomMargin=dp(8)})
         if(repo.warning.isNotEmpty())shell.addView(label(repo.warning,12f,muted).apply{setPadding(0,0,0,dp(8))})
-        val filter=row();filter.addView(button(arrayOf("全部时间⌄","最近24小时⌄","最近7天⌄","最近30天⌄")[range]){FloatDialog.choices(this,"时间",listOf("全部时间","最近24小时","最近7天","最近30天"),range){range=it;render()}})
+        val filter=row()
+        val timeFilter=button(arrayOf("全部时间⌄","最近24小时⌄","最近7天⌄","最近30天⌄")[range]){}
+        timeFilter.setOnClickListener{menu?.dismiss();menu=com.floatclip.app.ui.FloatMenu.show(timeFilter,listOf("全部时间","最近24小时","最近7天","最近30天"),range){range=it;render()}}
+        filter.addView(timeFilter)
         filter.addView(View(this),LinearLayout.LayoutParams(0,1,1f));filter.addView(button(if(selecting)"完成" else "选择"){selecting=!selecting;selected.clear();render()});shell.addView(filter)
         if(selecting){val actions=row();actions.addView(button(if(selected.size==visible().size&&selected.isNotEmpty())"取消全选" else "全选"){if(selected.size==visible().size)selected.clear() else selected.addAll(visible().map{it.key});render()});actions.addView(label("已选 ${selected.size}",12f,muted).apply{setPadding(dp(8),0,dp(8),0)});actions.addView(button("下载"){chooseFolder(picked())}.apply{isEnabled=selected.isNotEmpty();alpha=if(isEnabled)1f else .45f});actions.addView(button("分享"){prepare(picked(),"share",null)}.apply{isEnabled=selected.isNotEmpty();alpha=if(isEnabled)1f else .45f});shell.addView(HorizontalScrollView(this).apply{isHorizontalScrollBarEnabled=false;addView(actions)},LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(4)})}
         list=column();val files=visible();if(files.isEmpty())list.addView(label("暂无文件",15f,muted).apply{gravity=Gravity.CENTER;setPadding(dp(8),dp(48),dp(8),dp(32))}) else files.forEach{list.addView(card(it),LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(12)})}
@@ -126,7 +136,7 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         action("应用内预览"){prepare(listOf(file),"open",null)};action("下载到文件夹"){chooseFolder(listOf(file))};action("分享 / 转发"){prepare(listOf(file),"share",null)}
         if(SharedFileProvider.mime(file.name).startsWith("image/")&&repo.local(file)!=null)action("加入剪贴板"){startActivity(Intent(this,ImageImportActivity::class.java).setAction(Intent.ACTION_SEND).setType("image/*").putExtra(Intent.EXTRA_STREAM,SharedFileProvider.uri(packageName,file.key)))}
         action(if(file.kept)"取消保留" else "保留此文件"){repo.keep(file,!file.kept);render()}
-        detailDialog=FloatDialog.show(this,file.name,custom=ScrollView(this).apply{addView(body);isFillViewport=false},negative="关闭",positive=null)
+        detailDialog=FloatDialog.show(this,file.name,custom=ScrollView(this).apply{addView(body);isFillViewport=false},negative="关闭",positive=null,bottomSheet=true)
     }
     private fun devices(){startActivity(Intent(this,DeviceActivity::class.java).putExtra("devicesOnly",true))}
     private fun pickFiles(){if(busy)return;startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE);putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true)},100)}
@@ -142,7 +152,7 @@ class FileActivity:Activity(),SyncRuntime.Observer {
             }
         };prepare(treeSelection,"folder",uri);treeSelection=emptyList()}
     }
-    private fun manage(){FloatDialog.actions(this,"文件管理",listOf("设备与配对","清理当前时间范围内的下载缓存","清除当前时间范围内的文件记录")){when(it){0->devices();1->clear(false);2->clear(true)}}}
+    private fun manage(anchor:View){menu?.dismiss();menu=com.floatclip.app.ui.FloatMenu.show(anchor,listOf("设备与配对","清理当前时间范围内的下载缓存","清除当前时间范围内的文件记录")){when(it){0->devices();1->clear(false);2->clear(true)}}}
     private fun clear(records:Boolean){val files=if(selecting)picked() else visible();val eligible=files.filter{!it.kept};FloatDialog.show(this,if(records)"清除文件记录" else "清理下载缓存","将处理 ${eligible.size} 个文件，跳过 ${files.size-eligible.size} 个保留文件。"+if(records)"本机分享的应用内副本也会移除，原始文件不受影响。" else "保留文件清单，之后可以重新下载。",onPositive={repo.clear(files,records,true);selected.clear();render();true})}
     private fun prepare(files:List<SharedFile>,mode:String,tree:Uri?){
         if(busy||files.isEmpty()){if(files.isEmpty())message("请先选择文件");return};busy=true;canceled=false

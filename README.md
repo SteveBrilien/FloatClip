@@ -2,9 +2,9 @@
 
 本机优先的跨设备剪贴板与共享文件工具。同一仓库维护 **Windows WPF 桌面端、Android 移动端、共享协议和可选 Web/iPad 入口**。
 
-当前原生开发线为 **0.7.9 / Windows / Android build 29 候选**。本轮补齐跨端图片同步、蓝牙文件目录/下载、Android 图片布局与差量动画，以及 Windows 全应用透明/磨砂表面。
+当前原生开发线为 **0.7.9 / Windows build34 / Android build31 候选**。本轮完善整窗透明与背景即时切换，精简设置布局，并续接图片加载、来源栏滚动、长按菜单与蓝牙文件续接。Windows原生225项、Android单测71项通过；真实跨设备往返与完整外观验收仍待完成。
 
-[当前文档](docs/README.md) · [本轮候选与验收边界](docs/CANDIDATE_079_BUILD29_2026-10-24.md) · [Windows 设计规范](docs/design/FLOATCLIP_WINDOWS_DESIGN_SYSTEM.md) · [原生更新发布](docs/NATIVE_UPDATES_2026-10-23.md)
+[当前文档](docs/README.md) · [本轮候选与验收边界](docs/TAKEOVER_2026-10-25.md) · [Windows 设计规范](docs/design/FLOATCLIP_WINDOWS_DESIGN_SYSTEM.md) · [原生更新发布](docs/NATIVE_UPDATES_2026-10-23.md)
 
 ## 已有能力
 

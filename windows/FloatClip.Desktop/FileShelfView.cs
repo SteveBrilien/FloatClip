@@ -125,7 +125,7 @@ public sealed class FileShelfView:UserControl,IDisposable
         var transferActions=new WrapPanel{Margin=new Thickness(0,7,0,0)};
         accept=Button("接收",AcceptSelected);decline=Button("拒绝",DeclineSelected);cancel=Button("取消并重连",CancelSelected);saveAs=Button("另存为",SaveSelectedAs);openFile=Button("打开 / 预览",OpenSelectedTransfer);forget=Button("移除接收缓存",ForgetSelected);
         foreach(var b in new[]{accept,decline,cancel,saveAs,openFile,forget})transferActions.Children.Add(b);
-        More("直接发送到设备",()=>{var menu=new ContextMenu();if(sync!=null)foreach(var peer in sync.Transfers.Peers()){var item=new MenuItem{Header=peer.Name};item.Click+=(_,_)=>Run(()=>{peers.SelectedItem=peer;SendSelected();});menu.Items.Add(item);}if(menu.Items.Count==0)menu.Items.Add(new MenuItem{Header="暂无局域网连接",IsEnabled=false});menu.PlacementTarget=more;menu.IsOpen=true;});
+        More("直接发送到设备",()=>{var menu=new ContextMenu();if(sync!=null)foreach(var peer in sync.Transfers.Peers()){var item=new MenuItem{Header=peer.Name};item.Click+=(_,_)=>Run(()=>{peers.SelectedItem=peer;SendSelected();});menu.Items.Add(item);}if(menu.Items.Count==0)menu.Items.Add(new MenuItem{Header="暂无文件连接",IsEnabled=false});menu.PlacementTarget=more;menu.IsOpen=true;});
         DockPanel.SetDock(transferActions,Dock.Bottom);transferPanel.Children.Add(transferActions);
         ConfigureList(transferList,transferRows);System.Windows.Automation.AutomationProperties.SetAutomationId(transferList,"TransferActivityList");transferList.SelectionChanged+=(_,_)=>RefreshActions();transferList.MouseDoubleClick+=(_,_)=>OpenSelectedTransfer();transferPanel.Children.Add(transferList);
         transferList.MinHeight=0;activity.Child=transferPanel;activity.Margin=new Thickness(0,8,0,0);activity.SetResourceReference(Border.BorderBrushProperty,"FloatClip.Line");Grid.SetRow(activity,1);body.Children.Add(activity);
@@ -136,7 +136,7 @@ public sealed class FileShelfView:UserControl,IDisposable
         localList.ItemsSource=localRows;transferList.ItemsSource=transferRows;
         SizeChanged+=(_,_)=>FitColumns();Loaded+=(_,_)=>FitColumns();
         RefreshLocal();RefreshPeers();RefreshTransfers();RefreshActions();
-        if(sync!=null){sync.Transfers.Changed+=TransferChanged;sync.Files.Changed+=CatalogChanged;}
+        if(sync!=null){sync.Transfers.Changed+=TransferChanged;sync.Files.Changed+=CatalogChanged;sync.RequestFileConnection();}
     }
 
     public void Dispose(){if(closed)return;closed=true;statusTimer.Stop();batch?.Cancel();if(sync!=null){sync.Transfers.Changed-=TransferChanged;sync.Files.Changed-=CatalogChanged;}}
@@ -243,11 +243,11 @@ public sealed class FileShelfView:UserControl,IDisposable
     bool InRange(long ticks)=>dateRange.SelectedIndex<=0||ticks>=DateTime.UtcNow.AddDays(dateRange.SelectedIndex switch{1=>-1,2=>-7,_=>-30}).Ticks;
     void RefreshPeers()
     {
-        if(sync==null){peers.ItemsSource=new[]{new FilePeer("","暂无局域网设备")};peers.SelectedIndex=0;peers.IsEnabled=false;return;}
+        if(sync==null){peers.ItemsSource=new[]{new FilePeer("","暂无文件连接")};peers.SelectedIndex=0;peers.IsEnabled=false;return;}
         string? selected=(peers.SelectedItem as FilePeer)?.Key;var found=sync.Transfers.Peers();
-        if(found.Length==0){peers.ItemsSource=new[]{new FilePeer("","暂无局域网设备")};peers.SelectedIndex=0;peers.IsEnabled=false;}
+        if(found.Length==0){peers.ItemsSource=new[]{new FilePeer("","暂无文件连接")};peers.SelectedIndex=0;peers.IsEnabled=false;}
         else{peers.ItemsSource=found;peers.SelectedItem=found.FirstOrDefault(p=>p.Key==selected)??found[0];peers.IsEnabled=true;}
-        peers.ToolTip=found.Length>0?"选择已连接的局域网设备":"暂无局域网文件通道；蓝牙配对本身不提供文件传输";
+        peers.ToolTip=found.Length>0?"选择已连接的文件接收设备":"连接局域网或蓝牙后可发送文件；离线文件可从共享清单续接下载";
     }
     void RefreshTransfers(Guid? selectedId=null)
     {
@@ -300,7 +300,7 @@ public sealed class FileShelfView:UserControl,IDisposable
             try{if(store.Load().Length>=FileCatalog.MaximumShared)throw new IOException("最多共享 64 个文件，请先移除不需要的条目");var row=store.Add(file);added++;last=row.Path;}
             catch(IOException e){if(errors.Count<4)errors.Add(System.IO.Path.GetFileName(file)+": "+e.Message);}
         }
-        sync?.Files.Publish();RefreshLocal(last);status.Text=errors.Count==0?$"已添加 {added} 个文件":$"已添加 {added} 个文件。"+string.Join("；",errors);
+        sync?.Files.Publish();sync?.RequestFileConnection();RefreshLocal(last);status.Text=errors.Count==0?$"已添加 {added} 个文件":$"已添加 {added} 个文件。"+string.Join("；",errors);
     }
     void RemoveLocal()
     {
@@ -308,7 +308,7 @@ public sealed class FileShelfView:UserControl,IDisposable
     }
     void KeepSelected(){foreach(var row in localList.SelectedItems.Cast<FileShelfRow>().ToArray()){if(row.Remote!=null)sync?.Files.Keep(row.Remote,!row.Kept);else store.Keep(row.Path,!row.Kept);}RefreshLocal();}
     void ClearFiles(bool records){var rows=localList.SelectedItems.Cast<FileShelfRow>().ToArray();if(rows.Length==0)return;var eligible=rows.Where(r=>!r.Kept).ToArray();if(records&&MessageBox.Show(Window.GetWindow(this),$"移除 {eligible.Length} 条记录，跳过 {rows.Length-eligible.Length} 个保留文件？本机原始文件不会删除。","清除文件记录",MessageBoxButton.OKCancel)!=MessageBoxResult.OK)return;
-        if(sync!=null)sync.Files.Clear(eligible.Where(r=>r.Remote!=null).Select(r=>r.Remote!),records,true);if(records)foreach(var row in eligible.Where(r=>r.IsLocalShelf))store.Remove(row.Path);sync?.Files.Publish();RefreshLocal();status.Text=records?"已移除所选记录，本机原始文件保留。":"已清理所选下载缓存，保留的文件已跳过。";
+        if(sync!=null)sync.Files.Clear(eligible.Where(r=>r.Remote!=null).Select(r=>r.Remote!),records,true);if(records)foreach(var row in eligible.Where(r=>r.IsLocalShelf))store.Remove(row.Path);sync?.Files.Publish();sync?.RequestFileConnection();RefreshLocal();status.Text=records?"已移除所选记录，本机原始文件保留。":"已清理所选下载缓存，保留的文件已跳过。";
     }
     async Task DownloadSelected(){if(batch!=null)return;var rows=localList.SelectedItems.Cast<FileShelfRow>().ToArray();if(rows.Length==0){status.Text="请先选择文件。";return;}var folder=new OpenFolderDialog{Title="选择下载文件夹",Multiselect=false};if(folder.ShowDialog(Window.GetWindow(this))!=true)return;
         var token=new CancellationTokenSource();batch=token;batchProgress.Visibility=Visibility.Visible;batchProgress.Value=0;long completed=0,total=Math.Max(1,rows.Sum(r=>r.SizeBytes));var started=DateTime.UtcNow;FileShelfRow? current=null;

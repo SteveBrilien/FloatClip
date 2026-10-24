@@ -53,7 +53,12 @@ class FileShelfTest {
             assertEquals(1,a.connectedFilePeers());assertEquals(1,b.connectedFilePeers())
             val received=b.download(row).get(8,TimeUnit.SECONDS);assertArrayEquals(bytes,received.readBytes());assertArrayEquals(bytes,file.readBytes());b.keep(row,true);b.clear(listOf(row),true,true);assertTrue(received.exists());assertEquals(1,b.snapshot().size)
             FileRepository(bContext).use{restored->assertTrue(restored.snapshot().single().kept);assertNotNull(restored.local(restored.snapshot().single()));assertFalse(restored.snapshot().single().online)}
-            b.keep(row,false);b.clear(listOf(row),false,true);assertFalse(received.exists());assertEquals(1,b.snapshot().size);assertArrayEquals(bytes,b.download(row).get(8,TimeUnit.SECONDS).readBytes())
+            b.keep(row,false);b.clear(listOf(row),false,true);assertFalse(received.exists());assertEquals(1,b.snapshot().size)
+            row.online=false
+            val reconnecting=b.download(row)
+            assertFalse(reconnecting.isDone)
+            a.publish()
+            assertArrayEquals(bytes,reconnecting.get(8,TimeUnit.SECONDS).readBytes())
             b.clear(listOf(row),true,true);assertTrue(b.snapshot().isEmpty());assertTrue(file.exists())
         }finally{aSession.close();bSession.close();a.close();b.close()}
     }

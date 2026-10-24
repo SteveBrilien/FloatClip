@@ -32,6 +32,13 @@ public static class ClipboardBackgroundService
         }
         if(WindowChrome.GetWindowChrome(window)==null)WindowChrome.SetWindowChrome(window,new WindowChrome{CaptionHeight=caption?DesignTokens.Number("Hit.Title"):0,ResizeBorderThickness=new Thickness(6),GlassFrameThickness=new Thickness(0)});
         window.SourceInitialized+=(_,_)=>Apply(window,preferences);
+        // WPF/WindowChrome finalizes HWND styles after SourceInitialized. Applying
+        // native alpha earlier is undone by the first Show/initial layout.
+        bool firstRender=true;
+        window.ContentRendered+=(_,_)=>{
+            if(!firstRender)return;firstRender=false;
+            if(preferences.ClipboardBackground=="window")WindowOpacityService.Apply(window,preferences.WindowOpacity);
+        };
     }
     public static void RefreshAll(DesignPreferences preferences)
     {
@@ -70,7 +77,8 @@ public static class ClipboardBackgroundService
     // Keep the old signature for callers compiled against build 25. The page no longer changes the mode.
     public static string Apply(Window window,DesignPreferences preferences,bool clipboard=true)
     {
-        window.Opacity=1;
+        // External tools own the HWND alpha between explicit user changes.
+        // Background/theme/page refreshes must never restore Window.Opacity.
         var baseBrush=DesignTokens.Brush("Background");var handle=new WindowInteropHelper(window).Handle;
         string mode=preferences.ClipboardBackground;
         double opacity=Math.Clamp(preferences.BackgroundOpacity,.2,1);
@@ -88,8 +96,8 @@ public static class ClipboardBackgroundService
         if(useMaterial)window.Background=Brushes.Transparent;
         else if(transparent)window.Background=AlphaBrush("Background",opacity);
         else window.Background=DesignTokens.Brush("Background");
-        if(mode=="transparent"&&!window.AllowsTransparency||mode!="transparent"&&window.AllowsTransparency)return "背景类型将在重新打开应用后生效";
-        if(mode=="acrylic"&&!useMaterial||mode=="transparent"&&!transparent)return "系统透明效果不可用，当前使用纯色背景";
+        if(mode=="transparent"&&!window.AllowsTransparency||mode!="transparent"&&window.AllowsTransparency)return "正在切换背景";
+        if(mode=="acrylic"&&!useMaterial||mode=="transparent"&&!transparent)return "当前系统使用纯色背景";
         return "";
     }
 

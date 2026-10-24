@@ -77,6 +77,7 @@ object FloatDialog {
         positive:String?="确定",
         onNegative:(()->Unit)?=null,
         onCancel:(()->Unit)?=null,
+        bottomSheet:Boolean=false,
         onPositive:((Handle)->Boolean)?=null,
     ):Handle {
         val p=palette(context)
@@ -132,7 +133,8 @@ object FloatDialog {
             dialog.window?.apply {
                 setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
                 addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                attributes=attributes.apply { dimAmount=0.55f }
+                attributes=attributes.apply { dimAmount=0.35f;windowAnimations=0 }
+                if(bottomSheet)setGravity(Gravity.BOTTOM)
                 setLayout((context.resources.displayMetrics.widthPixels-dp(40)).coerceAtMost(dp(420)),WindowManager.LayoutParams.WRAP_CONTENT)
             }
         }

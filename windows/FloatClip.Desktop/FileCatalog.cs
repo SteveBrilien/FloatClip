@@ -33,6 +33,7 @@ public sealed class FileCatalog
     public FileShelfStore Store{get;}
     public string? Warning{get;private set;}
     public event Action? Changed;
+    public Action<string?>? RequestConnection{get;set;}
     public FileCatalog(string root,string cache,Func<string,bool> allowed,Func<string,string> describe)
     {
         this.allowed=allowed;this.describe=describe;this.cache=Path.GetFullPath(cache);path=Path.Combine(root,"remote-file-catalog.json");Store=new FileShelfStore(Path.Combine(root,"file-shelf.json"));
@@ -54,7 +55,7 @@ public sealed class FileCatalog
     public void Attach(string peer,Session session)
     {
         if(!session.CatalogEnabled)return;var link=new Link(session);lock(gate)links[peer]=link;
-        session.Catalog=data=>{if(allowed(peer))Handle(peer,link,data);};
+        session.Catalog=data=>{lock(gate){if(!links.TryGetValue(peer,out var current)||!ReferenceEquals(current,link))return;}if(allowed(peer))Handle(peer,link,data);};
         var legacy=session.Offered;
         session.Offered=offer=>{
             Pending? pending;lock(gate)pending=link.Pending;
@@ -95,9 +96,19 @@ public sealed class FileCatalog
     }
     public async Task<string> Download(SharedFileItem item,CancellationToken cancellation=default)
     {
-        if(IsLocal(item))return item.LocalPath;Link link;Pending pending;
+        if(IsLocal(item))return item.LocalPath;
+        if(!allowed(item.Peer))throw new IOException("此设备共享已暂停");
+        bool Ready(){lock(gate)return allowed(item.Peer)&&links.TryGetValue(item.Peer,out var active)&&!active.Session.IsClosed&&rows.TryGetValue(item.Key,out var row)&&row.Online;}
+        if(!Ready()){
+            RequestConnection?.Invoke(item.Peer);
+            long until=Environment.TickCount64+25000;
+            while(!Ready()&&Environment.TickCount64<until)await Task.Delay(200,cancellation);
+            if(!Ready())throw new IOException("未能连接来源设备，请检查蓝牙或连接同一 Wi-Fi / 热点");
+        }
+        lock(gate){if(!rows.TryGetValue(item.Key,out var latest)||latest.Version!=item.Version)throw new IOException("源文件已变化，请重新选择");item=latest;}
+        Link link;Pending pending;
         lock(gate){if(!item.Online||!allowed(item.Peer)||!links.TryGetValue(item.Peer,out link!))throw new IOException("来源设备离线或共享已暂停");if(link.Pending!=null)throw new IOException("请等待该设备当前下载完成");pending=new Pending(item);link.Pending=pending;item.Error="";item.Done=0;}
-        try{link.Session.SendCatalog(Encode(new{v=1,op="get",id=item.Id,version=item.Version,request=pending.Id.ToString("N")}));using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellation);timeout.CancelAfter(TimeSpan.FromMinutes(3));using var registration=timeout.Token.Register(()=>{Fail(link,"文件下载已取消或超时");link.Session.Dispose();});return await pending.Completion.Task;}
+        try{link.Session.SendCatalog(Encode(new{v=1,op="get",id=item.Id,version=item.Version,request=pending.Id.ToString("N")}));using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellation);timeout.CancelAfter(TimeSpan.FromMinutes(15));using var registration=timeout.Token.Register(()=>{Fail(link,"文件下载已取消或超时");link.Session.Dispose();});return await pending.Completion.Task;}
         catch{lock(gate)if(link.Pending==pending)link.Pending=null;throw;}
     }
     public void Keep(SharedFileItem item,bool value){lock(gate){item.Kept=value;if(rows.TryGetValue(item.Key,out var current))current.Kept=value;Save();}Notify();}

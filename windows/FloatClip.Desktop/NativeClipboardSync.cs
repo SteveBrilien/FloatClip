@@ -86,6 +86,7 @@ public sealed class NativeClipboardSync: IDisposable
         string PeerName(string key)=>engine.Snapshot().Peers.TryGetValue(key,out var peer)?peer.Device?.Name??pairs.Describe(key)?.Name??"已配对设备":pairs.Describe(key)?.Name??"已配对设备";
         Transfers=new DesktopTransfers(PeerName,FileAllowed);
         Files=new FileCatalog(root,cache,FileAllowed,PeerName);
+        Files.RequestConnection=RequestFileConnection;
         if(!pairs.Corrupt)
         {
             // v1 Windows keyed sync peers by the Android TLS pin. PairStore v2 derives the
@@ -179,6 +180,12 @@ public sealed class NativeClipboardSync: IDisposable
         lock(optionsGate){if(options.Images==value)return;options.Images=value;SaveOptions();}
         if(!value)ClearPendingImage();else foreach(string key in links.Keys)TrySendImage(key);
         Changed?.Invoke();
+    }
+    public void RequestFileConnection(string? peer=null)
+    {
+        if(!enabled||disposed||!Automatic)return;
+        if(peer!=null&&!FileAllowed(peer))return;
+        EnsureBluetooth();bluetooth?.Nudge(peer==null?null:new[]{peer});Signal();
     }
     public void ReconnectNow()
     {
@@ -390,7 +397,7 @@ public sealed class NativeClipboardSync: IDisposable
             if(disposed||!enabled||pairs.GetByKey(key).Length!=32){session.Dispose();return;}
             if(links.TryGetValue(key,out var existing))
             {
-                if(existing.Priority>=priority){session.Dispose();return;}
+                if(existing.Priority>=priority||existing.Session.HasActiveFile){session.Dispose();return;}
                 if(((System.Collections.Generic.ICollection<System.Collections.Generic.KeyValuePair<string,Link>>)links).Remove(new(key,existing)))
                 {engine.Disconnected(key);existing.Dispose();}
             }

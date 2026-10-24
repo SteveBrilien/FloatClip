@@ -22,6 +22,9 @@ import java.io.ByteArrayOutputStream
 object ClipboardImages {
     private val captures=java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task,"FloatClip image capture").apply { isDaemon=true } }
     private val main=Handler(Looper.getMainLooper())
+    private val decodes=java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task,"FloatClip thumbnails").apply { isDaemon=true } }
+    private val pending=mutableMapOf<String,MutableList<(Bitmap?)->Unit>>()
+
     private val thumbnails=object:android.util.LruCache<String,Bitmap>(8*1024*1024) {
         override fun sizeOf(key:String,value:Bitmap)=value.allocationByteCount
     }
@@ -70,10 +73,35 @@ object ClipboardImages {
         BitmapFactory.decodeByteArray(png,0,png.size,BitmapFactory.Options().apply { inSampleSize=sample })?.also { thumbnails.put(key,it) }
     }.getOrNull()
 
-    fun thumbnailAsync(store:ClipStore,entry:ClipEntry,maxDimension:Int=4096,done:(Bitmap?)->Unit) {
-        val key=entry.imageRef+":"+entry.imageSha256+":"+maxDimension
-        thumbnails.get(key)?.let { main.post { done(it) };return }
-        captures.execute { val bitmap=thumbnail(store,entry,maxDimension);main.post { done(bitmap) } }
+    private fun thumbnailKey(entry:ClipEntry,maxDimension:Int,card:Boolean)=
+        entry.imageRef+":"+entry.imageSha256+":"+maxDimension+if(card && entry.imageHeight>entry.imageWidth*2.2f)":card" else ""
+
+    /** Long cards decode only their visible top region; the full preview remains independent. */
+    internal fun cardRegion(width:Int,height:Int):android.graphics.Rect =
+        android.graphics.Rect(0,0,width,minOf(height,width*2))
+
+    fun thumbnailAsync(store:ClipStore,entry:ClipEntry,maxDimension:Int=480,card:Boolean=false,done:(Bitmap?)->Unit) {
+        val key=thumbnailKey(entry,maxDimension,card)
+        thumbnails.get(key)?.let { done(it);return }
+        synchronized(pending) {
+            pending[key]?.let { it.add(done);return }
+            pending[key]=mutableListOf(done)
+        }
+        decodes.execute {
+            val bitmap=runCatching {
+                if(card && entry.imageHeight>entry.imageWidth*2.2f) {
+                    val png=store.readImage(entry)
+                    val decoder=android.graphics.BitmapRegionDecoder.newInstance(png,0,png.size,false)
+                    try {
+                        var sample=1
+                        while(entry.imageWidth/(sample*2)>=maxDimension)sample*=2
+                        decoder.decodeRegion(cardRegion(entry.imageWidth,entry.imageHeight),BitmapFactory.Options().apply{inSampleSize=sample})
+                    } finally {decoder.recycle()}
+                } else thumbnail(store,entry,maxDimension)
+            }.getOrNull()
+            if(bitmap!=null)thumbnails.put(key,bitmap)
+            main.post { synchronized(pending){pending.remove(key)}.orEmpty().forEach{it(bitmap)} }
+        }
     }
 
     fun copy(context:Context,store:ClipStore,entry:ClipEntry) {

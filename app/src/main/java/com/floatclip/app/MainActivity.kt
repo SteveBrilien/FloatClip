@@ -481,7 +481,19 @@ open class MainActivity : Activity() {
                 gravity=Gravity.CENTER; setPadding(dp(13),0,dp(13),0); minimumHeight=dp(44)
                 background=roundedBackground(if(sourceFilter==key) colors.actionBackground else Color.TRANSPARENT,11f)
                 isSelected=sourceFilter==key; contentDescription="来源：$name"
-                setOnClickListener { sourceFilter=key; historyCategory=ALL_CATEGORY; render() }
+                setOnClickListener {
+                    if(sourceFilter==key)return@setOnClickListener
+                    sourceFilter=key;historyCategory=ALL_CATEGORY
+                    for(index in 0 until filters.childCount) {
+                        val child=filters.getChildAt(index) as TextView
+                        val active=sources[index].id==key
+                        child.isSelected=active
+                        child.setTextColor(if(active)colors.accent else colors.secondaryText)
+                        child.background=roundedBackground(if(active)colors.actionBackground else Color.TRANSPARENT,11f)
+                    }
+                    revealSourceTab(filterScroll,this)
+                    refreshHistory()
+                }
             }
             if(sourceFilter==key)selectedSourceView=tab
             filters.addView(tab,LinearLayout.LayoutParams(-2,dp(44)).apply { marginEnd=dp(4) })
@@ -495,20 +507,8 @@ open class MainActivity : Activity() {
         refreshHistory(); showUndo()
     }
 
-    private fun revealSourceTab(scroll:HorizontalScrollView, selected:View) {
-        if(scroll.width<=0)return
-        val visibleLeft=scroll.scrollX
-        val visibleRight=visibleLeft+scroll.width
-        when {
-            selected.left>=visibleLeft && selected.right<=visibleRight -> Unit
-            selected.right>visibleRight -> {
-                val centered=(selected.left+selected.width/2-scroll.width/2)
-                    .coerceIn(0,(scroll.getChildAt(0)?.width?.minus(scroll.width) ?: 0).coerceAtLeast(0))
-                scroll.smoothScrollTo(centered,0)
-            }
-            else -> scroll.smoothScrollTo((selected.left-dp(8)).coerceAtLeast(0),0)
-        }
-    }
+    private fun revealSourceTab(scroll:HorizontalScrollView, selected:View) =
+        com.floatclip.app.ui.TabReveal.reveal(scroll,selected)
 
     private fun updateImageImportAction() {
         val visible=currentPage==PAGE_CLIPBOARD&&!categoryManagement&&sourceFilter==ClipboardSources.IMAGE_SCOPE
@@ -554,12 +554,12 @@ open class MainActivity : Activity() {
         // decoded images instead of briefly clearing them on every state broadcast.
         if(renderedHistoryTarget===target&&renderedHistoryEntries==visibleHistory&&renderedHistoryOptions==options)return
         renderedHistoryTarget=target;renderedHistoryEntries=visibleHistory;renderedHistoryOptions=options
-        com.floatclip.app.ui.ClipboardLayout.clear(target)
         if (visibleHistory.isEmpty()) {
+            com.floatclip.app.ui.ClipboardLayout.clear(target)
             target.addView(textView(if(searchQuery.isEmpty()) "这里还没有记录" else "没有匹配的记录",15f,false,colors.secondaryText).apply { gravity=Gravity.CENTER; setPadding(0,dp(28),0,dp(20)) })
             if(searchQuery.isEmpty() && sourceFilter.isEmpty()) target.addView(compactTextAction("收录当前剪贴板") { captureCurrentClipboard();refreshHistory() })
         } else {
-            com.floatclip.app.ui.ClipboardLayout.render(target, visibleHistory, overlayPreferences.twoColumnClipboard(), ::addHistoryCard)
+            com.floatclip.app.ui.ClipboardLayout.renderRetained(target, visibleHistory, overlayPreferences.twoColumnClipboard(), ::addHistoryCard)
         }
     }
 
@@ -1232,7 +1232,7 @@ open class MainActivity : Activity() {
         val item=ClipboardCard(this,entry,colors.dark,colors.primaryText,colors.cardBackground)
         val wrapper = EntryGestureRow(this)
         wrapper.contentDescription=entry.text+"，来源："+entry.sourceDeviceName+(if(entry.pinned) "，已置顶" else "")+(if(entry.locked) "，已保护" else "")
-        wrapper.bind(
+        if(entry.kind=="image")wrapper.bind(item) else wrapper.bind(
             item,
             EntrySwipeActions(this, entry.pinned, colors.dark,
                 onPin = { clipStore.togglePinned(entry.id); refreshHistory(); notifyOverlayAppearanceChanged() },
@@ -1251,10 +1251,9 @@ open class MainActivity : Activity() {
             }.onFailure { Toast.makeText(this,it.message ?: "操作未完成",Toast.LENGTH_LONG).show() }
         }
         wrapper.onLongPress = {
-            FloatDialog.actions(
-                this,
-                entry.sourceDeviceName,
-                listOf(if(entry.kind=="image") "查看图片" else "查看全文", "更改分类", if(entry.locked) "取消保护" else "保护", if (entry.pinned) "取消置顶" else "置顶", "删除"),
+            com.floatclip.app.ui.FloatMenu.show(
+                wrapper,
+                listOf(if(entry.kind=="image") "查看图片" else "查看全文", "更改分类", if(entry.locked) "取消保护" else "保护", if (entry.pinned) "取消置顶" else "置顶", if(entry.kind=="image")"复制图片" else "复制", "删除"),
             ) { which ->
                 when (which) {
                     0 -> if(entry.kind=="image") runCatching { ClipboardImages.preview(this,clipStore,entry) }.onFailure {
@@ -1272,6 +1271,11 @@ open class MainActivity : Activity() {
                     1 -> showCategoryPicker(entry)
                     2 -> { clipStore.toggleLocked(entry.id); refreshHistory(); notifyOverlayAppearanceChanged() }
                     3 -> { clipStore.togglePinned(entry.id); refreshHistory(); notifyOverlayAppearanceChanged() }
+                    4 -> runCatching {
+                        if(entry.kind=="image")ClipboardImages.copy(this,clipStore,entry)
+                        else ClipboardWrites.copyByUser(this,getSystemService(ClipboardManager::class.java),entry.text)
+                        Toast.makeText(this,"已复制",Toast.LENGTH_SHORT).show()
+                    }.onFailure{Toast.makeText(this,it.message?:"复制未完成",Toast.LENGTH_LONG).show()}
                     else -> deleteEntry(entry)
                 }
             }

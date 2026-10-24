@@ -291,7 +291,7 @@ public sealed class BluetoothSyncTransport:IDisposable
 
     static async Task CloseAfter(Session session)
     {
-        try{await Task.Delay(TimeSpan.FromSeconds(180));}catch{}finally{session.Dispose();}
+        try{await Task.Delay(TimeSpan.FromSeconds(180));while(!session.IsClosed&&session.HasActiveFile)await Task.Delay(TimeSpan.FromSeconds(15));}catch{}finally{session.Dispose();}
     }
 
     static string Friendly(Exception e)=>e is IOException?e.Message:e.GetType().Name;

@@ -19,6 +19,21 @@ import com.floatclip.app.clipboard.ClipboardImages
 /** The content owns the row; provenance never consumes a second line. */
 class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foreground: Int,
     surface: Int, compact: Boolean = false) : FrameLayout(context) {
+    private var loadImage:(()->Unit)?=null
+    private val visibleImageListener=android.view.ViewTreeObserver.OnPreDrawListener {
+        if(loadImage!=null && isShown && getGlobalVisibleRect(android.graphics.Rect())) {
+            val load=loadImage;loadImage=null;load?.invoke()
+        }
+        true
+    }
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        viewTreeObserver.addOnPreDrawListener(visibleImageListener)
+    }
+    override fun onDetachedFromWindow() {
+        if(viewTreeObserver.isAlive)viewTreeObserver.removeOnPreDrawListener(visibleImageListener)
+        super.onDetachedFromWindow()
+    }
     init {
         fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
         val prefs = OverlayPreferences(context)
@@ -78,10 +93,12 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
                 preview.imageMatrix=android.graphics.Matrix().apply{setScale(factor,factor)}
             }
             if(longImage)preview.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> positionLongImage() }
-            ClipboardImages.thumbnailAsync(ClipStore(context),entry,if(longImage)1600 else 480) { image ->
+            loadImage = {
+              ClipboardImages.thumbnailAsync(ClipStore(context),entry,480,card=true) { image ->
                 preview.setImageBitmap(image)
                 preview.contentDescription=if(image==null)"图片暂不可用" else "图片 ${entry.imageWidth} × ${entry.imageHeight}"
                 if(image==null)label.text="图片暂不可用" else if(longImage)positionLongImage()
+              }
             }
         } else addView(TextView(context).apply {
             text = entry.text; textSize = if(compact) 15f else 16f

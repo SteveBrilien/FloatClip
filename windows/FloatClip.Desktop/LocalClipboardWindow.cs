@@ -40,7 +40,7 @@ public sealed partial class LocalClipboardWindow:Window
     Dictionary<string,string> categoryColors=new(),categoryIcons=new();
     readonly Dictionary<string,TextBlock> copyBadges=new();
     readonly DispatcherTimer copyFeedbackTimer=new();
-    bool pendingCopyRefresh;
+    bool pendingCopyRefresh,closingForReplacement,backgroundReopenQueued;
     readonly DockPanel root=new();readonly Border undo=new();
     readonly Dictionary<string,Window> auxiliaryWindows=new();
     readonly DispatcherTimer searchTimer=new(){Interval=TimeSpan.FromMilliseconds(120)};
@@ -58,7 +58,6 @@ public sealed partial class LocalClipboardWindow:Window
         viewModel.HistoryChanged+=()=>{deleted=null;Refresh();};
         copyFeedbackTimer.Interval=((Duration)Application.Current.FindResource("FloatClip.Motion.CopyFeedback")).TimeSpan;
         copyFeedbackTimer.Tick+=(_,_)=>{copyFeedbackTimer.Stop();viewModel.ClearCopy();foreach(var badge in copyBadges.Values)badge.Visibility=Visibility.Collapsed;if(pendingCopyRefresh){pendingCopyRefresh=false;Guard(()=>Refresh());}DismissAfterCopy();};
-        Opacity=1;
         Title=floating?"FloatClip · 悬浮剪贴板":"FloatClip · 管理剪贴板";
         Width=floating?520:760;Height=floating?650:760;MinWidth=420;MinHeight=420;
         ShowInTaskbar=!floating;
@@ -93,7 +92,7 @@ public sealed partial class LocalClipboardWindow:Window
         SystemEvents.UserPreferenceChanged+=SystemThemeChanged;
         host.Changed+=HostChanged;
         host.Updates.Changed+=UpdateChanged;
-        Closing+=(_,e)=>{if(!host.IsExiting){e.Cancel=true;host.RememberPlacement();Hide();}};
+        Closing+=(_,e)=>{if(!host.IsExiting&&!closingForReplacement){e.Cancel=true;host.RememberPlacement();Hide();}};
         Closed+=(_,_)=>{host.Changed-=HostChanged;host.Updates.Changed-=UpdateChanged;SystemEvents.UserPreferenceChanged-=SystemThemeChanged;searchTimer.Stop();copyFeedbackTimer.Stop();};
         IsVisibleChanged+=(_,_)=>{if(!IsVisible){copyFeedbackTimer.Stop();viewModel.ClearCopy();pendingCopyRefresh=false;}};
         if(floating) {
@@ -343,26 +342,63 @@ public sealed partial class LocalClipboardWindow:Window
     {
         var block=new TextBlock{Text=label,Margin=margin,TextWrapping=TextWrapping.Wrap};block.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Muted");return block;
     }
+    internal sealed record Presentation(Type Page,string Search,string Source,string Kind,bool Expanded,Rect Bounds,WindowState State,bool Visible,bool Active,bool Topmost,double Scroll);
+    internal Presentation CapturePresentation()
+    {
+        double offset=pages.TryGetValue(currentPage,out var page)&&page is UserControl{Content:ScrollViewer scroll}?scroll.VerticalOffset:0;
+        Rect bounds=WindowState==WindowState.Normal?new Rect(Left,Top,Width,Height):RestoreBounds;
+        return new(currentPage,search.Text,source,kindFilter,expandedNavigation,bounds,WindowState,IsVisible,IsActive,Topmost,offset);
+    }
+    internal void RestorePresentation(Presentation state)
+    {
+        WindowStartupLocation=WindowStartupLocation.Manual;Left=state.Bounds.Left;Top=state.Bounds.Top;Width=state.Bounds.Width;Height=state.Bounds.Height;
+        source=state.Source;kindFilter=state.Kind;expandedNavigation=state.Expanded;UpdateNavigation();search.Text=state.Search;currentPage=state.Page;Topmost=state.Topmost;WindowState=state.State;
+        Loaded+=(_,_)=>Dispatcher.BeginInvoke(new Action(()=>{Navigate(state.Page);if(pages.TryGetValue(state.Page,out var page)&&page is UserControl{Content:ScrollViewer scroll})scroll.ScrollToVerticalOffset(state.Scroll);}));
+    }
+    internal void MoveAuxiliaryWindows(LocalClipboardWindow replacement)
+    {
+        foreach(Window child in OwnedWindows.Cast<Window>().ToArray())child.Owner=replacement;
+        foreach(var pair in auxiliaryWindows){string key=pair.Key;Window child=pair.Value;replacement.auxiliaryWindows[key]=child;child.Closed+=(_,_)=>replacement.auxiliaryWindows.Remove(key);}
+        auxiliaryWindows.Clear();
+    }
+    internal void CloseForReplacement(){closingForReplacement=true;Close();}
+    void ReopenForBackgroundChange()
+    {
+        if(backgroundReopenQueued)return;backgroundReopenQueued=true;
+        Dispatcher.BeginInvoke(new Action(()=>{backgroundReopenQueued=false;if((designPreferences.ClipboardBackground=="transparent")!=AllowsTransparency)Guard(()=>host.RecreatePopup(this));}));
+    }
     public void OpenSettings()=>Navigate(typeof(SettingsPage));
     FrameworkElement BuildSettingsPage()
     {
         var panel=new StackPanel{Margin=(Thickness)Application.Current.FindResource("FloatClip.Padding.Page")};
         panel.Children.Add(new TextBlock{Text="设置",FontSize=DesignTokens.Number("Font.Title"),FontWeight=FontWeights.Medium,Margin=new(0,4,0,16)});
-        panel.Children.Add(MutedLabel("外观",new(0,0,0,8)));var modes=new ComboBox{ItemsSource=new[]{"跟随系统","浅色","深色（Tokyo Night）"},SelectedIndex=mode=="light"?1:mode is "dark" or "tokyo-night"?2:0,MinWidth=132};StyleInput(modes);System.Windows.Automation.AutomationProperties.SetAutomationId(modes,"ThemeMode");modes.SelectionChanged+=(_,_)=>Guard(()=>{mode=modes.SelectedIndex switch{1=>"light",2=>"tokyo-night",_=>"system"};SavePreferences();ApplyPalette();BuildHeader();Refresh();});panel.Children.Add(SettingRow("应用主题","",modes));
+        panel.Children.Add(MutedLabel("外观",new(0,0,0,8)));var modes=new ComboBox{ItemsSource=new[]{"跟随系统","浅色","深色"},SelectedIndex=mode=="light"?1:mode is "dark" or "tokyo-night"?2:0,MinWidth=132};StyleInput(modes);System.Windows.Automation.AutomationProperties.SetAutomationId(modes,"ThemeMode");modes.SelectionChanged+=(_,_)=>Guard(()=>{mode=modes.SelectedIndex switch{1=>"light",2=>"tokyo-night",_=>"system"};SavePreferences();ApplyPalette();BuildHeader();Refresh();});panel.Children.Add(SettingRow("应用主题","",modes));
         void Option(string label,bool selected,Action<bool> change)=>panel.Children.Add(ToggleSetting(label,"",selected,change));
         Option("展开导航文字",expandedNavigation,v=>{expandedNavigation=v;UpdateNavigation();});
         Option("减少动画",designPreferences.ReduceMotion,v=>{designPreferences.ReduceMotion=v;designPreferences.Save(prefsRoot);});
-        var backgroundChoice=new ComboBox{ItemsSource=new[]{"纯色","磨砂","透明（重启应用后生效）"},SelectedIndex=designPreferences.ClipboardBackground=="acrylic"?1:designPreferences.ClipboardBackground=="transparent"?2:0};StyleInput(backgroundChoice);
-        var backgroundHint=MutedLabel("",(Thickness)Application.Current.FindResource("FloatClip.Margin.Top4"));
-        backgroundChoice.SelectionChanged+=(_,_)=>Guard(()=>{designPreferences.ClipboardBackground=backgroundChoice.SelectedIndex switch{1=>"acrylic",2=>"transparent",_=>"solid"};designPreferences.Save(prefsRoot);backgroundHint.Text=ApplyClipboardBackground();});
-        panel.Children.Add(SettingRow("应用背景","适用于剪贴板、文件、设备、设置及辅助窗口",backgroundChoice));panel.Children.Add(backgroundHint);
-        panel.Children.Add(SliderSetting("背景与表面透明度","文字和图标保持完全不透明；卡片与列表随背景一起透出材质",20,100,designPreferences.BackgroundOpacity*100,v=>{designPreferences.BackgroundOpacity=v/100;designPreferences.Save(prefsRoot);ApplyClipboardBackground();},"BackgroundOpacity"));
+        var backgroundChoice=new ComboBox{ItemsSource=new[]{"纯色","磨砂","背景透明","整窗透明"},SelectedIndex=designPreferences.ClipboardBackground switch{"acrylic"=>1,"transparent"=>2,"window"=>3,_=>0},MinWidth=DesignTokens.Number("Setting.ControlWidth")};StyleInput(backgroundChoice);
+        System.Windows.Automation.AutomationProperties.SetAutomationId(backgroundChoice,"BackgroundMode");
+        var backgroundHint=MutedLabel("",(Thickness)Application.Current.FindResource("FloatClip.Margin.Top4"));backgroundHint.Visibility=Visibility.Collapsed;
+        void Status(string value){backgroundHint.Text=value;backgroundHint.Visibility=value.Length==0?Visibility.Collapsed:Visibility.Visible;}
+        var backgroundOpacity=SliderSetting("背景透明度","",20,100,designPreferences.BackgroundOpacity*100,v=>{designPreferences.BackgroundOpacity=v/100;designPreferences.Save(prefsRoot);Status(ApplyClipboardBackground());},"BackgroundOpacity");
+        var windowOpacity=SliderSetting("整窗透明度","",20,100,designPreferences.WindowOpacity*100,v=>{designPreferences.WindowOpacity=v/100;designPreferences.Save(prefsRoot);Status(WindowOpacityService.ApplyAll(designPreferences.WindowOpacity));},"WindowOpacity");
+        void UpdateOpacityControls(){bool whole=designPreferences.ClipboardBackground=="window";backgroundOpacity.Visibility=whole?Visibility.Collapsed:Visibility.Visible;windowOpacity.Visibility=whole?Visibility.Visible:Visibility.Collapsed;}
+        backgroundChoice.SelectionChanged+=(_,_)=>Guard(()=>{
+            string previous=designPreferences.ClipboardBackground;
+            designPreferences.ClipboardBackground=backgroundChoice.SelectedIndex switch{1=>"acrylic",2=>"transparent",3=>"window",_=>"solid"};
+            designPreferences.Save(prefsRoot);UpdateOpacityControls();
+            if((designPreferences.ClipboardBackground=="transparent")!=AllowsTransparency){ReopenForBackgroundChange();return;}
+            Status(ApplyClipboardBackground());
+            if(designPreferences.ClipboardBackground=="window"||previous=="window")Status(WindowOpacityService.ApplyAll(designPreferences.ClipboardBackground=="window"?designPreferences.WindowOpacity:1));
+        });
+        panel.Children.Add(SettingRow("应用背景","",backgroundChoice));panel.Children.Add(backgroundHint);
+        panel.Children.Add(backgroundOpacity);panel.Children.Add(windowOpacity);UpdateOpacityControls();Status(ApplyClipboardBackground());
         Option("设备特征色",sourceColors,v=>sourceColors=v);Option("彩色卡片背景",translucent,v=>translucent=v);
         panel.Children.Add(MutedLabel("分类特征色",(Thickness)Application.Current.FindResource("FloatClip.Margin.Section")));
         categorySettingsModel=new CategorySettingsViewModel(categories,()=>Guard(()=>Refresh()));panel.Children.Add(new CategorySettingsView{DataContext=categorySettingsModel});
-        panel.Children.Add(SliderSetting("文字大小","剪贴板正文",12,18,clipFontSize,v=>clipFontSize=v,"ClipFontSize"));
-        panel.Children.Add(SliderSetting("卡片间距","紧凑或宽松",4,18,cardSpacing,v=>cardSpacing=v,"CardSpacing"));
-        panel.Children.Add(SliderSetting("面板宽度","按屏幕调整",420,900,panelWidth,v=>{panelWidth=v;Width=v;},"PanelWidth"));
+        panel.Children.Add(SliderSetting("文字大小","",12,18,clipFontSize,v=>clipFontSize=v,"ClipFontSize"));
+        panel.Children.Add(SliderSetting("卡片间距","",4,18,cardSpacing,v=>cardSpacing=v,"CardSpacing"));
+        panel.Children.Add(SliderSetting("面板宽度","",420,900,panelWidth,v=>{panelWidth=v;Width=v;},"PanelWidth"));
         panel.Children.Add(MutedLabel("收录与启动",new(0,16,0,8)));
         Option("收录文字和图片",capture,v=>capture=v);
         Option("登录 Windows 时启动",WindowsStartup.Enabled,WindowsStartup.SetEnabled);

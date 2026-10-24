@@ -43,7 +43,7 @@ static class Program
         var bitmap=new RenderTargetBitmap((int)Math.Ceiling(surface.ActualWidth),(int)Math.Ceiling(surface.ActualHeight),96,96,PixelFormats.Pbgra32);bitmap.Render(surface);
         var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));using var file=File.Create(Path.Combine(output,name+".png"));encoder.Save(file);
     }
-    static void CheckFileTransfer(string dataRoot)
+    static void CheckFileTransfer(string dataRoot,string transport="lan",bool catalog=false)
     {
         var listener=new TcpListener(IPAddress.Loopback,0);TcpClient? senderClient=null,receiverClient=null;Session? sender=null,receiver=null;
         try
@@ -51,10 +51,10 @@ static class Program
             listener.Start();senderClient=new TcpClient();
             var connecting=senderClient.ConnectAsync(IPAddress.Loopback,((IPEndPoint)listener.LocalEndpoint).Port);
             receiverClient=listener.AcceptTcpClient();connecting.GetAwaiter().GetResult();
-            sender=new Session(senderClient.GetStream(),()=>senderClient.Dispose(),Path.Combine(dataRoot,"file-send-cache"),true);
-            receiver=new Session(receiverClient.GetStream(),()=>receiverClient.Dispose(),Path.Combine(dataRoot,"file-receive-cache"),true);
+            sender=new Session(senderClient.GetStream(),()=>senderClient.Dispose(),Path.Combine(dataRoot,"file-send-cache"),true,catalog);
+            receiver=new Session(receiverClient.GetStream(),()=>receiverClient.Dispose(),Path.Combine(dataRoot,"file-receive-cache"),true,catalog);
             var outgoing=new DesktopTransfers(_=>"Phone");var incoming=new DesktopTransfers(_=>"Windows");
-            outgoing.Attach("phone",sender,"lan");incoming.Attach("windows",receiver,"lan");sender.Start();receiver.Start();
+            outgoing.Attach("phone",sender,transport);incoming.Attach("windows",receiver,transport);sender.Start();receiver.Start();
             string source=Path.Combine(dataRoot,"loopback-test.pdf");byte[] content=Enumerable.Range(0,96*1024).Select(i=>(byte)((i*31+7)&255)).ToArray();File.WriteAllBytes(source,content);
             Guid id=outgoing.Send("phone",source);var deadline=DateTime.UtcNow.AddSeconds(8);DesktopTransfer? offered=null;
             while(DateTime.UtcNow<deadline){offered=incoming.Snapshot().FirstOrDefault(r=>r.Phase==TransferPhase.Offered);if(offered!=null)break;System.Threading.Thread.Sleep(10);}
@@ -87,7 +87,10 @@ static class Program
         b.Keep(row,true);b.Clear(new[]{row},true,true);Check(b.Snapshot().Length==1&&File.Exists(downloaded),"protected file survives record and cache clearing");
         var restored=new FileCatalog(bRoot,bCache,_=>true,_=>"电脑");Check(restored.Snapshot().Single().Kept&&restored.IsLocal(restored.Snapshot().Single())&&!restored.Snapshot().Single().Online,"file protection and verified cache persist after restart without pretending source online");
         b.Keep(row,false);b.Clear(new[]{row},false,true);Check(!File.Exists(downloaded)&&b.Snapshot().Length==1,"cache clear retains downloadable metadata");
-        string second=b.Download(row).GetAwaiter().GetResult();Check(File.Exists(second),"cleared file can be requested again");
+        row.Online=false;int reconnectRequests=0;
+        b.RequestConnection=peer=>{System.Threading.Interlocked.Increment(ref reconnectRequests);a.Publish();};
+        string second=b.Download(row).GetAwaiter().GetResult();
+        Check(reconnectRequests==1&&File.ReadAllBytes(second).SequenceEqual(bytes),"offline catalog selection requests reconnect and waits for a fresh matching version");Check(File.Exists(second),"cleared file can be requested again");
         a.Store.Remove(source);a.Publish();Check(Wait(()=>!b.Snapshot().Single().Online),"withdrawn file is marked unavailable while existing download remains");
         b.Clear(new[]{row},true,true);Check(b.Snapshot().Length==0&&!File.Exists(second),"unprotected record clear removes only app cache");
         a.Store.Add(source);a.Store.Keep(source,true);Check(!a.Store.Remove(source)&&new FileShelfStore(Path.Combine(aRoot,"file-shelf.json")).Load().Single().Kept,"local shared file protection survives reload and prevents bulk removal");
@@ -108,6 +111,24 @@ static class Program
         ClipboardHost? host=null;
         try
         {
+            if(args.Contains("--opacity-interactive"))
+            {
+                Directory.CreateDirectory(dataRoot);
+                new DesignPreferences{ClipboardBackground="window",WindowOpacity=1}.Save(dataRoot);
+                host=new ClipboardHost(dataRoot,false);host.SetPinned(true);
+                host.Vault.AddText("PowerToys opacity probe · 中文 😀 👩‍💻");
+                host.ShowPopup();var probe=app.Windows.OfType<LocalClipboardWindow>().Single();probe.Title="FloatClip PowerToys probe";
+                File.WriteAllText(Path.Combine(output,"powertoys-probe.json"),JsonSerializer.Serialize(new{pid=Environment.ProcessId,handle=new System.Windows.Interop.WindowInteropHelper(probe).Handle.ToInt64()}));
+                var timeout=new DispatcherTimer{Interval=TimeSpan.FromMinutes(3)};
+                timeout.Tick+=(_,_)=>{timeout.Stop();app.Shutdown();};timeout.Start();
+                app.Run();return 0;
+            }
+            if(args.Contains("--opacity-only"))
+            {
+                WindowOpacityChecks.Run(app,dataRoot,Check,Pump,w=>Call(w,"Refresh",true));
+                File.WriteAllText(Path.Combine(output,"report.json"),JsonSerializer.Serialize(new{result="PASS",checks,isolated=true,userClipboardUntouched=true,utc=DateTime.UtcNow}));
+                return 0;
+            }
             var components=app.Resources.MergedDictionaries.Last();
             foreach(object key in components.Keys)Check(components[key] is Style,"shared style resolves before opening UI: "+key);
             // Synthetic pixels include a semitransparent red pixel to exercise PNG alpha.
@@ -256,10 +277,12 @@ static class Program
             Check(DesktopUpdateInstaller.ApplyInRoot(planPath,Path.Combine(installerRoot,"other"),false)==1,"installer rejects a plan outside its update directory");
             vault.Commit(vault.Load()["revision"]!.GetValue<string>(),demonstration.AsArray());window.GetType().GetField("deleted",BindingFlags.Instance|BindingFlags.NonPublic)!.SetValue(window,null);Call(window,"Refresh",true);
             CheckFileTransfer(dataRoot);
+            CheckFileTransfer(dataRoot,"bluetooth",true);
             CheckFileCatalog(dataRoot);
             NativeSyncChecks.Run(dataRoot,Check);
             DesignChecks.Run(app,window,host,output,Check,Pump);
             ProductFixChecks.Run(dataRoot,Check,Pump,Snapshot);
+            WindowOpacityChecks.Run(app,dataRoot,Check,Pump,w=>Call(w,"Refresh",true));
             Check(host.UiFailureCount==0,"no guarded UI exceptions were hidden during acceptance");
             var acrylicPreferences=new DesignPreferences{ClipboardBackground="acrylic",BackgroundOpacity=.78};
             string materialResult=ClipboardBackgroundService.Apply(window,acrylicPreferences,true);window.FocusSearch();Pump(200);

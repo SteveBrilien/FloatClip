@@ -75,6 +75,10 @@ public final class ShareSession implements AutoCloseable {
         Thread reader=new Thread(this::readLoop,"floatclip-share-reader"); reader.start();
     }
     public boolean isClosed(){return closed.get();}
+    public boolean hasActiveFile(){synchronized(state){return incoming!=null || outgoing!=null;}}
+    public void closeWhenIdle(java.util.concurrent.ScheduledExecutorService scheduler,long delaySeconds){
+        scheduler.schedule(()->{if(isClosed())return;if(hasActiveFile())closeWhenIdle(scheduler,15);else close();},delaySeconds,TimeUnit.SECONDS);
+    }
     public void sendCatalog(byte[] data) throws IOException {if(!catalogEnabled||data.length<2||data.length>MAX_TEXT)throw new IOException("File catalog not negotiated");write(CATALOG,new UUID(0,0),data);}
     private void write(int type,UUID id,byte[] data) throws IOException {
         synchronized(writing) {

@@ -70,14 +70,14 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
         try { persist(listOf(entry)+current) } catch(e:Exception) { images.delete(reference);throw e }
         entry
     }
-    fun readImage(entry:ClipEntry):ByteArray = synchronized(LOCK) {
+    fun readImage(entry:ClipEntry):ByteArray {
         require(entry.kind=="image") { "这条记录不是图片" }
-        images.read(entry.imageRef,entry.imageSha256)
+        return images.read(entry.imageRef,entry.imageSha256)
     }
-    fun readImageReference(reference:String):ByteArray = synchronized(LOCK) {
+    fun readImageReference(reference:String):ByteArray {
         // URI read grants can outlive a history deletion. The authenticated blob stays readable
         // until it is neither the current clipboard nor a history/undo reference and is pruned.
-        images.read(reference)
+        return images.read(reference)
     }
     fun findImage(reference:String):ClipEntry? = synchronized(LOCK) {
         entries().firstOrNull { it.kind=="image" && it.imageRef==reference }

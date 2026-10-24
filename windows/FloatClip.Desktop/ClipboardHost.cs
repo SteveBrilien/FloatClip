@@ -202,6 +202,18 @@ public sealed class ClipboardHost:IDisposable
         popup.Show();PlacePopup();
         if(activate){popup.Activate();popup.FocusSearch();}
     }
+    internal void RecreatePopup(LocalClipboardWindow requested)
+    {
+        if(disposed||!ReferenceEquals(popup,requested))return;
+        var state=requested.CapturePresentation();
+        var replacement=new LocalClipboardWindow(this,true);
+        replacement.RestorePresentation(state);replacement.ShowActivated=false;
+        try{
+            if(state.Visible)replacement.Show();else new WindowInteropHelper(replacement).EnsureHandle();
+            requested.MoveAuxiliaryWindows(replacement);popup=replacement;requested.CloseForReplacement();
+            if(state.Active)replacement.Activate();
+        }catch{replacement.CloseForReplacement();throw;}
+    }
     // Legacy entry points activate the same clipboard surface.
     public void ShowLibrary()=>ShowPopup();
     public void ShowDevices(){ShowPopup();popup?.OpenDevices();}

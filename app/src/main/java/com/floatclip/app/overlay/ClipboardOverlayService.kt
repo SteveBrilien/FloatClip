@@ -863,22 +863,7 @@ class ClipboardOverlayService : Service() {
     }
 
     private fun revealTab(scroll:HorizontalScrollView?, selected:View?) {
-        if(scroll==null||selected==null)return
-        scroll.post {
-            if(scroll.width<=0)return@post
-            val left=scroll.scrollX
-            val right=left+scroll.width
-            when {
-                selected.left>=left+dp(4)&&selected.right<=right-dp(4) -> Unit
-                selected.right>right-dp(4) -> {
-                    val childWidth=(scroll.getChildAt(0)?.width ?: 0)
-                    val target=(selected.left+selected.width/2-scroll.width/2)
-                        .coerceIn(0,(childWidth-scroll.width).coerceAtLeast(0))
-                    scroll.smoothScrollTo(target,0)
-                }
-                else -> scroll.smoothScrollTo((selected.left-dp(8)).coerceAtLeast(0),0)
-            }
-        }
+        if(scroll!=null && selected!=null)com.floatclip.app.ui.TabReveal.reveal(scroll,selected)
     }
 
     private fun renderEntries() {
@@ -912,12 +897,11 @@ class ClipboardOverlayService : Service() {
                 setPadding(dp(10), dp(28), dp(10), dp(28))
             })
         } else {
-            com.floatclip.app.ui.ClipboardLayout.renderAnimated(
+            com.floatclip.app.ui.ClipboardLayout.renderRetained(
                 target,
                 items,
                 overlayPreferences.twoColumnClipboard(),
                 ::createClipRow,
-                overlayPreferences.transitionDurationMs().toLong().coerceIn(140L,320L),
             )
         }
         updateOverlayImageImportAction()
@@ -1031,7 +1015,7 @@ class ClipboardOverlayService : Service() {
         val front=com.floatclip.app.overlay.ui.ClipboardCard(this,entry,palette.isDark,palette.primaryText,palette.rowBackground,true)
         wrapper.contentDescription=entry.text+"，来源："+entry.sourceDeviceName+(if(entry.pinned) "，已置顶" else "")+(if(entry.locked) "，已保护" else "")
 
-        wrapper.bind(
+        if(entry.kind=="image")wrapper.bind(front) else wrapper.bind(
             front,
             EntrySwipeActions(this, entry.pinned, palette.isDark,
                 onPin = { store.togglePinned(entry.id); renderEntries() },

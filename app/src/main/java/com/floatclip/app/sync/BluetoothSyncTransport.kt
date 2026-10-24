@@ -104,7 +104,7 @@ class BluetoothSyncTransport(
         if(closed||!authorized(key)||!canAttach(key)){session.close();return false}
         delegate.attached(session)
         session.start()
-        runCatching{timer.schedule({session.close()},SHORT_SESSION_SECONDS,TimeUnit.SECONDS)}
+        runCatching{session.closeWhenIdle(timer,SHORT_SESSION_SECONDS)}
             .onFailure{session.close()}
         return true
     }

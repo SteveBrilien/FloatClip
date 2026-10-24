@@ -75,7 +75,7 @@ public final class BluetoothSyncHost implements AutoCloseable {
                 public void closed(){sockets.remove(socket);delegate.closed();}
             },true,true);
             delegate.attached(session);events.connected(relation,socket.getRemoteDevice().getAddress(),session);session.start();
-            deadlines.schedule(session::close,180,TimeUnit.SECONDS);handedOff=true;
+            session.closeWhenIdle(deadlines,180);handedOff=true;
         }catch(Exception ignored){}finally{timeout.cancel(false);if(!handedOff){sockets.remove(socket);closeSocket(socket);}}
     }
     private static void closeSocket(BluetoothSocket socket){try{socket.close();}catch(IOException ignored){}}

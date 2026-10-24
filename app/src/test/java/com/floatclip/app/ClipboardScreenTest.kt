@@ -95,6 +95,31 @@ class ClipboardScreenTest {
             assertEquals(1,list.childCount)
         } finally {controller.pause().stop().destroy()}
     }
+    @Test fun selectingSourceRetainsPageAndImagesHaveNoSwipePanels() {
+        val controller=Robolectric.buildActivity(UnifiedActivity::class.java).setup()
+        val activity=controller.get()
+        try {
+            val search=activity.findViewById<EditText>(R.id.clipboard_search)
+            val sources=activity.findViewById<android.widget.LinearLayout>(R.id.clipboard_sources)
+            sources.getChildAt(1).performClick()
+            assertSame(search,activity.findViewById(R.id.clipboard_search))
+            assertSame(sources,activity.findViewById(R.id.clipboard_sources))
+            val entry=ClipEntry(90,"图片",kind="image",imageRef="a".repeat(32),imageSha256="b".repeat(64),imageWidth=1080,imageHeight=2400)
+            val create=MainActivity::class.java.getDeclaredMethod("addHistoryCard",ClipEntry::class.java).apply{isAccessible=true}
+            val row=create.invoke(activity,entry) as ViewGroup
+            assertEquals("image actions belong to the long-press menu",1,row.childCount)
+        } finally {controller.pause().stop().destroy()}
+    }
+    @Test fun tabRevealKeepsLeadingItemsAndCentersOverflowWithoutOverscrolling() {
+        val tabs=com.floatclip.app.ui.TabReveal
+        assertEquals(0,tabs.target(100,60,360,800))
+        assertEquals(0,tabs.target(10,60,360,280))
+        assertEquals(250,tabs.target(400,60,360,800))
+        assertEquals(440,tabs.target(740,60,360,800))
+        val region=com.floatclip.app.clipboard.ClipboardImages.cardRegion(1080,15000)
+        assertEquals(2160,region.height())
+        assertEquals(1080,region.width())
+    }
     @Test fun searchCombinesTrimmedTextCategoryAndSourceWithoutChangingSourceFilter() {
         val entry=ClipEntry(1,"Mixed URL 中文",category="研究",sourceDeviceId="pc-1",sourceDeviceName="实验室电脑")
         assertTrue(ClipboardQuery.matches(entry,"  mixed url  ","pc-1"))

@@ -74,9 +74,19 @@ public sealed partial class LocalClipboardWindow
     FrameworkElement SettingRow(string title,string detail,FrameworkElement control)
     {
         var grid=new Grid();grid.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});grid.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-        var labels=new StackPanel{VerticalAlignment=VerticalAlignment.Center};labels.Children.Add(new System.Windows.Controls.TextBlock{Text=title,FontSize=14,TextWrapping=TextWrapping.Wrap});if(detail.Length>0){var hint=MutedLabel(detail,new(0,4,0,0));hint.FontSize=12;labels.Children.Add(hint);}grid.Children.Add(labels);
-        control.VerticalAlignment=VerticalAlignment.Center;control.Margin=new(16,0,0,0);Grid.SetColumn(control,1);grid.Children.Add(control);
-        return new Border{Child=grid,Style=(Style)Application.Current.FindResource("FloatClip.Setting.Row")};
+        grid.RowDefinitions.Add(new(){Height=GridLength.Auto});grid.RowDefinitions.Add(new(){Height=GridLength.Auto});
+        var labels=new StackPanel{VerticalAlignment=VerticalAlignment.Center};
+        labels.Children.Add(new System.Windows.Controls.TextBlock{Text=title,FontSize=DesignTokens.Number("Font.Body"),TextWrapping=TextWrapping.NoWrap,TextTrimming=TextTrimming.CharacterEllipsis,ToolTip=title});
+        if(detail.Length>0){var hint=MutedLabel(detail,(Thickness)Application.Current.FindResource("FloatClip.Margin.Top4"));hint.FontSize=DesignTokens.Number("Font.Caption");hint.LineHeight=DesignTokens.Number("Setting.DetailLineHeight");hint.MaxHeight=DesignTokens.Number("Setting.DetailMaxHeight");hint.TextTrimming=TextTrimming.CharacterEllipsis;labels.Children.Add(hint);}
+        grid.Children.Add(labels);control.VerticalAlignment=VerticalAlignment.Center;control.HorizontalAlignment=HorizontalAlignment.Right;grid.Children.Add(control);
+        void Arrange(){
+            bool stack=grid.ActualWidth<DesignTokens.Number("Setting.StackWidth");
+            Grid.SetColumn(control,stack?0:1);Grid.SetRow(control,stack?1:0);Grid.SetColumnSpan(control,stack?2:1);Grid.SetColumnSpan(labels,stack?2:1);
+            control.Margin=stack?(Thickness)Application.Current.FindResource("FloatClip.Margin.Top8"):new Thickness(DesignTokens.Number("Space.16"),0,0,0);
+            if(grid.ActualWidth>0)control.MaxWidth=grid.ActualWidth;
+        }
+        grid.SizeChanged+=(_,_)=>Arrange();Arrange();
+        return new Border{Child=grid,Tag="setting-row",Style=(Style)Application.Current.FindResource("FloatClip.Setting.Row")};
     }
     FrameworkElement ToggleSetting(string title,string detail,bool selected,Action<bool> change,string id="")
     {
@@ -85,7 +95,7 @@ public sealed partial class LocalClipboardWindow
     }
     FrameworkElement SliderSetting(string title,string detail,double min,double max,double value,Action<double> change,string id)
     {
-        var panel=new StackPanel{Width=132};var label=MutedLabel(value.ToString("F0"),new(0,0,0,4));label.HorizontalAlignment=HorizontalAlignment.Right;panel.Children.Add(label);
+        var panel=new StackPanel{Width=DesignTokens.Number("Setting.ControlWidth")};var label=MutedLabel(value.ToString("F0"),new(0,0,0,4));label.HorizontalAlignment=HorizontalAlignment.Right;panel.Children.Add(label);
         var slider=new Slider{Minimum=min,Maximum=max,Value=value,TickFrequency=1,IsSnapToTickEnabled=true};System.Windows.Automation.AutomationProperties.SetName(slider,title);System.Windows.Automation.AutomationProperties.SetAutomationId(slider,id);
         slider.ValueChanged+=(_,_)=>Guard(()=>{label.Text=slider.Value.ToString("F0");change(slider.Value);SavePreferences();Refresh();});panel.Children.Add(slider);return SettingRow(title,detail,panel);
     }

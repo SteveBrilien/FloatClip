@@ -65,6 +65,20 @@ object ClipboardLayout {
         }
     }
 
+    /** Reuse unchanged cards and commit filters immediately, without animating every bitmap. */
+    fun renderRetained(target:LinearLayout,entries:List<ClipEntry>,twoColumnImages:Boolean,create:(ClipEntry)->View) {
+        generations[target]=(generations[target]?:0)+1
+        val existing=(0 until target.childCount).map{target.getChildAt(it)}
+        existing.forEach{it.animate().setListener(null).cancel();it.alpha=1f;it.scaleX=1f;it.scaleY=1f;it.translationY=0f}
+        val reusable=existing.mapNotNull{v->signatures[v]?.let{it to v}}.toMap()
+        val ordered=groups(entries,twoColumnImages).map{g->reusable[g.signature]?:createGroup(target,g,twoColumnImages,create)}
+        existing.filter{it !in ordered}.forEach{target.removeView(it)}
+        ordered.forEachIndexed{index,v->
+            if(v.parent!==target)target.addView(v,index,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=(10*target.resources.displayMetrics.density+.5f).toInt()})
+            else if(target.indexOfChild(v)!=index){target.removeView(v);target.addView(v,index)}
+        }
+    }
+
     /**
      * Retain unchanged views, shrink removed rows and slide new rows into position.
      * The footer is added only after the current generation has committed its children.

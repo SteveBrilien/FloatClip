@@ -3,13 +3,13 @@
   "platforms": {
     "android": {
       "version": "0.7.9",
-      "build": 29,
-      "review": "docs/CANDIDATE_079_BUILD29_2026-10-24.md"
+      "build": 31,
+      "review": "docs/TAKEOVER_2026-10-25.md"
     },
     "windows": {
       "version": "0.7.9",
-      "build": 29,
-      "review": "docs/CANDIDATE_079_BUILD29_2026-10-24.md"
+      "build": 34,
+      "review": "docs/TAKEOVER_2026-10-25.md"
     }
   }
 }

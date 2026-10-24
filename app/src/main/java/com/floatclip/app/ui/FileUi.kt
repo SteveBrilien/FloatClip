@@ -13,11 +13,11 @@ object FileUi {
     const val CARD_RADIUS=12
     const val CONTROL_RADIUS=8
     const val HIT=48
-    data class Palette(val page:Int,val surface:Int,val text:Int,val muted:Int,val border:Int,val accent:Int,val selected:Int,val success:Int)
+    data class Palette(val page:Int,val surface:Int,val text:Int,val muted:Int,val border:Int,val accent:Int,val selected:Int,val success:Int,val destructive:Int)
     fun palette(context:Context):Palette {
         val dark=when(OverlayPreferences(context).themeMode().name){"DARK"->true;"LIGHT"->false;else->context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK==Configuration.UI_MODE_NIGHT_YES}
         fun c(light:String,night:String)=Color.parseColor(if(dark)night else light)
-        return Palette(c("#F0F3F8","#1A1B26"),c("#FFFFFF","#24283B"),c("#19283F","#E4E9FF"),c("#596C85","#BBC4E5"),c("#DCE3EF","#414868"),c("#225BC4","#9AB7FF"),c("#EAF0FF","#303C5B"),c("#237858","#7EDDB7"))
+        return Palette(c("#F0F3F8","#1A1B26"),c("#FFFFFF","#24283B"),c("#19283F","#E4E9FF"),c("#596C85","#BBC4E5"),c("#DCE3EF","#414868"),com.floatclip.probe.FloatClipAccent.color(OverlayPreferences(context).accentTheme(),dark),c("#EAF0FF","#303C5B"),c("#237858","#7EDDB7"),c("#B3263B","#FF9BA8"))
     }
     fun shape(context:Context,fill:Int,border:Int=Color.TRANSPARENT,radius:Int=CARD_RADIUS)=GradientDrawable().apply {
         val density=context.resources.displayMetrics.density

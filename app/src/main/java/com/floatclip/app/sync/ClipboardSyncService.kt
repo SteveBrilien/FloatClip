@@ -361,6 +361,16 @@ class ClipboardSyncService: Service() {
         actor.execute{for(host in hosts.values)host.close();hosts.clear();bluetooth?.close();bluetooth=null;if(::engine.isInitialized)runCatching{engine.configure(false,prefs.sending(),prefs.receiving(),prefs.applying())}}
         setStatus("共享已暂停")
     }
+    /** User file requests and a changed local shelf can wake a trusted short connection. */
+    fun requestFileConnection(peer:String?=null) {
+        actor.execute {
+            if(closing || paused || !prefs.enabled())return@execute
+            if(peer!=null && !authorized(peer))return@execute
+            refreshHosts();refreshBluetooth()
+            if(prefs.reconnect())bluetooth?.nudge(peer?.let{setOf(it)})
+        }
+    }
+
     private fun refreshBluetooth(){
         if(closing||paused||!prefs.enabled()||!prefs.reconnect()){
             bluetooth?.close();bluetooth=null;return
@@ -414,7 +424,7 @@ class ClipboardSyncService: Service() {
             override fun attached(session: ShareSession){actor.execute {
                 if(closing||paused||!prefs.enabled()||!authorized(peer)||session.isClosed||(!replaceExisting&&!prefs.reconnect())){session.close();return@execute}
                 val previous=links[peer]
-                if(previous!=null&&!replaceExisting){session.close();return@execute}
+                if(previous!=null&&(!replaceExisting||previous.session.hasActiveFile())){session.close();return@execute}
                 // Publish ownership only after admission. A rejected Bluetooth candidate
                 // must never invalidate callbacks belonging to the existing LAN session.
                 connectionTokens[peer]=token

@@ -29,7 +29,7 @@ object FileRuntime {
     fun get(context:Context):FileRepository=repository?:synchronized(this){repository?:FileRepository(context.applicationContext).also{repository=it}}
 }
 
-/** Only explicitly imported files are advertised. FCP3 and Bluetooth peers never receive catalog frames. */
+/** Only explicitly imported files are advertised over authenticated catalog-capable sessions. */
 class FileRepository(private val context:Context):AutoCloseable {
     private class Pending(val row:SharedFile){val id=UUID.randomUUID();val future=CompletableFuture<File>()}
     private class Link(val session:ShareSession,val allowed:()->Boolean){var pending:Pending?=null;var serving:UUID?=null}
@@ -102,10 +102,32 @@ class FileRepository(private val context:Context):AutoCloseable {
             else->throw IOException("文件清单操作无效")
         }
     }
-    fun download(row:SharedFile):CompletableFuture<File>{local(row)?.let{return CompletableFuture.completedFuture(it)};val link:Link;val pending=Pending(row)
-        synchronized(lock){link=links[row.peer]?:return failure("来源设备离线，请先连接局域网");if(!link.allowed()||!row.online)return failure("设备共享已暂停或文件已撤回");if(link.pending!=null)return failure("请等待该设备当前下载完成");link.pending=pending;row.done=0;row.error=""}
+    fun download(row:SharedFile):CompletableFuture<File> {
+        local(row)?.let{return CompletableFuture.completedFuture(it)}
+        if(row.peer=="local")return failure("本机文件副本不可用，请重新添加")
+        if(synchronized(lock){links[row.peer]?.let{!it.session.isClosed&&it.allowed()&&rows[row.key]?.online==true}!=true}) {
+            val result=CompletableFuture<File>()
+            com.floatclip.app.sync.SyncRuntime.current()?.requestFileConnection(row.peer)
+            val until=System.nanoTime()+TimeUnit.SECONDS.toNanos(25)
+            fun poll() {
+                if(result.isDone)return
+                val current=synchronized(lock){rows[row.key]?.takeIf{it.online&&links[row.peer]?.let{l->!l.session.isClosed&&l.allowed()}==true}}
+                if(current!=null) {
+                    if(current.version!=row.version){result.completeExceptionally(IOException("源文件已变化，请重新选择"));return}
+                    val transfer=downloadConnected(current)
+                    result.whenComplete{_,_->if(result.isCancelled)transfer.cancel(true)}
+                    transfer.whenComplete{file,error->if(error==null)result.complete(file) else result.completeExceptionally(error)}
+                } else if(System.nanoTime()>=until)result.completeExceptionally(IOException("未能连接来源设备，请检查蓝牙或连接同一 Wi-Fi / 热点"))
+                else deadlines.schedule({poll()},200,TimeUnit.MILLISECONDS)
+            }
+            poll();return result
+        }
+        return downloadConnected(row)
+    }
+    private fun downloadConnected(row:SharedFile):CompletableFuture<File>{val link:Link;val pending=Pending(row)
+        synchronized(lock){link=links[row.peer]?:return failure("来源设备连接已结束，请重试");if(!link.allowed()||!row.online)return failure("设备共享已暂停或文件已撤回");if(link.pending!=null)return failure("请等待该设备当前下载完成");link.pending=pending;row.done=0;row.error=""}
         try{send(link,JSONObject().put("op","get").put("id",row.id).put("version",row.version).put("request",pending.id.toString().replace("-","")))}catch(e:Exception){synchronized(lock){link.pending=null};pending.future.completeExceptionally(e)}
-        val timeout=deadlines.schedule({if(!pending.future.isDone){pending.future.completeExceptionally(IOException("下载超时，可重新连接后重试"));link.session.close()}},3,TimeUnit.MINUTES)
+        val timeout=deadlines.schedule({if(!pending.future.isDone){pending.future.completeExceptionally(IOException("下载超时，可重新连接后重试"));link.session.close()}},15,TimeUnit.MINUTES)
         pending.future.whenComplete{_,_->timeout.cancel(false);if(pending.future.isCancelled)link.session.close()};return pending.future
     }
     fun offered(peer:String,offer:ShareWire.Offer):Boolean {
@@ -126,7 +148,7 @@ class FileRepository(private val context:Context):AutoCloseable {
         try{context.contentResolver.openInputStream(uri)?.use{input->temp.outputStream().use{output->val buffer=ByteArray(32768);while(true){val count=input.read(buffer);if(count<0)break;size+=count;check(size<=ShareWire.MAX_FILE){"单个文件最大 64 MiB"};check(sources.listFiles().orEmpty().sumOf{it.length()}<=256L*1024*1024){"共享文件空间已满，请移除不需要的文件"};hash.update(buffer,0,count);output.write(buffer,0,count)}}}?:throw IOException("无法读取所选文件");check(temp.renameTo(destination)){"文件未能保存"}}
         finally{temp.delete()}
         val row=SharedFile("local",id,hash.digest().joinToString(""){"%02x".format(it.toInt()and 255)},name,size,modified,0,System.currentTimeMillis(),source=destination.path,online=true)
-        synchronized(lock){rows[row.key]=row;save()};publish();return row
+        synchronized(lock){rows[row.key]=row;save()};publish();com.floatclip.app.sync.SyncRuntime.current()?.requestFileConnection();return row
     }
     private fun failure(message:String)=CompletableFuture<File>().apply{completeExceptionally(IOException(message))}
     fun keep(row:SharedFile,value:Boolean){synchronized(lock){rows[row.key]?.kept=value;save()};changed()}

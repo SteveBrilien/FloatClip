@@ -93,6 +93,8 @@ public sealed class Session : IDisposable
     public Action<Frame>? Sync;
     public Action<byte[]>? Catalog;
     public bool CatalogEnabled{get;}
+    public bool IsClosed=>Volatile.Read(ref closed)!=0;
+    public bool HasActiveFile{get{lock(state)return incoming!=null||outgoing!=null;}}
     public Session(Stream stream,Action closeSocket,string cache,bool persistent=false,bool catalog=false)
     {
         this.stream=stream; this.closeSocket=closeSocket; this.cache=cache; Directory.CreateDirectory(cache);

@@ -13,6 +13,8 @@
   <Thickness x:Key="FloatClip.Padding.Popup">4</Thickness>
   <Thickness x:Key="FloatClip.Margin.Section">0,16,0,8</Thickness><Thickness x:Key="FloatClip.Margin.Top8">0,8,0,0</Thickness><Thickness x:Key="FloatClip.Margin.Top4">0,4,0,0</Thickness><Thickness x:Key="FloatClip.Margin.End8">0,0,8,0</Thickness><Thickness x:Key="FloatClip.Margin.Bottom12">0,0,0,12</Thickness>
   <sys:Double x:Key="FloatClip.Device.MethodWidth">184</sys:Double>
+  <sys:Double x:Key="FloatClip.Setting.StackWidth">280</sys:Double><sys:Double x:Key="FloatClip.Setting.ControlWidth">132</sys:Double>
+  <sys:Double x:Key="FloatClip.Setting.DetailLineHeight">18</sys:Double><sys:Double x:Key="FloatClip.Setting.DetailMaxHeight">36</sys:Double><sys:Double x:Key="FloatClip.Setting.CompactMaxHeight">104</sys:Double>
   <Duration x:Key="FloatClip.Motion.Press">0:0:0.100</Duration><Duration x:Key="FloatClip.Motion.State">0:0:0.160</Duration><Duration x:Key="FloatClip.Motion.Panel">0:0:0.240</Duration>
   <sys:Double x:Key="FloatClip.Motion.PressScale">0.975</sys:Double><sys:Double x:Key="FloatClip.Motion.HoldMilliseconds">520</sys:Double>
   <sys:Double x:Key="FloatClip.Category.BadgeMaxWidth">96</sys:Double>

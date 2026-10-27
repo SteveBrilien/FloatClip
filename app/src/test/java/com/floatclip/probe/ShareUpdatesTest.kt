@@ -53,4 +53,22 @@ class ShareUpdatesTest {
         for(field in listOf("package","signerSha256","sha256")) {val copy=JSONObject(release.toString());copy.getJSONObject("android").put(field,"wrong");rejected { ShareUpdates.parse(copy,ShareUpdates.Channel.PREVIEW) }}
     }
     @Test fun comparesSemanticVersionsWithoutDowngrade() {assertTrue(ShareUpdates.compareVersion("0.7.1","0.7.7")<0);assertTrue(ShareUpdates.compareVersion("0.7.10","0.7.9")>0);assertEquals(0,ShareUpdates.compareVersion("0.7.7","0.7.7"))}
+    @Test fun reportsBothSourceFailuresAndCancelledCheckDoesNotFetch() {
+        var calls=0
+        try {
+            ShareUpdates.check(fetcher={ calls++;throw ShareUpdates.SourceUnavailable(if(calls==1)"HTTP 503" else "HTTP 504") })
+            fail("offline check claimed success")
+        } catch(error:java.io.IOException) {
+            assertTrue(error.message!!.contains("HTTP 503"));assertTrue(error.message!!.contains("HTTP 504"))
+            assertTrue(error.message!!.contains("公网更新源"));assertTrue(error.message!!.contains("GitHub"))
+        }
+        calls=0
+        val cancellation=ShareUpdates.CheckCancellation();cancellation.cancel()
+        try {
+            ShareUpdates.check(fetcher={ calls++;fixture() },cancellation=cancellation)
+            fail("cancelled request ran")
+        } catch(_:java.util.concurrent.CancellationException) {}
+        assertEquals(0,calls)
+    }
+
 }

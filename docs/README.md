@@ -18,3 +18,5 @@
 [历史首页](archive/README_PRE_078.md)与[历史状态](archive/STATUS_PRE_078.md)收纳了先前互相冲突的首页说明。原来的专题文档链接仍保留，便于追溯既有决策。
 
 - [2026-10-28 更新 build 标识与悬浮窗响应](FEEDBACK_2026-10-28.md)
+
+- [2026-10-28 Android build33 恢复与回归记录](RECOVERY_2026-10-28.md)

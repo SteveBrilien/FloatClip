@@ -12,6 +12,11 @@ class UpdatePreferences(context:Context) {
     fun channel():UpdateChannel = runCatching {
         UpdateChannel.valueOf(prefs.getString("channel",UpdateChannel.PREVIEW.name) ?: UpdateChannel.PREVIEW.name)
     }.getOrDefault(UpdateChannel.PREVIEW)
+    fun lastCheck(channel:UpdateChannel):String = prefs.getString("last_"+channel.name,"")?:""
+    fun saveLastCheck(channel:UpdateChannel,version:String,build:Int) {
+        val time=java.text.SimpleDateFormat("MM-dd HH:mm",java.util.Locale.getDefault()).format(java.util.Date())
+        prefs.edit().putString("last_"+channel.name,"上次成功："+time+" · "+version+" build "+build).apply()
+    }
     fun saveChannel(value:UpdateChannel) {
         check(prefs.edit().putString("channel",value.name).commit()) { "无法保存更新通道" }
     }

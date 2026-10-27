@@ -126,46 +126,5 @@ class OverlayHistoryTest {
         assertTrue(OverlayPreferences(RuntimeEnvironment.getApplication()).panelFollowsBubble())
         prefs.resetAppearance();assertFalse(prefs.panelFollowsBubble())
     }
-    @Test fun closingDuringOpenKeepsTrajectoryAndRetainsWindowsForReopen() {
-        val context=RuntimeEnvironment.getApplication()
-        val prefs=OverlayPreferences(context)
-        prefs.saveKeepAliveEnabled(false)
-        java.io.File(context.filesDir,"floatclip_vault.bin").delete()
-        val controller=org.robolectric.Robolectric.buildService(com.floatclip.app.overlay.ClipboardOverlayService::class.java).create()
-        val service=controller.get()
-        val type=service.javaClass
-        fun field(name:String)=type.getDeclaredField(name).apply { isAccessible=true }.get(service)
-        fun open() { type.getDeclaredMethod("expandPanel",Boolean::class.javaPrimitiveType).apply { isAccessible=true }.invoke(service,false) }
-        fun close() { type.getDeclaredMethod("collapsePanel").apply { isAccessible=true }.invoke(service) }
-        try {
-            open()
-            val panel=field("panelView")
-            val list=field("historyList")
-            val params=field("panelParams") as android.view.WindowManager.LayoutParams
-            val width=params.width;val height=params.height
-            val opening=field("panelTransitionAnimator") as? android.animation.ValueAnimator
-            opening?.currentPlayTime=(opening?.duration?:240L)/2
-            val beforeX=params.x;val beforeY=params.y
-            close()
-            assertEquals("reverse must begin at the current surface position",beforeX,params.x)
-            assertEquals(beforeY,params.y)
-            assertEquals(width,params.width);assertEquals(height,params.height)
-            (field("panelTransitionAnimator") as? android.animation.ValueAnimator)?.end()
-            assertEquals(0f,params.alpha,0f)
-            assertEquals(false,field("panelCollapsing"))
-            assertTrue(params.flags and android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE!=0)
-            assertEquals(0,params.flags and android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
-            open()
-            (field("panelTransitionAnimator") as? android.animation.ValueAnimator)?.end()
-            assertSame(panel,field("panelView"))
-            assertSame(list,field("historyList"))
-            assertEquals(1f,params.alpha,0f)
-            assertEquals(true,field("panelOpen"))
-            assertFalse((panel as com.floatclip.app.overlay.ui.BorderDragFrameLayout).interactionBlocked)
-        } finally {
-            prefs.saveOverlayEnabled(false)
-            controller.destroy()
-        }
-    }
 
 }

@@ -24,31 +24,60 @@ internal object ShareUpdates {
     }
     data class Release(val build:Int,val version:String,val notes:String,val url:String,val sha256:String,val bytes:Long,val packageName:String,val signerSha256:String)
     internal class SourceUnavailable(message:String,cause:Throwable?=null):IOException(message,cause)
-    fun check(channel:Channel=Channel.PREVIEW,fetcher:((String)->ByteArray)?=null):Release {
-        var failure:SourceUnavailable?=null
+    class CheckCancellation {
+        @Volatile private var cancelled=false
+        @Volatile private var active:HttpsURLConnection?=null
+        fun ensureActive() {
+            if(cancelled || Thread.currentThread().isInterrupted)throw java.util.concurrent.CancellationException()
+        }
+        fun attach(connection:HttpsURLConnection) { active=connection;ensureActive() }
+        fun detach(connection:HttpsURLConnection) { if(active===connection)active=null }
+        fun cancel() {
+            cancelled=true
+            active?.let { connection ->
+                Thread({ runCatching { connection.disconnect() } },"FloatClip cancel update").apply { isDaemon=true }.start()
+            }
+        }
+    }
+    fun check(
+        channel:Channel=Channel.PREVIEW,
+        fetcher:((String)->ByteArray)?=null,
+        cancellation:CheckCancellation=CheckCancellation(),
+        onSource:(String)->Unit={},
+    ):Release {
+        val failures=mutableListOf<String>()
         for(source in listOf(channel.feed,FALLBACK_FEED)) {
-            val content=try { (fetcher ?: ::fetch)(source) } catch(error:SourceUnavailable) { failure=error;continue }
-            // A bad signature is a hard failure. Never hide it behind a fallback request.
+            cancellation.ensureActive()
+            val label=if(source==FEED)"公网更新源" else "GitHub 备用源"
+            onSource(label)
+            val content=try { fetcher?.invoke(source) ?: fetch(source,cancellation) }
+                catch(error:SourceUnavailable) { failures+=label+"："+error.message;continue }
+            cancellation.ensureActive()
+            // A bad signature is a hard failure; it must never be hidden by another source.
             return parse(verifySigned(content,channel),channel)
         }
-        throw IOException("所有更新源暂不可用：${failure?.message}",failure)
+        throw IOException("更新源暂不可用：\n"+failures.joinToString("\n"))
     }
-    private fun fetch(source:String):ByteArray {
-        val label=if(source==FEED) "FloatClip 公网更新源" else "GitHub 备用更新源"
+    private fun fetch(source:String,cancellation:CheckCancellation):ByteArray {
         val connection=URL(source).openConnection() as HttpsURLConnection
-        connection.connectTimeout=6000;connection.readTimeout=6000;connection.instanceFollowRedirects=false
+        connection.connectTimeout=4000;connection.readTimeout=4000;connection.instanceFollowRedirects=false
         connection.useCaches=false;connection.setRequestProperty("User-Agent","FloatClip-Android/$VERSION");connection.setRequestProperty("Cache-Control","no-cache")
         try {
-            if(connection.responseCode!=200)throw SourceUnavailable("$label 返回 HTTP ${connection.responseCode}")
+            cancellation.attach(connection)
+            if(connection.responseCode!=200)throw SourceUnavailable("HTTP "+connection.responseCode)
             return connection.inputStream.use { input ->
                 val data=ByteArrayOutputStream();val buffer=ByteArray(8192);var size=input.read(buffer)
-                while(size>=0) { require(data.size()+size<=131072) { "更新信息过大" };data.write(buffer,0,size);size=input.read(buffer) }
+                while(size>=0) {
+                    cancellation.ensureActive()
+                    require(data.size()+size<=131072) { "更新信息过大" }
+                    data.write(buffer,0,size);size=input.read(buffer)
+                }
                 data.toByteArray()
             }
         } catch(error:SourceUnavailable) { throw error }
-        catch(error:java.net.SocketTimeoutException) { throw SourceUnavailable("$label 连接超时",error) }
-        catch(error:IOException) { throw SourceUnavailable("无法连接$label，请检查网络或安全连接后重试",error) }
-        finally { connection.disconnect() }
+        catch(error:java.net.SocketTimeoutException) { cancellation.ensureActive();throw SourceUnavailable("连接超时",error) }
+        catch(error:IOException) { cancellation.ensureActive();throw SourceUnavailable("网络连接失败，请稍后重试",error) }
+        finally { cancellation.detach(connection);connection.disconnect() }
     }
     internal fun verifySigned(data:ByteArray,channel:Channel,now:Long=System.currentTimeMillis()/1000,publicKey:String=UpdateTrust.PUBLIC_KEY):JSONObject {
         require(data.size<=131072) { "更新信息过大" }

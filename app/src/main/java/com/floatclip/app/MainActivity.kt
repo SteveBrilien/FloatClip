@@ -72,6 +72,11 @@ open class MainActivity : Activity() {
     private lateinit var colors: AppColors
     private var searchQuery: String = ""
     private var currentPage: Int = PAGE_CLIPBOARD
+    private var updateCheck:com.floatclip.app.ui.ClientUpdateCheck?=null
+    private var updateDialog:FloatDialog.Handle?=null
+    private var updateStatusText:TextView?=null
+    private var updateSelectedChannel=UpdateChannel.PREVIEW
+    private var firstResume=true
     private var categoryManagement = false
     private var settingsSection = ""
     private var historyCategory: String = ALL_CATEGORY
@@ -97,11 +102,14 @@ open class MainActivity : Activity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        overlayPreferences=OverlayPreferences(this)
+        colors=resolveAppColors()
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(colors.pageBackground))
         super.onCreate(savedInstanceState)
+        applySystemBars()
         val historyFilter=IntentFilter(ClipboardSyncService.HISTORY_CHANGED).apply{addAction(SyncRuntime.STATE_CHANGED)}
         if(android.os.Build.VERSION.SDK_INT>=33)registerReceiver(sharedHistoryChanged,historyFilter,"$packageName.permission.INTERNAL",null,Context.RECEIVER_NOT_EXPORTED)
         else registerReceiver(sharedHistoryChanged,historyFilter,"$packageName.permission.INTERNAL",null)
-        if(SyncPreferences(this).enabled())SyncRuntime.refresh(this)
         IntegrationRegistry.initialize(this)
         categoryStore = CategoryStore(this)
         clipStore = ClipStore(this)
@@ -115,6 +123,9 @@ open class MainActivity : Activity() {
         if(intent?.getStringExtra("floatclip_page")=="clipboard_sync"){currentPage=PAGE_SETTINGS;settingsSection="剪贴板共享"}
         categoryManagement = savedInstanceState?.getBoolean("categoryManagement") ?: false
         render()
+        window.decorView.post {
+            if(!isFinishing && !isDestroyed && SyncPreferences(this).enabled())SyncRuntime.refresh(this)
+        }
         getSystemService(ClipboardManager::class.java).addPrimaryClipChangedListener(clipboardChanged)
     }
 
@@ -147,6 +158,7 @@ open class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if(firstResume) { firstResume=false;return }
         if (::content.isInitialized) {
             if(currentPage==PAGE_CLIPBOARD && currentFocus is EditText && historyList?.isAttachedToWindow==true) refreshHistory() else render()
         }
@@ -162,8 +174,10 @@ open class MainActivity : Activity() {
         return super.dispatchTouchEvent(event)
     }
     override fun onDestroy() {
+        updateCheck?.close();updateCheck=null
+        updateDialog?.dialog?.dismiss();updateDialog=null;updateStatusText=null
         if(::clipStore.isInitialized)clipStore.retainUndoImages(undoOwner,emptyList())
-        unregisterReceiver(sharedHistoryChanged)
+        runCatching { unregisterReceiver(sharedHistoryChanged) }
         getSystemService(ClipboardManager::class.java).removePrimaryClipChangedListener(clipboardChanged)
         super.onDestroy()
     }
@@ -664,7 +678,7 @@ open class MainActivity : Activity() {
                 }
             })
             addView(divider())
-            addView(settingRow("检查更新","","›", R.drawable.ic_update) { checkClientUpdate() })
+            addView(settingRow("检查更新",updatePrefs.lastCheck(updatePrefs.channel()),"›", R.drawable.ic_update) { checkClientUpdate() })
             addView(divider())
             addView(settingRow("关于", "", "›", R.drawable.ic_info) {
                 FloatDialog.show(
@@ -1323,36 +1337,64 @@ open class MainActivity : Activity() {
         sendBroadcast(Intent(ClipboardSyncService.HISTORY_CHANGED).setPackage(packageName),"$packageName.permission.INTERNAL")
     }
     private fun checkClientUpdate() {
-        Toast.makeText(this,"正在检查更新…",Toast.LENGTH_SHORT).show()
-        val selectedChannel=UpdatePreferences(this).channel()
-        val wireChannel=when(selectedChannel) {
+        if(isFinishing || isDestroyed)return
+        val existing=updateCheck
+        if(existing?.state?.phase==com.floatclip.app.ui.ClientUpdateCheck.Phase.CHECKING)return
+        updateSelectedChannel=UpdatePreferences(this).channel()
+        val wireChannel=when(updateSelectedChannel) {
             UpdateChannel.PREVIEW -> com.floatclip.probe.ShareUpdates.Channel.PREVIEW
             UpdateChannel.DEV -> com.floatclip.probe.ShareUpdates.Channel.DEV
         }
-        Thread {
-            val result=runCatching { com.floatclip.probe.ShareUpdates.check(wireChannel) }
-            runOnUiThread {
-                if(isFinishing || isDestroyed) return@runOnUiThread
-                result.onSuccess { release ->
-                    val build=packageManager.getPackageInfo(packageName,0).longVersionCode
-                    val versionOrder=com.floatclip.probe.ShareUpdates.compareVersion(release.version,versionName())
-                    val newer=release.build>build && versionOrder>=0
-                    FloatDialog.show(
-                        this,
-                        if(newer) "发现 ${release.version} · build ${release.build}" else "当前 ${versionName()} · build $build",
-                        if(newer) release.notes else if(versionOrder<0 || release.build<build) "当前为试用版本；"+selectedChannel.label+"通道已发布 ${release.version} · build ${release.build}" else "已是"+selectedChannel.label+"通道最新版本（build $build）",
-                        negative="关闭",
-                        positive=if(newer) "下载" else null,
-                        onPositive=if(newer) { { _ ->
-                            startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(release.url)))
-                            true
-                        } } else null,
-                    )
-                }.onFailure {
-                    FloatDialog.show(this,"检查更新失败",it.message ?: "更新服务暂不可用",negative=null,positive="关闭")
-                }
+        val build=packageManager.getPackageInfo(packageName,0).longVersionCode
+        val progress=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            addView(android.widget.ProgressBar(this@MainActivity,null,android.R.attr.progressBarStyleHorizontal).apply {
+                isIndeterminate=true
+            },LinearLayout.LayoutParams(-1,dp(4)))
+            addView(textView("正在连接更新源…",13f,false,colors.secondaryText).apply {
+                setPadding(0,dp(10),0,0);updateStatusText=this
+            })
+        }
+        updateDialog=FloatDialog.show(this,"检查更新",
+            versionName()+" · build "+build+" · "+updateSelectedChannel.label,
+            custom=progress,negative="取消",positive=null,
+            onNegative={ updateCheck?.cancel() },onCancel={ updateCheck?.cancel() })
+        if(existing==null)updateCheck=com.floatclip.app.ui.ClientUpdateCheck(listener=::updateCheckChanged)
+        updateCheck?.start(wireChannel)
+    }
+
+    private fun updateCheckChanged(state:com.floatclip.app.ui.ClientUpdateCheck.State) {
+        if(isFinishing || isDestroyed)return
+        when(state.phase) {
+            com.floatclip.app.ui.ClientUpdateCheck.Phase.CHECKING -> updateStatusText?.text=state.source
+            com.floatclip.app.ui.ClientUpdateCheck.Phase.SUCCESS -> {
+                updateDialog?.dialog?.dismiss()
+                updateStatusText=null
+                val release=state.release?:return
+                UpdatePreferences(this).saveLastCheck(updateSelectedChannel,release.version,release.build)
+                val build=packageManager.getPackageInfo(packageName,0).longVersionCode
+                val order=com.floatclip.probe.ShareUpdates.compareVersion(release.version,versionName())
+                val newer=release.build>build && order>=0
+                updateDialog=FloatDialog.show(this,
+                    if(newer)"发现 "+release.version+" · build "+release.build else "当前 "+versionName()+" · build "+build,
+                    if(newer)release.notes else if(order<0 || release.build<build)
+                        updateSelectedChannel.label+"通道已发布 "+release.version+" · build "+release.build
+                    else "已是"+updateSelectedChannel.label+"通道最新版本",
+                    negative="关闭",positive=if(newer)"下载" else null,
+                    onPositive=if(newer) { { _ ->
+                        runCatching { startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(release.url))) }
+                            .onFailure { Toast.makeText(this,"无法打开下载地址，请使用系统浏览器",Toast.LENGTH_LONG).show() }.isSuccess
+                    } } else null)
             }
-        }.start()
+            com.floatclip.app.ui.ClientUpdateCheck.Phase.FAILED -> {
+                updateDialog?.dialog?.dismiss();updateStatusText=null
+                val last=UpdatePreferences(this).lastCheck(updateSelectedChannel)
+                updateDialog=FloatDialog.show(this,"检查未完成",
+                    state.message+(if(last.isNotEmpty())"\n\n"+last else ""),
+                    negative="关闭",positive="重试",onPositive={ checkClientUpdate();true })
+            }
+            else -> Unit
+        }
     }
 
     private fun installCategoryDrag(

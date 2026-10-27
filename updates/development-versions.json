@@ -3,8 +3,8 @@
   "platforms": {
     "android": {
       "version": "0.7.9",
-      "build": 32,
-      "review": "docs/FEEDBACK_2026-10-28.md"
+      "build": 33,
+      "review": "docs/RECOVERY_2026-10-28.md"
     },
     "windows": {
       "version": "0.7.9",

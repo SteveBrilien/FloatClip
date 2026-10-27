@@ -797,6 +797,15 @@ open class MainActivity : Activity() {
         sectionTitle("展开面板")
         addCard(
             card().apply {
+                addView(segmentedSetting(
+                    "展开位置",
+                    listOf(0 to "记住位置",1 to "跟随悬浮球"),
+                    if(overlayPreferences.panelFollowsBubble())1 else 0,
+                ) { value ->
+                    overlayPreferences.savePanelFollowsBubble(value==1)
+                    notifyOverlayAppearanceChanged()
+                })
+                addView(divider())
                 addView(
                     sliderSetting(
                         "面板透明度",
@@ -1330,8 +1339,8 @@ open class MainActivity : Activity() {
                     val newer=release.build>build && versionOrder>=0
                     FloatDialog.show(
                         this,
-                        if(newer) "发现 ${release.version}" else "当前版本 ${versionName()}",
-                        if(newer) release.notes else if(versionOrder<0 || release.build<build) "当前为试用版本；"+selectedChannel.label+"通道已发布版本为 "+release.version else "已是"+selectedChannel.label+"通道最新版本（build $build）",
+                        if(newer) "发现 ${release.version} · build ${release.build}" else "当前 ${versionName()} · build $build",
+                        if(newer) release.notes else if(versionOrder<0 || release.build<build) "当前为试用版本；"+selectedChannel.label+"通道已发布 ${release.version} · build ${release.build}" else "已是"+selectedChannel.label+"通道最新版本（build $build）",
                         negative="关闭",
                         positive=if(newer) "下载" else null,
                         onPositive=if(newer) { { _ ->

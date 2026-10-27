@@ -1,4 +1,9 @@
-# FloatClip 当前续接入口（2026-10-25）
+# FloatClip 当前续接入口（2026-10-28）
+
+本轮为 Android build32 / Windows build35 候选，细节见 [更新与悬浮窗反馈](FEEDBACK_2026-10-28.md)。更新原本已按 build 比较，当前补齐显示；正式两个通道与备用源仍为 build29。Android 悬浮面板改后台历史快照、可见行回收、记住/跟随球位置和关联转场。2026-10-28 Remote/正式ADB离线，未替用户安装；Android78项单测/lint0错误、Windows更新47项与交叉编译通过，构建测试证据以该反馈文档为准，不称为真机动画验收。源保留在既有独立工作区分支，原根目录未清理。
+
+## 上轮记录（2026-10-25）
+
 
 当前候选为 Windows build34 / Android build31。先读 [本轮续接](TAKEOVER_2026-10-25.md)：包括上一会话未提交工作与 PowerToys 整窗透明兼容。Windows Remote 和正式 ADB25555 已恢复；Windows build34 / Android build31均已安装，Windows原生225、UpdateChecks45、Android单测71通过。实际PowerToys按键序列未稳定验收；下文build29设备状态是历史记录。候选未更新正式签名feed。
 

@@ -50,6 +50,9 @@ import com.floatclip.app.prefs.CategoryIcons
 import com.floatclip.app.prefs.OverlayPreferences
 import com.floatclip.app.overlay.ui.BorderDragFrameLayout
 import com.floatclip.app.overlay.ui.BubbleMotionController
+import com.floatclip.app.overlay.ui.PanelGeometry
+import com.floatclip.app.ui.ClipboardHistoryList
+import com.floatclip.app.ui.LatestSnapshotLoader
 import com.floatclip.app.overlay.ui.EntrySwipeActions
 import com.floatclip.app.overlay.ui.EntryGestureRow
 import com.floatclip.app.overlay.ui.EntryLockAction
@@ -77,10 +80,18 @@ class ClipboardOverlayService : Service() {
     private var panelScrimParams: WindowManager.LayoutParams? = null
     private var panelPinButton: ImageView? = null
     private var entryActionLayer: View? = null
-    private var listContainer: LinearLayout? = null
+    private var historyList: ClipboardHistoryList? = null
+    private var historySnapshot=emptyList<ClipEntry>()
+    private var historyLoaded=false
+    private val historyWorker=java.util.concurrent.Executors.newSingleThreadExecutor { task ->
+        Thread(task,"FloatClip history").apply { isDaemon=true }
+    }
+    private lateinit var historyLoader:LatestSnapshotLoader<List<ClipEntry>>
+    private var panelContentView:View?=null
+    private var restingPanelX=0
+    private var restingPanelY=0
     private var imageImportButton: View? = null
     private var undoContainer: LinearLayout? = null
-    private var entriesContainer: LinearLayout? = null
     private var categoryBar: LinearLayout? = null
     private var sourceBar: LinearLayout? = null
     private var categoryScrollView: HorizontalScrollView? = null
@@ -137,6 +148,14 @@ class ClipboardOverlayService : Service() {
         else registerReceiver(sharedHistoryChanged,historyFilter,"$packageName.permission.INTERNAL",null)
         windowManager = getSystemService(WindowManager::class.java)
         store = ClipStore(this)
+        historyLoader=LatestSnapshotLoader(historyWorker,java.util.concurrent.Executor { handler.post(it) },{ store.entries() }) { result ->
+            result.onSuccess {
+                historySnapshot=it;historyLoaded=true
+                if(panelOpen && !panelCollapsing) {
+                    renderSourceBar();renderCategoryBar();renderEntries(false)
+                }
+            }
+        }
         clipboard = ClipboardRepository(this)
         categoryStore = CategoryStore(this)
         overlayPreferences = OverlayPreferences(this)
@@ -214,6 +233,8 @@ class ClipboardOverlayService : Service() {
     }
 
     override fun onDestroy() {
+        if(::historyLoader.isInitialized)historyLoader.close()
+        historyWorker.shutdownNow()
         if(::store.isInitialized)store.retainUndoImages(undoOwner,emptyList())
         releaseClipboardFocus()
         clipboardCaptureGeneration++
@@ -221,7 +242,7 @@ class ClipboardOverlayService : Service() {
         bubbleMotion.cancel()
         bubbleMotionAnimator?.cancel()
         bubbleMotionAnimator = null
-        panelTransitionAnimator?.cancel()
+        cancelPanelTransition()
         panelTransitionAnimator = null
         bubbleView?.animate()?.cancel()
         panelView?.animate()?.cancel()
@@ -270,7 +291,7 @@ class ClipboardOverlayService : Service() {
         bubbleMotion.cancel()
         bubbleMotionAnimator?.cancel()
         bubbleMotionAnimator = null
-        panelTransitionAnimator?.cancel()
+        cancelPanelTransition()
         panelTransitionAnimator = null
         bubbleView?.animate()?.cancel()
         panelView?.animate()?.cancel()
@@ -286,9 +307,9 @@ class ClipboardOverlayService : Service() {
         panelScrimParams = null
         panelPinButton = null
         entryActionLayer = null
-        listContainer = null
+        historyList = null
+        panelContentView = null
         undoContainer = null
-        entriesContainer = null
         panelCollapsing = false
         showBubble()
         if (foregroundStarted) getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, createNotification())
@@ -308,9 +329,9 @@ class ClipboardOverlayService : Service() {
             panelScrimParams = null
             panelPinButton = null
             entryActionLayer = null
-            listContainer = null
+            historyList = null
+            panelContentView = null
             undoContainer = null
-            entriesContainer = null
             categoryBar = null
             sourceBar = null
             categoryScrollView = null
@@ -544,6 +565,7 @@ class ClipboardOverlayService : Service() {
             flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         }
         panelParams = params
+        restingPanelX=panelX;restingPanelY=panelY
 
         val panelAlpha = percentAlpha(overlayPreferences.panelAlphaPercent())
         val frost=overlayPreferences.frostStrengthPercent()/100f
@@ -571,7 +593,7 @@ class ClipboardOverlayService : Service() {
         panelSurfaceView = panel
         panelCollapsing = false
 
-        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }.also { panelContentView=it }
         panel.addView(
             content,
             FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT),
@@ -616,24 +638,10 @@ class ClipboardOverlayService : Service() {
         sourceScroll.addView(sourceBar, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42)))
         content.addView(sourceScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(47)))
 
-        val scroll = ScrollView(this).apply {
-            isFillViewport = true
-            overScrollMode = View.OVER_SCROLL_NEVER
-        }
-        listContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(1), 0, dp(4))
-        }.also { outer ->
-            undoContainer=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
-            entriesContainer=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
-            outer.addView(undoContainer,LinearLayout.LayoutParams(-1,-2))
-            outer.addView(entriesContainer,LinearLayout.LayoutParams(-1,-2))
-        }
-        scroll.addView(
-            listContainer,
-            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
-        )
-        content.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        val history=ClipboardHistoryList(this).also { historyList=it }
+        undoContainer=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+        history.attachHeader(undoContainer!!)
+        content.addView(history,LinearLayout.LayoutParams(-1,0,1f))
 
         val categoryScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -686,28 +694,24 @@ class ClipboardOverlayService : Service() {
         val panel = panelView ?: return
         val params = panelParams ?: return
         panelOpen = true
-        panel.interactionBlocked = false
+        panel.interactionBlocked = true
         panel.isEnabled = true
+        cancelPanelTransition()
         panel.animate().cancel()
-        val animations=ValueAnimator.areAnimatorsEnabled()
-        val duration=overlayPreferences.transitionDurationMs().toLong()
-        panel.alpha = if(animations) 0f else 1f
-        panel.scaleX = if(animations) 0.92f else 1f
-        panel.scaleY = if(animations) 0.92f else 1f
-        panel.translationX = 0f
+        val screen=screenSize()
+        val ball=bubbleParams
+        val placed=PanelGeometry.placement(screen.x,screen.y,
+            PanelGeometry.Box(overlayPreferences.panelX(restingPanelX),overlayPreferences.panelY(restingPanelY),params.width,params.height),
+            PanelGeometry.Box(ball?.x?:0,ball?.y?:0,ball?.width?:dp(50),ball?.height?:dp(50)),
+            overlayPreferences.panelFollowsBubble(),dp(8),dp(16))
+        restingPanelX=placed.x;restingPanelY=placed.y
+        params.x=placed.x;params.y=placed.y
         renderSourceBar()
         renderCategoryBar()
+        renderEntries(false)
         renderEntries()
         params.alpha = 1f
         params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-        windowManager.updateViewLayout(panel, params)
-        if(animations) {
-            panel.animate()
-                .alpha(1f).scaleX(1f).scaleY(1f)
-                .setDuration(duration)
-                .setInterpolator(PathInterpolator(0.2f,0.8f,0.2f,1f))
-                .start()
-        }
         panelScrimView?.let { scrim ->
             panelScrimParams?.let {
                 it.alpha = 1f
@@ -716,32 +720,7 @@ class ClipboardOverlayService : Service() {
                 windowManager.updateViewLayout(scrim, it)
             }
         }
-        bubbleView?.let { bubble ->
-            bubble.animate().cancel()
-            bubbleParams?.let {
-                it.alpha = 1f
-                it.flags = it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                windowManager.updateViewLayout(bubble, it)
-            }
-            if(animations) {
-                bubble.alpha=1f; bubble.scaleX=1f; bubble.scaleY=1f
-                bubble.animate().alpha(0f).scaleX(0.76f).scaleY(0.76f)
-                    .setDuration(duration)
-                    .setInterpolator(PathInterpolator(0.2f,0.8f,0.2f,1f))
-                    .withEndAction {
-                        bubbleParams?.let {
-                            it.alpha=0f
-                            windowManager.updateViewLayout(bubble,it)
-                        }
-                    }.start()
-            } else {
-                bubble.alpha=1f; bubble.scaleX=1f; bubble.scaleY=1f
-                bubbleParams?.let {
-                    it.alpha=0f
-                    windowManager.updateViewLayout(bubble,it)
-                }
-            }
-        }
+        animatePanel(opening=true) { panel.interactionBlocked=false }
         if(captureOnOpen)beginClipboardFocus()
     }
 
@@ -820,14 +799,21 @@ class ClipboardOverlayService : Service() {
                     .setDuration((overlayPreferences.transitionDurationMs()*0.6f).toLong().coerceIn(90,260))
                     .setInterpolator(PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
                     .start()
-                if (moved && !cancelled) overlayPreferences.savePanelPosition(windowParams.x, windowParams.y)
+                if (moved && !cancelled) {
+                    restingPanelX=windowParams.x;restingPanelY=windowParams.y
+                    overlayPreferences.savePanelPosition(windowParams.x,windowParams.y)
+                }
             }
         }
     }
 
     private var lastDeletedEntries: List<ClipEntry> = emptyList()
+        set(value) {
+            field=value
+            // Pin undo attachments only when the undo state changes, never during filtering.
+            if(::store.isInitialized)store.retainUndoImages(undoOwner,value)
+        }
     private fun appendUndo(container: LinearLayout) {
-        store.retainUndoImages(undoOwner,lastDeletedEntries)
         if(lastDeletedEntries.isEmpty()) return
         val palette=themeProvider.palette()
         container.addView(TextView(this).apply {
@@ -866,44 +852,30 @@ class ClipboardOverlayService : Service() {
         if(scroll!=null && selected!=null)com.floatclip.app.ui.TabReveal.reveal(scroll,selected)
     }
 
-    private fun renderEntries() {
+    private fun renderEntries(reload:Boolean=true) {
         if (!panelOpen || panelCollapsing) return
+        if(reload) { historyLoader.request();return }
         val undo=undoContainer ?: return
-        val target=entriesContainer ?: return
-        val palette = themeProvider.palette()
-        undo.removeAllViews()
-        appendUndo(undo)
-        val allItems = store.entries()
-        val sourceItems = when {
+        val target=historyList ?: return
+        val palette=themeProvider.palette()
+        undo.removeAllViews();appendUndo(undo)
+        val allItems=historySnapshot
+        val sourceItems=when {
             activeSource.isEmpty() -> allItems
             activeSource==ClipboardSources.IMAGE_SCOPE -> allItems.filter {
                 it.kind=="image" && (overlayPreferences.mergeRemoteImages() || it.sourceDeviceId=="local")
             }
-            else -> allItems.filter { it.sourceDeviceId == activeSource }
+            else -> allItems.filter { it.sourceDeviceId==activeSource }
         }
-        val items = if (activeCategory == ALL_CATEGORY) sourceItems else sourceItems.filter { it.category == activeCategory }
-        if (items.isEmpty()) {
-            com.floatclip.app.ui.ClipboardLayout.clear(target)
-            val sourceName=ClipboardSources.tabs(this,allItems).firstOrNull{it.id==activeSource}?.name
-            target.addView(TextView(this).apply {
-                text = when {
-                    allItems.isEmpty() -> getString(R.string.empty_history_hint)
-                    activeSource.isNotEmpty() -> (sourceName ?: "此设备")+"还没有同步内容"
-                    else -> "这个分类还没有内容"
-                }
-                textSize = 14f
-                gravity = Gravity.CENTER
-                setTextColor(palette.secondaryText)
-                setPadding(dp(10), dp(28), dp(10), dp(28))
-            })
-        } else {
-            com.floatclip.app.ui.ClipboardLayout.renderRetained(
-                target,
-                items,
-                overlayPreferences.twoColumnClipboard(),
-                ::createClipRow,
-            )
+        val items=if(activeCategory==ALL_CATEGORY)sourceItems else sourceItems.filter { it.category==activeCategory }
+        val sourceName=ClipboardSources.tabs(this,allItems).firstOrNull { it.id==activeSource }?.name
+        val hint=when {
+            !historyLoaded -> "正在读取…"
+            allItems.isEmpty() -> getString(R.string.empty_history_hint)
+            activeSource.isNotEmpty() -> (sourceName?:"此设备")+"还没有同步内容"
+            else -> "这个分类还没有内容"
         }
+        target.submit(items,overlayPreferences.twoColumnClipboard(),activeSource+"|"+activeCategory,hint,palette.secondaryText,::createClipRow)
         updateOverlayImageImportAction()
     }
 
@@ -931,13 +903,13 @@ class ClipboardOverlayService : Service() {
             })
         }
         button.visibility=if(visible)View.VISIBLE else View.GONE
-        entriesContainer?.setPadding(0,0,0,if(visible)dp(66) else 0)
+        historyList?.setPadding(0,0,0,if(visible)dp(66) else 0)
     }
 
     private fun renderSourceBar() {
         val bar=sourceBar ?: return
         val palette=themeProvider.palette()
-        val tabs=ClipboardSources.tabs(this,store.entries())
+        val tabs=ClipboardSources.tabs(this,historySnapshot)
         if(activeSource !in tabs.map { it.id })activeSource=""
         bar.removeAllViews()
         var selectedView:View?=null
@@ -958,7 +930,7 @@ class ClipboardOverlayService : Service() {
                     if(activeSource!=source.id){
                         activeSource=source.id
                         activeCategory=ALL_CATEGORY
-                        renderSourceBar();renderCategoryBar();renderEntries()
+                        renderSourceBar();renderCategoryBar();renderEntries(false)
                     }
                 }
             }
@@ -994,7 +966,7 @@ class ClipboardOverlayService : Service() {
                         if (activeCategory != category) {
                             activeCategory = category
                             renderCategoryBar()
-                            renderEntries()
+                            renderEntries(false)
                         }
                     }
                 }
@@ -1335,52 +1307,111 @@ class ClipboardOverlayService : Service() {
         bubbleMotionAnimator?.cancel()
         bubbleMotionAnimator = null
         panel.animate().cancel()
-        listContainer?.let { list ->
-            for (i in 0 until list.childCount) (list.getChildAt(i) as? EntryGestureRow)?.cancelPendingGestures()
-        }
+        historyList?.cancelVisibleGestures()
         dismissEntryActionLayer(animated = false)
-        val animations=ValueAnimator.areAnimatorsEnabled()
-        val duration=overlayPreferences.transitionDurationMs().toLong()
         panelScrimView?.let { scrim ->
             panelScrimParams?.let {
-                it.alpha = 0f
-                it.flags = it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                windowManager.updateViewLayout(scrim, it)
+                it.alpha=0f
+                it.flags=it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                windowManager.updateViewLayout(scrim,it)
             }
         }
-        bubbleView?.let { bubble ->
-            bubble.animate().cancel()
-            bubbleParams?.let {
-                it.alpha = 1f
-                it.flags = it.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-                windowManager.updateViewLayout(bubble, it)
-            }
-            if(animations) {
-                bubble.alpha=0f; bubble.scaleX=0.76f; bubble.scaleY=0.76f
-                bubble.animate().alpha(1f).scaleX(1f).scaleY(1f)
-                    .setDuration(duration)
-                    .setInterpolator(PathInterpolator(0.2f,0.8f,0.2f,1f))
-                    .start()
-            } else {
-                bubble.alpha=1f; bubble.scaleX=1f; bubble.scaleY=1f
-            }
-        }
-        fun finishCollapse() {
+        animatePanel(opening=false) {
             panelParams?.let {
-                it.alpha = 0f
-                it.flags = it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                windowManager.updateViewLayout(panel, it)
+                it.alpha=0f
+                it.flags=it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                windowManager.updateViewLayout(panel,it)
             }
-            panel.alpha=1f;panel.scaleX=1f;panel.scaleY=1f
             panelCollapsing=false
         }
-        if(animations) {
-            panel.animate().alpha(0f).scaleX(0.92f).scaleY(0.92f)
-                .setDuration(duration)
-                .setInterpolator(PathInterpolator(0.2f,0.8f,0.2f,1f))
-                .withEndAction { finishCollapse() }.start()
-        } else finishCollapse()
         // Keep the exact pre-open dock coordinate. Edge-hide runs only after a real ball drag.
+    }
+
+    private fun cancelPanelTransition() {
+        panelTransitionAnimator?.let { it.removeAllListeners();it.cancel() }
+        panelTransitionAnimator=null
+    }
+
+    /** Move the existing surface; do not resize/rebuild the history on every animation frame. */
+    private fun animatePanel(opening:Boolean,onEnd:()->Unit) {
+        val panel=panelView?:return
+        val params=panelParams?:return
+        val bubble=bubbleView
+        val ball=bubbleParams
+        cancelPanelTransition()
+        val box=PanelGeometry.Box(restingPanelX,restingPanelY,params.width,params.height)
+        val anchor=if(ball!=null)PanelGeometry.atBubble(box,PanelGeometry.Box(ball.x,ball.y,ball.width,ball.height))
+            else PanelGeometry.Pose(restingPanelX.toFloat(),restingPanelY.toFloat(),1f,1f)
+        val animations=ValueAnimator.areAnimatorsEnabled()
+        panel.pivotX=params.width/2f;panel.pivotY=params.height/2f
+        val corner=dp(themeProvider.palette().panelCornerRadiusDp).toFloat()
+        val background=panel.background as? GradientDrawable
+        if(opening) {
+            params.x=anchor.x.toInt();params.y=anchor.y.toInt()
+            panel.scaleX=anchor.scaleX;panel.scaleY=anchor.scaleY;panel.alpha=1f
+            panelContentView?.alpha=0f
+            background?.cornerRadii=FloatArray(8) { if(it%2==0)params.width/2f else params.height/2f }
+        }
+        val startX=params.x;val startY=params.y
+        val startScaleX=panel.scaleX;val startScaleY=panel.scaleY
+        val startContent=panelContentView?.alpha?:1f
+        val startRadii=background?.cornerRadii
+        val startCornerX=startRadii?.get(0)?:background?.cornerRadius?:corner
+        val startCornerY=startRadii?.get(1)?:background?.cornerRadius?:corner
+        val startBubbleAlpha=if(ball?.alpha==0f)0f else bubble?.alpha?:0f
+        val end=if(opening)PanelGeometry.Pose(restingPanelX.toFloat(),restingPanelY.toFloat(),1f,1f) else anchor
+        bubble?.animate()?.cancel()
+        if(bubble!=null && ball!=null) {
+            ball.alpha=1f;ball.flags=ball.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            bubble.scaleX=1f;bubble.scaleY=1f
+            bubble.alpha=if(opening)1f else startBubbleAlpha
+            windowManager.updateViewLayout(bubble,ball)
+        }
+        params.flags=params.flags or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        panel.setLayerType(View.LAYER_TYPE_HARDWARE,null)
+        fun frame(f:Float) {
+            params.x=lerp(startX,end.x.toInt(),f);params.y=lerp(startY,end.y.toInt(),f)
+            panel.scaleX=startScaleX+(end.scaleX-startScaleX)*f
+            panel.scaleY=startScaleY+(end.scaleY-startScaleY)*f
+            panelContentView?.alpha=if(opening)((f-.12f)/.60f).coerceIn(0f,1f) else startContent*(1f-f/.65f).coerceIn(0f,1f)
+            background?.cornerRadii=FloatArray(8) { index ->
+                val start=if(index%2==0)startCornerX else startCornerY
+                val endRadius=if(opening)corner else if(index%2==0)params.width/2f else params.height/2f
+                start+(endRadius-start)*f
+            }
+            bubble?.alpha=if(opening)(1f-f/.25f).coerceIn(0f,1f) else startBubbleAlpha+(1f-startBubbleAlpha)*((f-.72f)/.28f).coerceIn(0f,1f)
+            windowManager.updateViewLayout(panel,params)
+        }
+        fun finish() {
+            params.x=restingPanelX;params.y=restingPanelY
+            params.flags=params.flags and WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS.inv()
+            panel.scaleX=1f;panel.scaleY=1f;panel.alpha=1f
+            panelContentView?.alpha=1f;background?.cornerRadius=corner
+            panel.setLayerType(View.LAYER_TYPE_NONE,null)
+            if(bubble!=null && ball!=null) {
+                ball.alpha=if(opening)0f else 1f
+                ball.flags=if(opening)ball.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                    else ball.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                bubble.alpha=1f
+                windowManager.updateViewLayout(bubble,ball)
+            }
+            // Hide before restoring the surface position to avoid a final-frame jump.
+            if(!opening)params.alpha=0f
+            windowManager.updateViewLayout(panel,params)
+            panelTransitionAnimator=null
+            onEnd()
+        }
+        if(!animations) { frame(1f);finish();return }
+        frame(0f)
+        panelTransitionAnimator=ValueAnimator.ofFloat(0f,1f).apply {
+            duration=overlayPreferences.transitionDurationMs().toLong()
+            interpolator=PathInterpolator(.2f,.8f,.2f,1f)
+            addUpdateListener { frame(it.animatedValue as Float) }
+            addListener(object:AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation:Animator) { finish() }
+            })
+            start()
+        }
     }
 
     private fun createNotification(): Notification {

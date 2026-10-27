@@ -1,0 +1,23 @@
+{
+  "android": {
+    "build": 32,
+    "tests": 78,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "source": "app/build/test-results/testDebugUnitTest",
+    "signerSha256": "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c",
+    "bytes": 4211024,
+    "sha256": "9d3fa15fc7d3c4eeb0aae26356618ccaaeab225ed2a71f5fab9905b5ab3c8cab"
+  },
+  "windows": {
+    "build": 35,
+    "updateChecks": 47,
+    "crossCompilation": "0 warnings / 0 errors",
+    "sha256": "330acfc50c62e31829ddd8be5fe073e0a29c92f40ab8db5e79186d1f46665197",
+    "bytes": 78903655
+  },
+  "realDeviceAnimationVerified": false,
+  "nativeWindowsUiThisRound": false,
+  "productionFeedsUpdated": false
+}

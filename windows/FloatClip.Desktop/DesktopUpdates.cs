@@ -51,8 +51,8 @@ public sealed class DesktopUpdates:IDisposable
         try {
             var release=await check(lifetime.Token);int comparison=ShareUpdates.Compare(release);
             bool notice=manual||release.Build!=preferences.SkippedBuild;
-            Publish(comparison>0?new(UpdatePhase.Available,release,"发现新版本 "+release.Version,Notice:notice):comparison<0?
-                new(UpdatePhase.Ahead,release,"当前为预览版本；发布源仍为 "+release.Version):new(UpdatePhase.Current,release,"已是最新版本 "+ShareUpdates.Version));
+            Publish(comparison>0?new(UpdatePhase.Available,release,"发现新版本 "+release.Version+" · build "+release.Build,Notice:notice):comparison<0?
+                new(UpdatePhase.Ahead,release,"当前为预览版本；发布源为 "+release.Version+" · build "+release.Build):new(UpdatePhase.Current,release,"已是最新版本 "+ShareUpdates.Version+" · build "+ShareUpdates.Build));
         }catch(OperationCanceledException)when(lifetime.IsCancellationRequested){}
         catch(Exception e){Publish(new(UpdatePhase.Failed,null,e is IOException?e.Message:"暂时无法连接更新源，请稍后重试",Notice:manual));}
     }

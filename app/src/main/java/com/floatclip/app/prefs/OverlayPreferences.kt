@@ -46,6 +46,8 @@ class OverlayPreferences(context: Context) {
     fun transitionDurationMs(): Int = prefs.getInt(KEY_TRANSITION_DURATION_MS, DEFAULT_TRANSITION_DURATION_MS).coerceIn(120, 480)
     fun switchAnimationMs(): Int = prefs.getInt(KEY_SWITCH_ANIMATION_MS, DEFAULT_SWITCH_ANIMATION_MS).coerceIn(80, 300)
     fun detailedNotification(): Boolean = prefs.getBoolean(KEY_DETAILED_NOTIFICATION, false)
+    fun panelFollowsBubble(): Boolean = prefs.getBoolean(KEY_PANEL_FOLLOWS_BUBBLE, false)
+    fun savePanelFollowsBubble(value:Boolean) { prefs.edit().putBoolean(KEY_PANEL_FOLLOWS_BUBBLE,value).apply() }
     fun panelX(defaultValue: Int): Int = prefs.getInt(KEY_PANEL_X, defaultValue)
     fun panelY(defaultValue: Int): Int = prefs.getInt(KEY_PANEL_Y, defaultValue)
 
@@ -138,6 +140,7 @@ class OverlayPreferences(context: Context) {
             .remove(KEY_PANEL_PRESS_SCALE_PERCENT)
             .remove(KEY_TRANSITION_DURATION_MS)
             .remove(KEY_SWITCH_ANIMATION_MS)
+            .remove(KEY_PANEL_FOLLOWS_BUBBLE)
             .remove(KEY_PANEL_X)
             .remove(KEY_PANEL_Y)
             .remove(KEY_THEME_MODE)
@@ -189,6 +192,7 @@ class OverlayPreferences(context: Context) {
         private const val KEY_TRANSITION_DURATION_MS = "transition_duration_ms"
         private const val KEY_SWITCH_ANIMATION_MS = "switch_animation_ms"
         private const val KEY_DETAILED_NOTIFICATION = "detailed_notification"
+        private const val KEY_PANEL_FOLLOWS_BUBBLE = "panel_follows_bubble"
         private const val KEY_PANEL_X = "panel_x"
         private const val KEY_PANEL_Y = "panel_y"
         private const val KEY_THEME_MODE = "theme_mode"

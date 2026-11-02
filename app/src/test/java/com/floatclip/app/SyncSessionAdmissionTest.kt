@@ -124,4 +124,33 @@ class SyncSessionAdmissionTest {
             admitted.close(); transport.close()
         }
     }
+
+    @Test fun independentDevicesStayConnectedUntilExplicitConnectionPause() {
+        val context=RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("floatclip_sync",Context.MODE_PRIVATE).edit().clear().commit()
+        val prefs=SyncPreferences(context).apply { save(enabled=true) }
+        val trust=context.getSharedPreferences("share-pairs",Context.MODE_PRIVATE)
+        val keys=listOf("a".repeat(64),"b".repeat(64))
+        trust.edit().clear().putBoolean("peer-"+keys[0],true).putBoolean("peer-"+keys[1],true).commit()
+        val service=Robolectric.buildService(ClipboardSyncService::class.java).get()
+        val actor=get(service,"actor") as ScheduledExecutorService
+        val engine=ClipboardSync(ClipboardSync.Device(UUID.randomUUID(),"test","android"),object:ClipboardSync.Storage {
+            override fun load():ByteArray?=null
+            override fun save(bytes:ByteArray)=Unit
+        },object:ClipboardSync.Events {
+            override fun send(peer:String,frame:ShareWire.Frame)=Unit
+            override fun history(entry:ClipboardSync.Entry)=Unit
+            override fun apply(entry:ClipboardSync.Entry)=Unit
+        })
+        set(service,"prefs",prefs);set(service,"trust",trust);set(service,"engine",engine)
+        val sessions=keys.map { key -> val callbacks=events(service,key,true); session(context,callbacks).also { callbacks.attached(it) } }
+        fun drain(){actor.submit {}.get(3,TimeUnit.SECONDS)}
+        try {
+            drain();assertEquals(2,service.connectedCount);assertTrue(sessions.none { it.isClosed })
+            service.pauseConnections();drain()
+            assertEquals(0,service.connectedCount);assertTrue(sessions.all { it.isClosed })
+            assertTrue(prefs.enabled());assertTrue(prefs.connectionsPaused())
+            assertTrue(keys.all { trust.getBoolean("peer-"+it,false) })
+        } finally { set(service,"closing",true);sessions.forEach { it.close() };actor.shutdownNow() }
+    }
 }

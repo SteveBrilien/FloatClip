@@ -80,11 +80,13 @@ class ClipboardScreenTest {
             MainActivity::class.java.getDeclaredField("clipStore").apply{isAccessible=true}.set(activity,store)
             MainActivity::class.java.getDeclaredField("sourceFilter").apply{isAccessible=true}.set(activity,com.floatclip.app.clipboard.ClipboardSources.IMAGE_SCOPE)
             MainActivity::class.java.getDeclaredMethod("render").apply{isAccessible=true}.invoke(activity)
-            val list=activity.findViewById<android.widget.LinearLayout>(R.id.clipboard_list)
-            val card=list.getChildAt(0)
+            val list=activity.findViewById<com.floatclip.app.ui.ClipboardHistoryList>(R.id.clipboard_list)
+            list.measure(View.MeasureSpec.makeMeasureSpec(360,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(440,View.MeasureSpec.EXACTLY))
+            list.layout(0,0,360,440)
+            val card=list.getChildAt(list.childCount-1)
             val receiver=MainActivity::class.java.getDeclaredField("sharedHistoryChanged").apply{isAccessible=true}.get(activity) as android.content.BroadcastReceiver
             repeat(4){receiver.onReceive(activity,android.content.Intent(com.floatclip.app.sync.SyncRuntime.STATE_CHANGED))}
-            assertSame("a connection heartbeat must not recreate the image card",card,list.getChildAt(0))
+            assertSame("a connection heartbeat must not recreate the image card",card,list.getChildAt(list.childCount-1))
             val button=activity.findViewById<View>(R.id.clipboard_image_import)
             assertEquals(View.VISIBLE,button.visibility)
             assertTrue(button.parent is android.widget.FrameLayout)
@@ -92,7 +94,9 @@ class ClipboardScreenTest {
             val params=button.layoutParams as android.widget.FrameLayout.LayoutParams
             assertEquals(android.view.Gravity.BOTTOM or android.view.Gravity.END,params.gravity)
             assertTrue(params.bottomMargin>0)
-            assertEquals(1,list.childCount)
+            assertEquals(2,list.count) // empty header + one data row
+            var ancestor=list.parent
+            while(ancestor is View) { assertFalse("virtual history must not be nested in an unbounded ScrollView",ancestor is android.widget.ScrollView);ancestor=ancestor.parent }
         } finally {controller.pause().stop().destroy()}
     }
     @Test fun selectingSourceRetainsPageAndImagesHaveNoSwipePanels() {

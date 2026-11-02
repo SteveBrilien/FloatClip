@@ -58,6 +58,7 @@ import android.content.IntentFilter
 import com.floatclip.app.sync.SyncPreferences
 import com.floatclip.app.sync.SyncRuntime
 import com.floatclip.app.sync.ClipboardSyncService
+import com.floatclip.app.ui.ClientUpdateInstaller
 import com.floatclip.app.ui.FluentSwitch
 import com.floatclip.app.ui.FloatDialog
 import com.floatclip.probe.FloatClipAccent
@@ -75,16 +76,20 @@ open class MainActivity : Activity() {
     private var updateCheck:com.floatclip.app.ui.ClientUpdateCheck?=null
     private var updateDialog:FloatDialog.Handle?=null
     private var updateStatusText:TextView?=null
+    private var updateDownloadProgress:android.widget.ProgressBar?=null
+    private var updateAwaitingInstallPermission=false
+    private val updateInstaller by lazy(LazyThreadSafetyMode.NONE){ClientUpdateInstaller(this)}
+    private var silentUpdateCheck=false
     private var updateSelectedChannel=UpdateChannel.PREVIEW
     private var firstResume=true
     private var categoryManagement = false
     private var settingsSection = ""
     private var historyCategory: String = ALL_CATEGORY
     private var sourceFilter = ""
-    private var historyList: LinearLayout? = null
+    private var historyList: com.floatclip.app.ui.ClipboardHistoryList? = null
     private var viewport: FrameLayout? = null
     private var imageImportButton: View? = null
-    private var renderedHistoryTarget: LinearLayout? = null
+    private var renderedHistoryTarget: com.floatclip.app.ui.ClipboardHistoryList? = null
     private var renderedHistoryEntries: List<ClipEntry>? = null
     private var renderedHistoryOptions: List<Any>? = null
     private var undoEntries: List<ClipEntry> = emptyList()
@@ -120,6 +125,7 @@ open class MainActivity : Activity() {
         searchQuery = savedInstanceState?.getString("searchQuery").orEmpty()
         sourceFilter = savedInstanceState?.getString("sourceFilter").orEmpty()
         settingsSection = savedInstanceState?.getString("settingsSection").orEmpty()
+        if(intent?.getBooleanExtra("floatclip_update",false)==true)window.decorView.post { checkClientUpdate() }
         if(intent?.getStringExtra("floatclip_page")=="clipboard_sync"){currentPage=PAGE_SETTINGS;settingsSection="剪贴板共享"}
         categoryManagement = savedInstanceState?.getBoolean("categoryManagement") ?: false
         render()
@@ -127,6 +133,9 @@ open class MainActivity : Activity() {
             if(!isFinishing && !isDestroyed && SyncPreferences(this).enabled())SyncRuntime.refresh(this)
         }
         getSystemService(ClipboardManager::class.java).addPrimaryClipChangedListener(clipboardChanged)
+        if(savedInstanceState==null && UpdatePreferences(this).checkOnLaunch())window.decorView.postDelayed({
+            if(!isFinishing && !isDestroyed)checkClientUpdate(silent=true)
+        },1200)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -150,6 +159,7 @@ open class MainActivity : Activity() {
 
     override fun onNewIntent(intent:Intent) {
         super.onNewIntent(intent);setIntent(intent)
+        if(intent.getBooleanExtra("floatclip_update",false))checkClientUpdate()
         if(intent.getStringExtra("floatclip_page")=="clipboard_sync") {
             currentPage=PAGE_SETTINGS;settingsSection="剪贴板共享"
             if(::content.isInitialized)render()
@@ -158,6 +168,15 @@ open class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if(updateAwaitingInstallPermission){
+            updateAwaitingInstallPermission=false
+            when(updateInstaller.installPending(requestPermission=false)){
+                ClientUpdateInstaller.InstallResult.STARTED -> Unit
+                ClientUpdateInstaller.InstallResult.PERMISSION_REQUIRED -> Toast.makeText(this,"未允许 FloatClip 安装更新，可在“检查更新”中再次安装",Toast.LENGTH_LONG).show()
+                ClientUpdateInstaller.InstallResult.FAILED -> Toast.makeText(this,"无法打开系统安装器，请稍后重试",Toast.LENGTH_LONG).show()
+                else -> Unit
+            }
+        }
         if(firstResume) { firstResume=false;return }
         if (::content.isInitialized) {
             if(currentPage==PAGE_CLIPBOARD && currentFocus is EditText && historyList?.isAttachedToWindow==true) refreshHistory() else render()
@@ -174,8 +193,10 @@ open class MainActivity : Activity() {
         return super.dispatchTouchEvent(event)
     }
     override fun onDestroy() {
+        prefetchTask?.let(prefetchHandler::removeCallbacks)
         updateCheck?.close();updateCheck=null
-        updateDialog?.dialog?.dismiss();updateDialog=null;updateStatusText=null
+        updateInstaller.close()
+        updateDialog?.dialog?.dismiss();updateDialog=null;updateStatusText=null;updateDownloadProgress=null
         if(::clipStore.isInitialized)clipStore.retainUndoImages(undoOwner,emptyList())
         runCatching { unregisterReceiver(sharedHistoryChanged) }
         getSystemService(ClipboardManager::class.java).removePrimaryClipChangedListener(clipboardChanged)
@@ -268,7 +289,10 @@ open class MainActivity : Activity() {
             content,
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
         )
-        root.addView(scroll, FrameLayout.LayoutParams(-1,-1))
+        if(currentPage==PAGE_CLIPBOARD && !categoryManagement) {
+            scroll.removeView(content)
+            root.addView(content,FrameLayout.LayoutParams(-1,-1))
+        } else root.addView(scroll, FrameLayout.LayoutParams(-1,-1))
         root.isFocusableInTouchMode=true
         setContentView(root)
 
@@ -516,8 +540,10 @@ open class MainActivity : Activity() {
         selectedSourceView?.let { selected -> filterScroll.post { revealSourceTab(filterScroll,selected) } }
         undoBar=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL; visibility=View.GONE }
         content.addView(undoBar)
-        historyList=LinearLayout(this).apply { id=R.id.clipboard_list; orientation=LinearLayout.VERTICAL }
-        content.addView(historyList)
+        historyList=com.floatclip.app.ui.ClipboardHistoryList(this).apply {
+            id=R.id.clipboard_list;attachHeader(LinearLayout(this@MainActivity))
+        }
+        content.addView(historyList,LinearLayout.LayoutParams(-1,0,1f))
         refreshHistory(); showUndo()
     }
 
@@ -562,19 +588,29 @@ open class MainActivity : Activity() {
                     else -> true
                 }
             }
-            .filter { historyCategory==ALL_CATEGORY || it.category==historyCategory }.take(100)
+            .filter { historyCategory==ALL_CATEGORY || it.category==historyCategory }
         val options=listOf(sourceFilter,searchQuery,historyCategory,mergeRemoteImages,overlayPreferences.twoColumnClipboard())
         // Connection heartbeats do not change clipboard content. Keep card instances and
         // decoded images instead of briefly clearing them on every state broadcast.
         if(renderedHistoryTarget===target&&renderedHistoryEntries==visibleHistory&&renderedHistoryOptions==options)return
         renderedHistoryTarget=target;renderedHistoryEntries=visibleHistory;renderedHistoryOptions=options
-        if (visibleHistory.isEmpty()) {
-            com.floatclip.app.ui.ClipboardLayout.clear(target)
-            target.addView(textView(if(searchQuery.isEmpty()) "这里还没有记录" else "没有匹配的记录",15f,false,colors.secondaryText).apply { gravity=Gravity.CENTER; setPadding(0,dp(28),0,dp(20)) })
-            if(searchQuery.isEmpty() && sourceFilter.isEmpty()) target.addView(compactTextAction("收录当前剪贴板") { captureCurrentClipboard();refreshHistory() })
-        } else {
-            com.floatclip.app.ui.ClipboardLayout.renderRetained(target, visibleHistory, overlayPreferences.twoColumnClipboard(), ::addHistoryCard)
-        }
+        target.submit(visibleHistory,overlayPreferences.twoColumnClipboard(),options.joinToString("|"),
+            if(searchQuery.isEmpty())"这里还没有记录" else "没有匹配的记录",colors.secondaryText,::addHistoryCard)
+        scheduleHistoryPrefetch(clipStore.entries(),sourceFilter)
+
+    }
+
+    private val prefetchHandler=android.os.Handler(android.os.Looper.getMainLooper())
+    private var prefetchTask:Runnable?=null
+    private fun scheduleHistoryPrefetch(entries:List<ClipEntry>,source:String) {
+        prefetchTask?.let(prefetchHandler::removeCallbacks)
+        prefetchTask=Runnable {
+            if(isDestroyed)return@Runnable
+            val tabs=ClipboardSources.tabs(this,entries)
+            val next=tabs.getOrNull((tabs.indexOfFirst { it.id==source }+1)%tabs.size.coerceAtLeast(1))?.id?:return@Runnable
+            entries.asSequence().filter { it.kind=="image" && (next==ClipboardSources.IMAGE_SCOPE || next.isEmpty() || it.sourceDeviceId==next) }
+                .take(3).forEach { ClipboardImages.prefetch(clipStore,it) }
+        }.also { prefetchHandler.postDelayed(it,200) }
     }
 
     private fun renderPermissionGuide() {
@@ -650,7 +686,7 @@ open class MainActivity : Activity() {
             addView(divider())
             addView(settingRow("设备特征色","",if(overlayPreferences.sourceColors()) "已开启" else "已关闭") { overlayPreferences.saveSourceColors(!overlayPreferences.sourceColors());render();notifyOverlayAppearanceChanged() })
             addView(divider())
-            addView(settingRow("半透明色块","",if(overlayPreferences.translucentCards()) "已开启" else "已关闭") { overlayPreferences.saveTranslucentCards(!overlayPreferences.translucentCards());render();notifyOverlayAppearanceChanged() })
+            addView(settingRow("卡片来源底色","",if(overlayPreferences.translucentCards()) "已开启" else "已关闭") { overlayPreferences.saveTranslucentCards(!overlayPreferences.translucentCards());render();notifyOverlayAppearanceChanged() })
         })
         spacer(12)
         addCard(card().apply {
@@ -676,6 +712,13 @@ open class MainActivity : Activity() {
                     updatePrefs.saveChannel(values[index])
                     render()
                 }
+            })
+            addView(divider())
+            addView(settingRow("启动时检查更新","",if(updatePrefs.checkOnLaunch())"已开启" else "已关闭") {
+                val enabled=!updatePrefs.checkOnLaunch();updatePrefs.saveCheckOnLaunch(enabled)
+                if(enabled && android.os.Build.VERSION.SDK_INT>=33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)
+                    requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),638)
+                render()
             })
             addView(divider())
             addView(settingRow("检查更新",updatePrefs.lastCheck(updatePrefs.channel()),"›", R.drawable.ic_update) { checkClientUpdate() })
@@ -709,8 +752,24 @@ open class MainActivity : Activity() {
             toggle("接收文字到历史",prefs.receiving()){prefs.save(receiving=!prefs.receiving())}
             toggle("接收后写入系统剪贴板",prefs.applying()){prefs.save(applying=!prefs.applying())}
         })
-        SyncRuntime.current()?.peers()?.forEach {peer ->
-            spacer(12);addCard(card().apply {addView(settingRow(peer.device.name,"",if(peer.enabled)"共享中" else "已暂停"){SyncRuntime.current()?.peerEnabled(peer.key,!peer.enabled);window.decorView.postDelayed({render()},120)})})
+        val activePeers=SyncRuntime.current()?.peers().orEmpty().associateBy{it.key}
+        val trustedPeers=runCatching{com.floatclip.app.sync.TrustedPeerStore(this).peers()}.getOrDefault(emptyList())
+        val peerGroups=trustedPeers.groupBy { saved -> saved.deviceId?.toString() ?: activePeers[saved.key]?.device?.id?.toString() ?: "relation:"+saved.key }
+        peerGroups.values.forEach { group ->
+            val active=group.mapNotNull{activePeers[it.key]}
+            val name=active.map{it.device.name}.firstOrNull{it.isNotBlank()&&!it.equals("unknown device",true)&&!it.equals("unknown",true)&&it!="未知设备"}
+                ?:group.mapNotNull{it.name}.firstOrNull{it.isNotBlank()&&!it.equals("unknown device",true)&&!it.equals("unknown",true)&&it!="未知设备"}
+                ?:"已授权设备 · "+group.first().key.take(8)
+            val enabled=active.isEmpty()||active.all{it.enabled}
+            val status=when { active.isEmpty()->"已授权 · 未连接";active.any{it.enabled}->"共享中";else->"已暂停" }
+            val hint=if(group.size>1)"蓝牙/局域网已合并 · ${group.size} 个连接凭据" else ""
+            spacer(12);addCard(card().apply {addView(settingRow(name,hint,status) {
+                if(active.isNotEmpty()) {
+                    val next=!enabled
+                    active.forEach{SyncRuntime.current()?.peerEnabled(it.key,next)}
+                } else SyncRuntime.refresh(this@MainActivity)
+                window.decorView.postDelayed({render()},180)
+            })})
         }
         spacer(12)
         addCard(card().apply {addView(textView(SyncRuntime.current()?.status?:"共享关闭时保留配对授权",14f,false,colors.secondaryText));addView(textView(if(SyncRuntime.current()?.backgroundCaptureConnected==true)"ADB 后台采集已连接；离开 App 后的新复制也可同步。" else if(prefs.backgroundCapture())"后台采集增强等待 ADB 激活；手机重启后需要重新激活。" else "普通模式在打开 App 或悬浮剪贴板时读取；可选择 ADB 增强后台采集。",13f,false,colors.secondaryText))})
@@ -820,9 +879,18 @@ open class MainActivity : Activity() {
                     notifyOverlayAppearanceChanged()
                 })
                 addView(divider())
+                val modes=listOf("solid" to "纯色","transparent" to "背景透明","frost" to "雾化","window" to "整窗透明")
+                addView(settingRow("背景模式","",modes.first { it.first==overlayPreferences.backgroundMode() }.second) {
+                    FloatDialog.choices(this@MainActivity,"背景模式",modes.map { it.second },modes.indexOfFirst{it.first==overlayPreferences.backgroundMode()}) { index ->
+                        overlayPreferences.saveBackgroundMode(modes[index].first);notifyOverlayAppearanceChanged();render()
+                    }
+                })
+                if(overlayPreferences.backgroundMode()=="window")addView(sliderSetting("整窗不透明度",20,100,overlayPreferences.windowAlphaPercent(),"%") {
+                    overlayPreferences.saveWindowAlphaPercent(it);notifyOverlayAppearanceChanged()
+                })
                 addView(
-                    sliderSetting(
-                        "面板透明度",
+                    surfaceSliderSetting(
+                        "面板不透明度",
                         45,
                         100,
                         overlayPreferences.panelAlphaPercent(),
@@ -831,8 +899,8 @@ open class MainActivity : Activity() {
                 )
                 addView(divider())
                 addView(
-                    sliderSetting(
-                        "区块透明度",
+                    surfaceSliderSetting(
+                        "卡片不透明度",
                         45,
                         100,
                         overlayPreferences.cardAlphaPercent(),
@@ -841,7 +909,7 @@ open class MainActivity : Activity() {
                 )
                 addView(divider())
                 addView(
-                    sliderSetting(
+                    surfaceSliderSetting(
                         "磨砂雾化",
                         0,
                         100,
@@ -849,7 +917,8 @@ open class MainActivity : Activity() {
                         "%",
                     ) { overlayPreferences.saveFrostStrengthPercent(it); notifyOverlayAppearanceChanged() },
                 )
-                addView(textView("Android 11 普通悬浮层使用半透明雾化；系统级实时背景模糊需要特权窗口能力。",12f,false,colors.secondaryText).apply {
+                addView(textView("雾化使用半透明表面，不模糊文字。",12f,false,colors.secondaryText).apply {
+                    visibility=if(overlayPreferences.backgroundMode()=="frost")View.VISIBLE else View.GONE
                     setPadding(0,dp(2),0,dp(8))
                 })
                 addView(divider())
@@ -898,24 +967,58 @@ open class MainActivity : Activity() {
 
         sectionTitle("动画与交互")
         addCard(card().apply {
+            addView(settingRow("动画曲线","","调整") {
+                val names=listOf("舒缓","利落","线性","自定义")
+                FloatDialog.choices(this@MainActivity,"动画曲线",names,3) { index ->
+                    if(index<3) {
+                        val values=listOf(listOf(20,80,20,100),listOf(16,100,30,100),listOf(0,0,100,100))[index]
+                        values.forEachIndexed { i,v -> overlayPreferences.saveCurveControl(i,v) }
+                        notifyOverlayAppearanceChanged();render()
+                    } else {
+                        val controls=LinearLayout(this@MainActivity).apply { orientation=LinearLayout.VERTICAL }
+                        listOf("X1","Y1","X2","Y2").forEachIndexed { i,label ->
+                            controls.addView(sliderSetting(label,0,100,overlayPreferences.curveControl(i),"%") { overlayPreferences.saveCurveControl(i,it) })
+                        }
+                        FloatDialog.show(this@MainActivity,"贝塞尔曲线",custom=controls,negative="完成",positive=null)
+                    }
+                }
+            })
+            addView(divider())
+            addView(settingRow("滑条范围","","调整") {
+                val labels=listOf("卡片缩放","悬浮球缩放","拖动缩放","打开/收回时长","开关时长")
+                val keys=listOf("card","bubble","panel","transition","switch")
+                FloatDialog.choices(this@MainActivity,"滑条范围",labels) { index ->
+                    val key=keys[index];val range=overlayPreferences.interactionRange(key)
+                    val box=LinearLayout(this@MainActivity).apply { orientation=LinearLayout.VERTICAL }
+                    val low=EditText(this@MainActivity).apply { inputType=android.text.InputType.TYPE_CLASS_NUMBER;hint="最小值";setText(range.first.toString()) }
+                    val high=EditText(this@MainActivity).apply { inputType=android.text.InputType.TYPE_CLASS_NUMBER;hint="最大值";setText(range.last.toString()) }
+                    box.addView(low);box.addView(high)
+                    FloatDialog.show(this@MainActivity,labels[index],if(index<3)"范围 10–120%" else "范围 0–5000ms",custom=box,onPositive={
+                        val ok=runCatching { overlayPreferences.saveInteractionRange(key,low.text.toString().toInt(),high.text.toString().toInt()) }.isSuccess
+                        if(ok){notifyOverlayAppearanceChanged();render()} else high.error="请检查上下限"
+                        ok
+                    })
+                }
+            })
+            addView(divider())
             addView(sliderSetting(
-                "卡片按压缩放",94,100,overlayPreferences.cardPressScalePercent(),"%"
+                "卡片按压缩放",overlayPreferences.interactionRange("card").first,overlayPreferences.interactionRange("card").last,overlayPreferences.cardPressScalePercent(),"%"
             ) { overlayPreferences.saveCardPressScalePercent(it) })
             addView(divider())
             addView(sliderSetting(
-                "悬浮球按压缩放",90,100,overlayPreferences.bubblePressScalePercent(),"%"
+                "悬浮球按压缩放",overlayPreferences.interactionRange("bubble").first,overlayPreferences.interactionRange("bubble").last,overlayPreferences.bubblePressScalePercent(),"%"
             ) { overlayPreferences.saveBubblePressScalePercent(it); notifyOverlayAppearanceChanged() })
             addView(divider())
             addView(sliderSetting(
-                "面板拖动缩放",97,100,overlayPreferences.panelPressScalePercent(),"%"
+                "面板拖动缩放",overlayPreferences.interactionRange("panel").first,overlayPreferences.interactionRange("panel").last,overlayPreferences.panelPressScalePercent(),"%"
             ) { overlayPreferences.savePanelPressScalePercent(it); notifyOverlayAppearanceChanged() })
             addView(divider())
             addView(sliderSetting(
-                "打开/收回动画",120,480,overlayPreferences.transitionDurationMs(),"ms"
+                "打开/收回动画",overlayPreferences.interactionRange("transition").first,overlayPreferences.interactionRange("transition").last,overlayPreferences.transitionDurationMs(),"ms"
             ) { overlayPreferences.saveTransitionDurationMs(it); notifyOverlayAppearanceChanged() })
             addView(divider())
             addView(sliderSetting(
-                "开关动画",80,300,overlayPreferences.switchAnimationMs(),"ms"
+                "开关动画",overlayPreferences.interactionRange("switch").first,overlayPreferences.interactionRange("switch").last,overlayPreferences.switchAnimationMs(),"ms"
             ) { overlayPreferences.saveSwitchAnimationMs(it) })
         })
 
@@ -1046,6 +1149,11 @@ open class MainActivity : Activity() {
         })
     }
 
+    private fun surfaceSliderSetting(title:String,min:Int,max:Int,value:Int,suffix:String,changed:(Int)->Unit):View=
+        sliderSetting(title,min,max,value,suffix,changed).apply {
+            visibility=if(overlayPreferences.backgroundMode()=="solid" || (title=="磨砂雾化" && overlayPreferences.backgroundMode()!="frost"))View.GONE else View.VISIBLE
+        }
+
     private fun sliderSetting(
         title: String,
         minValue: Int,
@@ -1063,7 +1171,17 @@ open class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         header.addView(textView(title, 14.5f, false), LinearLayout.LayoutParams(0, dp(30), 1f))
-        val valueLabel = textView(getString(R.string.slider_value, currentValue, suffix), 12.5f, false, colors.secondaryText)
+        var selectedValue=currentValue.coerceIn(minValue,maxValue)
+        val valueLabel = textView(getString(R.string.slider_value, selectedValue, suffix), 12.5f, false, colors.secondaryText)
+        valueLabel.contentDescription=title+"，点击输入数值"
+        valueLabel.setOnClickListener {
+            val input=EditText(this).apply { inputType=android.text.InputType.TYPE_CLASS_NUMBER;setText(selectedValue.toString());selectAll() }
+            FloatDialog.show(this,title,"$minValue–$maxValue$suffix",custom=input,negative="取消",positive="保存",onPositive={
+                val value=input.text.toString().toIntOrNull()
+                if(value==null || value !in minValue..maxValue){input.error="请输入 $minValue–$maxValue";false}
+                else { onChanged(value);valueLabel.text=getString(R.string.slider_value,value,suffix);notifyOverlayAppearanceChanged();render();true }
+            })
+        }
         header.addView(valueLabel)
         root.addView(header)
         root.addView(
@@ -1075,6 +1193,7 @@ open class MainActivity : Activity() {
                 setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                     override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                         val value = minValue + progress
+                        selectedValue=value
                         valueLabel.text = getString(R.string.slider_value, value, suffix)
                         if (fromUser) onChanged(value)
                     }
@@ -1336,10 +1455,11 @@ open class MainActivity : Activity() {
     private fun notifyHistoryChanged() {
         sendBroadcast(Intent(ClipboardSyncService.HISTORY_CHANGED).setPackage(packageName),"$packageName.permission.INTERNAL")
     }
-    private fun checkClientUpdate() {
+    private fun checkClientUpdate(silent:Boolean=false) {
         if(isFinishing || isDestroyed)return
         val existing=updateCheck
         if(existing?.state?.phase==com.floatclip.app.ui.ClientUpdateCheck.Phase.CHECKING)return
+        silentUpdateCheck=silent
         updateSelectedChannel=UpdatePreferences(this).channel()
         val wireChannel=when(updateSelectedChannel) {
             UpdateChannel.PREVIEW -> com.floatclip.probe.ShareUpdates.Channel.PREVIEW
@@ -1355,7 +1475,7 @@ open class MainActivity : Activity() {
                 setPadding(0,dp(10),0,0);updateStatusText=this
             })
         }
-        updateDialog=FloatDialog.show(this,"检查更新",
+        if(!silent)updateDialog=FloatDialog.show(this,"检查更新",
             versionName()+" · build "+build+" · "+updateSelectedChannel.label,
             custom=progress,negative="取消",positive=null,
             onNegative={ updateCheck?.cancel() },onCancel={ updateCheck?.cancel() })
@@ -1375,18 +1495,25 @@ open class MainActivity : Activity() {
                 val build=packageManager.getPackageInfo(packageName,0).longVersionCode
                 val order=com.floatclip.probe.ShareUpdates.compareVersion(release.version,versionName())
                 val newer=release.build>build && order>=0
+                if(silentUpdateCheck) {
+                    silentUpdateCheck=false
+                    if(!newer)return
+                    val identity=updateSelectedChannel.name+":"+release.version+":"+release.build
+                    val prefs=UpdatePreferences(this)
+                    if(prefs.lastNotified()==identity)return
+                    prefs.saveNotified(identity)
+                    notifyAvailableUpdate(release)
+                }
                 updateDialog=FloatDialog.show(this,
                     if(newer)"发现 "+release.version+" · build "+release.build else "当前 "+versionName()+" · build "+build,
                     if(newer)release.notes else if(order<0 || release.build<build)
                         updateSelectedChannel.label+"通道已发布 "+release.version+" · build "+release.build
                     else "已是"+updateSelectedChannel.label+"通道最新版本",
-                    negative="关闭",positive=if(newer)"下载" else null,
-                    onPositive=if(newer) { { _ ->
-                        runCatching { startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(release.url))) }
-                            .onFailure { Toast.makeText(this,"无法打开下载地址，请使用系统浏览器",Toast.LENGTH_LONG).show() }.isSuccess
-                    } } else null)
+                    negative="关闭",positive=if(newer)"下载并安装" else null,
+                    onPositive=if(newer) { { _ -> startClientUpdateDownload(release);true } } else null)
             }
             com.floatclip.app.ui.ClientUpdateCheck.Phase.FAILED -> {
+                if(silentUpdateCheck){silentUpdateCheck=false;return}
                 updateDialog?.dialog?.dismiss();updateStatusText=null
                 val last=UpdatePreferences(this).lastCheck(updateSelectedChannel)
                 updateDialog=FloatDialog.show(this,"检查未完成",
@@ -1394,6 +1521,53 @@ open class MainActivity : Activity() {
                     negative="关闭",positive="重试",onPositive={ checkClientUpdate();true })
             }
             else -> Unit
+        }
+    }
+
+    private fun notifyAvailableUpdate(release:com.floatclip.probe.ShareUpdates.Release) {
+        val manager=getSystemService(android.app.NotificationManager::class.java)
+        manager.createNotificationChannel(android.app.NotificationChannel("floatclip_updates","应用更新",android.app.NotificationManager.IMPORTANCE_DEFAULT))
+        val open=Intent(this,UnifiedActivity::class.java).putExtra("floatclip_update",true)
+        val pending=android.app.PendingIntent.getActivity(this,638,open,android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
+        if(android.os.Build.VERSION.SDK_INT>=33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)return
+        runCatching { manager.notify(638,android.app.Notification.Builder(this,"floatclip_updates")
+            .setSmallIcon(R.drawable.ic_notification).setContentTitle("FloatClip 有新版本")
+            .setContentText(release.version+" · build "+release.build).setContentIntent(pending).setAutoCancel(true).build()) }
+    }
+
+    private fun startClientUpdateDownload(release:com.floatclip.probe.ShareUpdates.Release) {
+        val progress=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            addView(android.widget.ProgressBar(this@MainActivity,null,android.R.attr.progressBarStyleHorizontal).apply {
+                isIndeterminate=false;max=100;progress=0;updateDownloadProgress=this
+            },LinearLayout.LayoutParams(-1,dp(5)))
+            addView(textView("正在准备下载…",13f,false,colors.secondaryText).apply {
+                setPadding(0,dp(10),0,0);updateStatusText=this
+            })
+        }
+        updateDialog?.dialog?.dismiss()
+        updateDialog=FloatDialog.show(this,"更新 FloatClip",release.version+" · build "+release.build,custom=progress,negative="取消",positive=null,
+            onNegative={updateInstaller.cancel()},onCancel={updateInstaller.cancel()})
+        updateInstaller.start(release){state->
+            if(isFinishing||isDestroyed)return@start
+            when(state.phase){
+                ClientUpdateInstaller.Phase.DOWNLOADING->{updateDownloadProgress?.progress=state.percent;updateStatusText?.text=state.message}
+                ClientUpdateInstaller.Phase.READY->{
+                    updateDownloadProgress?.progress=100;updateStatusText?.text=state.message;updateDialog?.dialog?.dismiss();updateDialog=null
+                    when(updateInstaller.installPending()){
+                        ClientUpdateInstaller.InstallResult.STARTED -> Unit
+                        ClientUpdateInstaller.InstallResult.PERMISSION_REQUESTED -> {updateAwaitingInstallPermission=true;Toast.makeText(this,"请允许 FloatClip 安装未知应用，返回后将继续更新",Toast.LENGTH_LONG).show()}
+                        ClientUpdateInstaller.InstallResult.PERMISSION_REQUIRED -> Toast.makeText(this,"需要允许安装未知应用",Toast.LENGTH_LONG).show()
+                        ClientUpdateInstaller.InstallResult.MISSING -> Toast.makeText(this,"更新包缓存不存在，请重新下载",Toast.LENGTH_LONG).show()
+                        ClientUpdateInstaller.InstallResult.FAILED -> Toast.makeText(this,"无法打开系统安装器，请稍后重试",Toast.LENGTH_LONG).show()
+                    }
+                }
+                ClientUpdateInstaller.Phase.FAILED->{
+                    updateDialog?.dialog?.dismiss();updateDialog=null
+                    FloatDialog.show(this,"更新失败",state.message,negative="关闭",positive="重试",onPositive={startClientUpdateDownload(release);true})
+                }
+                else->Unit
+            }
         }
     }
 

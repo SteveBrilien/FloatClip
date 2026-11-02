@@ -36,8 +36,14 @@ public sealed partial class LocalClipboardWindow
             for(var p=e.OriginalSource as DependencyObject;p!=null&&p!=titleBar;p=p is Visual?VisualTreeHelper.GetParent(p):LogicalTreeHelper.GetParent(p))if(p is System.Windows.Controls.Primitives.ButtonBase)return;
             if(e.ClickCount==1){DragMove();host.RememberPlacement();e.Handled=true;}
         };
-        var close=IconButton("\uE711","收起 FloatClip",Hide);DockPanel.SetDock(close,Dock.Right);titleBar.Children.Add(close);
-        var pin=IconButton("\uE718","固定面板",()=>{host.SetPinned(!host.Pinned);BuildShellTitle();});DockPanel.SetDock(pin,Dock.Right);titleBar.Children.Add(pin);
+        var close=IconButton("\uE711","收起 FloatClip",Hide);
+        close.ClearValue(Control.BackgroundProperty);close.ClearValue(Control.ForegroundProperty);
+        close.SetResourceReference(FrameworkElement.StyleProperty,"FloatClip.Button.CaptionClose");
+        System.Windows.Automation.AutomationProperties.SetAutomationId(close,"WindowClose");
+        close.Content=new SymbolIcon(SymbolRegular.Dismiss24){FontSize=DesignTokens.Number("Icon.Small")};DockPanel.SetDock(close,Dock.Right);titleBar.Children.Add(close);
+        var pin=IconButton("\uE718","固定面板",()=>{host.SetPinned(!host.Pinned);BuildShellTitle();});
+        System.Windows.Automation.AutomationProperties.SetAutomationId(pin,"WindowPin");
+        pin.ClearValue(Control.BackgroundProperty);pin.SetResourceReference(FrameworkElement.StyleProperty,"FloatClip.Button.Caption");DockPanel.SetDock(pin,Dock.Right);titleBar.Children.Add(pin);
         var brand=new StackPanel{Orientation=Orientation.Horizontal,VerticalAlignment=VerticalAlignment.Center,Margin=new(10,0,0,0)};var mark=BrandMark();mark.LayoutTransform=new ScaleTransform(.7,.7);brand.Children.Add(mark);brand.Children.Add(new System.Windows.Controls.TextBlock{Text="FloatClip",FontSize=13,FontWeight=FontWeights.Medium,VerticalAlignment=VerticalAlignment.Center,Margin=new(8,0,0,0)});
         titleBar.Children.Add(brand);DockPanel.SetDock(titleBar,Dock.Top);shell.Children.Add(titleBar);BuildShellTitle();
         if(Content is Border oldBorder)oldBorder.Child=null;else Content=null;
@@ -66,7 +72,7 @@ public sealed partial class LocalClipboardWindow
     void BuildShellTitle()
     {
         var title=(DockPanel)shell.Children[0];var pin=(System.Windows.Controls.Button)title.Children[1];
-        pin.Content=new SymbolIcon(SymbolRegular.Pin24){Filled=host.Pinned,FontSize=17};pin.ToolTip=host.Pinned?"取消固定面板":"固定面板";
+        pin.Content=new SymbolIcon(SymbolRegular.Pin24){Filled=host.Pinned,FontSize=DesignTokens.Number("Icon.Small")};pin.ToolTip=host.Pinned?"取消固定面板":"固定面板";
         System.Windows.Automation.AutomationProperties.SetName(pin,host.Pinned?"取消固定面板":"固定面板");
     }
     void UpdateNavigation(){navigation.PaneDisplayMode=NavigationViewPaneDisplayMode.Left;navigation.IsPaneOpen=expandedNavigation;}

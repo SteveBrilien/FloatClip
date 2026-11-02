@@ -179,9 +179,15 @@ public sealed class PairStore
         {
             if(corrupt||!peers.TryGetValue(key,out var current))throw new IOException("设备授权不存在");
             if(current.DeviceId!=null&&current.DeviceId!=device.Id)throw new IOException("记住的设备身份已改变，需要重新授权");
-            if(current.DeviceId==device.Id&&current.Name==device.Name&&current.Platform==device.Platform)return;
+            string incoming=device.Name.Trim();
+            bool generic=incoming.Length==0||incoming.Equals("unknown device",StringComparison.OrdinalIgnoreCase)||incoming.Equals("unknown",StringComparison.OrdinalIgnoreCase)||incoming=="未知设备";
+            string? saved=current.Name?.Trim();
+            bool savedUseful=!string.IsNullOrWhiteSpace(saved)&&!saved.Equals("unknown device",StringComparison.OrdinalIgnoreCase)&&!saved.Equals("unknown",StringComparison.OrdinalIgnoreCase)&&saved!="未知设备";
+            if(!savedUseful){saved=peers.Values.Where(p=>p.DeviceId==device.Id).Select(p=>p.Name?.Trim()).FirstOrDefault(n=>!string.IsNullOrWhiteSpace(n)&&!n.Equals("unknown device",StringComparison.OrdinalIgnoreCase)&&!n.Equals("unknown",StringComparison.OrdinalIgnoreCase)&&n!="未知设备"&&n!="已授权设备");savedUseful=saved!=null;}
+            string name=generic&&savedUseful?saved!:incoming;
+            if(current.DeviceId==device.Id&&current.Name==name&&current.Platform==device.Platform)return;
             var next=peers.ToDictionary(p=>p.Key,p=>p.Value.Copy());var row=next[key];
-            row.DeviceId=device.Id;row.Name=device.Name;row.Platform=device.Platform;Save(next);
+            row.DeviceId=device.Id;row.Name=name.Length==0?(savedUseful?saved:"已授权设备"):name;row.Platform=device.Platform;Save(next);
         }
         Changed?.Invoke();
     }

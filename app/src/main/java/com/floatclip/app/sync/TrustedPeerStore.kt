@@ -68,8 +68,13 @@ class TrustedPeerStore(
         val current = load().toMutableMap()
         val previous = current[normalized] ?: throw IOException("Trusted credential missing")
         if (previous.deviceId != null && previous.deviceId != device.id) throw IOException("Remembered device identity changed")
-        if (previous.deviceId == device.id && previous.name == device.name && previous.platform == device.platform) return
-        current[normalized] = previous.copy(deviceId = device.id, name = device.name, platform = device.platform)
+        val incomingName=device.name.trim()
+        fun useful(value:String?)=value?.trim()?.takeIf { it.isNotEmpty()&&!it.equals("unknown device",true)&&!it.equals("unknown",true)&&it!="未知设备"&&it!="已授权设备" }
+        val generic=useful(incomingName)==null
+        val savedName=useful(previous.name) ?: current.values.firstNotNullOfOrNull { if(it.deviceId==device.id) useful(it.name) else null }
+        val name=if(generic&&savedName!=null)savedName else incomingName
+        if (previous.deviceId == device.id && previous.name == name && previous.platform == device.platform) return
+        current[normalized] = previous.copy(deviceId = device.id, name = name.ifEmpty { savedName ?: "已授权设备" }, platform = device.platform)
         save(current)
     }
 

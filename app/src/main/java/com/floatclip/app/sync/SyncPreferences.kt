@@ -11,6 +11,10 @@ class SyncPreferences(context: Context) {
         val appliedSend: String,val appliedReceive: String,val appliedApply: String)
     fun enabled()=prefs.getBoolean("enabled",false)
     fun reconnect()=prefs.getBoolean("reconnect",true)
+    fun connectionsPaused()=prefs.getBoolean("connections_paused",false)
+    fun saveConnectionsPaused(value:Boolean)=synchronized(prefs) {
+        check(prefs.edit().putBoolean("connections_paused",value).commit()){ "无法保存共享连接状态" }
+    }
     fun keepAlive()=prefs.getBoolean("keep_alive",true)
     fun backgroundCapture()=prefs.getBoolean("adb_background_capture",false)
     fun saveBackgroundCapture(value:Boolean)=synchronized(prefs) {
@@ -40,6 +44,7 @@ class SyncPreferences(context: Context) {
     }
     fun save(enabled: Boolean=enabled(),reconnect: Boolean=reconnect(),sending: Boolean=sending(),receiving: Boolean=receiving(),applying: Boolean=applying()) = synchronized(prefs) {
         val editor=prefs.edit().putBoolean("enabled",enabled).putBoolean("reconnect",reconnect).putBoolean("send",sending).putBoolean("receive",receiving).putBoolean("apply",applying)
+        if(!enabled)editor.putBoolean("connections_paused",false)
         if(enabled!=this.enabled()||sending!=this.sending())editor.putString("send_generation",UUID.randomUUID().toString())
         if(enabled!=this.enabled()||receiving!=this.receiving())editor.putString("receive_generation",UUID.randomUUID().toString())
         if(enabled!=this.enabled()||receiving!=this.receiving()||applying!=this.applying())editor.putString("apply_generation",UUID.randomUUID().toString())

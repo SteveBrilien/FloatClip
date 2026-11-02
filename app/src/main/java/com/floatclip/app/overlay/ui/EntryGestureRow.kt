@@ -66,9 +66,9 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
     private fun press(down: Boolean) {
         front?.animate()?.cancel()
         val scale=if(down && ValueAnimator.areAnimatorsEnabled()) appearance.cardPressScalePercent()/100f else 1f
-        val duration=if(down) (appearance.transitionDurationMs()*0.38f).toLong().coerceIn(55,180)
-            else (appearance.transitionDurationMs()*0.68f).toLong().coerceIn(90,260)
-        front?.animate()?.scaleX(scale)?.scaleY(scale)?.setDuration(duration)?.start()
+        val duration=if(down) (appearance.transitionDurationMs()*0.38f).toLong().coerceIn(0,1900)
+            else (appearance.transitionDurationMs()*0.68f).toLong().coerceIn(0,3400)
+        front?.animate()?.scaleX(scale)?.scaleY(scale)?.setDuration(duration)?.setInterpolator(appearance.motionInterpolator())?.start()
     }
 
     fun bind(
@@ -123,7 +123,7 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
         }
         if (!animated) { translate(target); return }
         settling = ValueAnimator.ofFloat(front?.translationX ?: 0f, target).apply {
-            duration = if(ValueAnimator.areAnimatorsEnabled()) appearance.transitionDurationMs().toLong().coerceIn(120,480) else 0L
+            duration = if(ValueAnimator.areAnimatorsEnabled()) appearance.transitionDurationMs().toLong().coerceIn(0,5000) else 0L
             addUpdateListener { translate(it.animatedValue as Float) }
             start()
         }

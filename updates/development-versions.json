@@ -3,13 +3,13 @@
   "platforms": {
     "android": {
       "version": "0.7.9",
-      "build": 33,
-      "review": "docs/RECOVERY_2026-10-28.md"
+      "build": 38,
+      "review": "docs/INTERACTION_PERFORMANCE_2026-11-03.md"
     },
     "windows": {
       "version": "0.7.9",
-      "build": 35,
-      "review": "docs/FEEDBACK_2026-10-28.md"
+      "build": 38,
+      "review": "docs/INTERACTION_PERFORMANCE_2026-11-03.md"
     }
   }
 }

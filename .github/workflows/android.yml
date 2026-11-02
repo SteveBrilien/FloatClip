@@ -102,13 +102,15 @@ jobs:
         run: |
           set -euo pipefail
           version="$(python3 -c 'import json;print(json.load(open("updates/share-preview.json"))["version"])')"
-          tag="v$version"
+          build="$(python3 -c 'import json; r=json.load(open("updates/share-preview.json")); print(max(r["android"]["build"],r["windows"]["build"]))')"
+          tag="$(python3 -c 'import json; r=json.load(open("updates/share-preview.json")); print(r.get("releaseTag","v"+r["version"]))')"
           if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "$tag" ]]; then
             echo "Tag does not match the frozen native release" >&2
             exit 1
           fi
           echo "publish=true" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Resolve verified candidate assets
@@ -170,10 +172,11 @@ jobs:
           WINDOWS: ${{ steps.release_assets.outputs.windows }}
           RELEASE_TAG: ${{ steps.native_release.outputs.tag }}
           RELEASE_VERSION: ${{ steps.native_release.outputs.version }}
+          RELEASE_BUILD: ${{ steps.native_release.outputs.build }}
         run: |
           set -euo pipefail
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "FloatClip $RELEASE_VERSION" --generate-notes
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "FloatClip $RELEASE_VERSION · build$RELEASE_BUILD" --generate-notes --latest
           fi
           for asset in "$ANDROID" "$WINDOWS"; do
             if gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | grep -Fxq "$asset"; then

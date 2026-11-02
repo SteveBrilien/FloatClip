@@ -61,6 +61,7 @@ class FluentSwitch(context: Context) : View(context) {
         checked = value
         animator = ValueAnimator.ofFloat(start, end).apply {
             duration = if (ValueAnimator.areAnimatorsEnabled()) OverlayPreferences(context).switchAnimationMs().toLong() else 0L
+            interpolator=OverlayPreferences(context).motionInterpolator()
             addUpdateListener {
                 position = it.animatedValue as Float
                 invalidate()

@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -14,13 +15,14 @@ public sealed class DevicePeerViewModel:ObservableObject
 {
     bool enabled,canConfigure,updating;string name="",status="";readonly Action<DevicePeerViewModel,bool> configure;
     public string Key{get;}
+    public IReadOnlyList<string> RelatedKeys{get;private set;}=Array.Empty<string>();
     public string Name{get=>name;private set=>SetProperty(ref name,value);}
     public string Status{get=>status;private set=>SetProperty(ref status,value);}
     public bool CanConfigure{get=>canConfigure;private set=>SetProperty(ref canConfigure,value);}
     public bool Enabled{get=>enabled;set{if(SetProperty(ref enabled,value)&&!updating)configure(this,value);}}
     public IRelayCommand ForgetCommand{get;}
     public DevicePeerViewModel(string key,Action<DevicePeerViewModel,bool> configure,Action<DevicePeerViewModel> forget){Key=key;this.configure=configure;ForgetCommand=new RelayCommand(()=>forget(this));}
-    public void Update(DevicePeerState state){updating=true;try{Name=state.Name;Status=state.Status;CanConfigure=state.CanConfigure;Enabled=state.Enabled;}finally{updating=false;}}
+    public void Update(DevicePeerState state){updating=true;try{RelatedKeys=state.RelatedKeys??new[]{state.Key};Name=state.Name;Status=state.Status;CanConfigure=state.CanConfigure;Enabled=state.Enabled;}finally{updating=false;}}
 }
 public sealed class DevicePanelViewModel:ObservableObject,IDisposable
 {
@@ -78,7 +80,7 @@ public sealed class DevicePanelViewModel:ObservableObject,IDisposable
             foreach(var peer in state.Peers)
             {
                 var row=Peers.FirstOrDefault(p=>p.Key==peer.Key);
-                if(row==null){row=new DevicePeerViewModel(peer.Key,(p,on)=>Run(()=>service.SetPeerEnabled(p.Key,on)),p=>{if(confirm("移除设备","移除“"+p.Name+"”的配对后，需要重新核对识别码。"))Run(()=>service.Forget(p.Key));});Peers.Add(row);}
+                if(row==null){row=new DevicePeerViewModel(peer.Key,(p,on)=>Run(()=>{foreach(var key in p.RelatedKeys)service.SetPeerEnabled(key,on);}),p=>{if(confirm("移除设备","移除“"+p.Name+"”的所有连接方式后，需要重新核对识别码。"))Run(()=>{foreach(var key in p.RelatedKeys)service.Forget(key);});});Peers.Add(row);}
                 row.Update(peer);
             }
         }

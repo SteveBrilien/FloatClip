@@ -408,8 +408,8 @@ class ClipboardOverlayService : Service() {
                     view.animate()
                         .scaleX(if (ValueAnimator.areAnimatorsEnabled()) overlayPreferences.bubblePressScalePercent()/100f else 1f)
                         .scaleY(if (ValueAnimator.areAnimatorsEnabled()) overlayPreferences.bubblePressScalePercent()/100f else 1f)
-                        .setDuration((overlayPreferences.transitionDurationMs()*0.35f).toLong().coerceIn(55,160))
-                        .setInterpolator(PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
+                        .setDuration((overlayPreferences.transitionDurationMs()*0.35f).toLong().coerceIn(0,1750))
+                        .setInterpolator(overlayPreferences.motionInterpolator())
                         .start()
                     true
                 }
@@ -439,8 +439,8 @@ class ClipboardOverlayService : Service() {
                     view.animate()
                         .scaleX(1f)
                         .scaleY(1f)
-                        .setDuration((overlayPreferences.transitionDurationMs()*0.55f).toLong().coerceIn(80,240))
-                        .setInterpolator(PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
+                        .setDuration((overlayPreferences.transitionDurationMs()*0.55f).toLong().coerceIn(0,2750))
+                        .setInterpolator(overlayPreferences.motionInterpolator())
                         .start()
                     if (moved && event.actionMasked == MotionEvent.ACTION_UP) {
                         velocityTracker?.computeCurrentVelocity(1000, dp(7200).toFloat())
@@ -492,7 +492,7 @@ class ClipboardOverlayService : Service() {
         bubbleMotionAnimator?.cancel()
         bubbleMotionAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = EDGE_HIDE_ANIMATION_MS
-            interpolator = PathInterpolator(0.25f, 0.8f, 0.25f, 1f)
+            interpolator = overlayPreferences.motionInterpolator()
             addUpdateListener { animator ->
                 params.x = lerp(startX, targetX, animator.animatedValue as Float)
                 runCatching { overlayWindows.update(view, params) }
@@ -558,8 +558,8 @@ class ClipboardOverlayService : Service() {
         panelParams = params
         restingPanelX=panelX;restingPanelY=panelY
 
-        val panelAlpha = percentAlpha(overlayPreferences.panelAlphaPercent())
-        val frost=overlayPreferences.frostStrengthPercent()/100f
+        val panelAlpha = percentAlpha(if(overlayPreferences.backgroundMode()=="solid")100 else overlayPreferences.panelAlphaPercent())
+        val frost=if(overlayPreferences.backgroundMode()=="frost")overlayPreferences.frostStrengthPercent()/100f else 0f
         val frostedPanel=if(palette.isDark) blendColor(palette.panelBackground,Color.WHITE,0.07f*frost)
             else blendColor(palette.panelBackground,Color.WHITE,0.22f*frost)
         val borderAlpha=percentAlpha(overlayPreferences.borderAlphaPercent())
@@ -761,7 +761,7 @@ class ClipboardOverlayService : Service() {
                 panel.animate().cancel()
                 val pressScale=if (ValueAnimator.areAnimatorsEnabled()) overlayPreferences.panelPressScalePercent()/100f else 1f
                 panel.animate().scaleX(pressScale).scaleY(pressScale)
-                    .setDuration((overlayPreferences.transitionDurationMs()*0.3f).toLong().coerceIn(50,150)).start()
+                    .setDuration((overlayPreferences.transitionDurationMs()*0.3f).toLong().coerceIn(0,1500)).start()
             }
 
             override fun onDragMove(rawX: Float, rawY: Float) {
@@ -778,8 +778,8 @@ class ClipboardOverlayService : Service() {
                 panel.animate()
                     .scaleX(1f)
                     .scaleY(1f)
-                    .setDuration((overlayPreferences.transitionDurationMs()*0.6f).toLong().coerceIn(90,260))
-                    .setInterpolator(PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
+                    .setDuration((overlayPreferences.transitionDurationMs()*0.6f).toLong().coerceIn(0,3000))
+                    .setInterpolator(overlayPreferences.motionInterpolator())
                     .start()
                 if (moved && !cancelled) {
                     restingPanelX=windowParams.x;restingPanelY=windowParams.y
@@ -859,6 +859,16 @@ class ClipboardOverlayService : Service() {
         }
         target.submit(items,overlayPreferences.twoColumnClipboard(),activeSource+"|"+activeCategory,hint,palette.secondaryText,::createClipRow)
         updateOverlayImageImportAction()
+        val expectedSource=activeSource;val expectedCategory=activeCategory;val expectedSnapshot=historySnapshot
+        handler.postDelayed({
+            if(!panelOpen || activeSource!=expectedSource || activeCategory!=expectedCategory || historySnapshot!==expectedSnapshot)return@postDelayed
+            val tabs=ClipboardSources.tabs(this,expectedSnapshot)
+            val next=tabs.getOrNull((tabs.indexOfFirst{it.id==activeSource}+1)%tabs.size.coerceAtLeast(1))?.id
+            expectedSnapshot.asSequence().filter { it.kind=="image" && (
+                (it.category!=activeCategory && (activeSource.isEmpty() || it.sourceDeviceId==activeSource)) ||
+                next==ClipboardSources.IMAGE_SCOPE || next.isNullOrEmpty() || it.sourceDeviceId==next) }
+                .take(3).forEach { ClipboardImages.prefetch(store,it) }
+        },200)
     }
 
     private fun updateOverlayImageImportAction() {
@@ -1295,37 +1305,57 @@ class ClipboardOverlayService : Service() {
         view?.apply { alpha=1f;scaleX=1f;scaleY=1f;translationX=0f;translationY=0f }
     }
 
-    /** Visibility and hit testing commit synchronously; no animation callback owns service state. */
+    private var presentationGeneration=0L
+    /** Input/ball state commits first. A cancelled visual transition cannot own service visibility. */
     private fun showPanelPresentation(open:Boolean) {
         if(stopping)return
+        val token=++presentationGeneration
         val panel=panelView
         val bubble=bubbleView
+        val startScaleX=panel?.scaleX?:1f
+        val startScaleY=panel?.scaleY?:1f
+        val startAlpha=panel?.alpha?:1f
+        val startX=panel?.translationX?:0f
+        val startY=panel?.translationY?:0f
         clearMotion(panel);clearMotion(bubble)
-        panel?.apply { interactionBlocked=!open;isEnabled=open;setLayerType(View.LAYER_TYPE_NONE,null) }
-        // Restore the ball first on close. Each surface is independently recoverable.
-        fun ball() {
-            if(bubble!=null)bubbleParams?.let {
-                it.alpha=if(open)0f else 1f
-                it.flags=if(open)it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                    else it.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-                overlayWindows.update(bubble,it)
+        panel?.apply { interactionBlocked=!open;isEnabled=open }
+        val opacity=if(overlayPreferences.backgroundMode()=="window")overlayPreferences.windowAlphaPercent()/100f else 1f
+        bubbleParams?.let { p -> if(bubble!=null) {
+            p.alpha=if(open)0f else 1f
+            p.flags=if(open)p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE else p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+            overlayWindows.update(bubble,p)
+        } }
+        val duration=if(ValueAnimator.areAnimatorsEnabled())overlayPreferences.transitionDurationMs().toLong() else 0L
+        val pp=panelParams
+        if(panel!=null && pp!=null) {
+            pp.alpha=if(open || duration>0)opacity else 0f
+            pp.flags=(if(open)pp.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv() else pp.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) and WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS.inv()
+            overlayWindows.update(panel,pp)
+            val ball=bubbleParams
+            val sx=((ball?.width?:dp(50)).toFloat()/pp.width.coerceAtLeast(1)).coerceIn(.05f,1f)
+            val sy=((ball?.height?:dp(50)).toFloat()/pp.height.coerceAtLeast(1)).coerceIn(.05f,1f)
+            val dx=(ball?.x?:pp.x)+(ball?.width?:dp(50))/2f-pp.x-pp.width/2f
+            val dy=(ball?.y?:pp.y)+(ball?.height?:dp(50))/2f-pp.y-pp.height/2f
+            panel.pivotX=pp.width/2f;panel.pivotY=pp.height/2f
+            if(duration>0) {
+                panel.scaleX=if(open)sx else startScaleX;panel.scaleY=if(open)sy else startScaleY
+                panel.translationX=if(open)dx else startX;panel.translationY=if(open)dy else startY
+                panel.alpha=if(open)0f else startAlpha
+                panel.animate().scaleX(if(open)1f else sx).scaleY(if(open)1f else sy)
+                    .translationX(if(open)0f else dx).translationY(if(open)0f else dy).alpha(if(open)1f else 0f)
+                    .setDuration(duration).setInterpolator(overlayPreferences.motionInterpolator())
+                    .withEndAction {
+                        if(token==presentationGeneration && !open && !panelOpen && panelView===panel) {
+                            pp.alpha=0f;overlayWindows.update(panel,pp)
+                        }
+                    }.start()
             }
-        }
-        if(!open)ball()
-        if(panel!=null)panelParams?.let {
-            it.alpha=if(open)1f else 0f
-            it.flags=(if(open)it.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-                else it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) and
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS.inv()
-            overlayWindows.update(panel,it)
         }
         panelScrimView?.let { scrim -> panelScrimParams?.let {
             it.alpha=if(open)1f else 0f
-            it.flags=if(open && !panelPinnedMode)it.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-                else it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            it.flags=if(open && !panelPinnedMode)it.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv() else it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
             overlayWindows.update(scrim,it)
         } }
-        if(open)ball()
     }
 
     private fun createNotification(): Notification {
@@ -1343,7 +1373,7 @@ class ClipboardOverlayService : Service() {
         }
         manager.createNotificationChannel(channel)
         return Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_copy_paste)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("FloatClip")
             .setContentText(if(overlayPreferences.detailedNotification()) "悬浮剪贴板正在后台运行" else "")
             .setCategory(Notification.CATEGORY_SERVICE)

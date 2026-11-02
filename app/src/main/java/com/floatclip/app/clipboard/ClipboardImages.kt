@@ -22,8 +22,16 @@ import java.io.ByteArrayOutputStream
 object ClipboardImages {
     private val captures=java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task,"FloatClip image capture").apply { isDaemon=true } }
     private val main=Handler(Looper.getMainLooper())
-    private val decodes=java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task,"FloatClip thumbnails").apply { isDaemon=true } }
-    private val pending=mutableMapOf<String,MutableList<(Bitmap?)->Unit>>()
+    private val sequence=java.util.concurrent.atomic.AtomicLong()
+    private class DecodeTask(val priority:Int,val order:Long,val work:()->Unit):Runnable,Comparable<DecodeTask> {
+        override fun run()=work()
+        override fun compareTo(other:DecodeTask)=compareValuesBy(this,other,{it.priority},{it.order})
+    }
+    private val decodes=java.util.concurrent.ThreadPoolExecutor(1,1,0,java.util.concurrent.TimeUnit.MILLISECONDS,
+        java.util.concurrent.PriorityBlockingQueue<Runnable>(),java.util.concurrent.ThreadFactory { task -> Thread(task,"FloatClip thumbnails").apply { isDaemon=true } })
+    private val previews=java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task,"FloatClip image preview").apply { isDaemon=true } }
+    private class Request(val done:(Bitmap?)->Unit) { @Volatile var active=true }
+    private val pending=mutableMapOf<String,MutableList<Request>>()
 
     private val thumbnails=object:android.util.LruCache<String,Bitmap>(8*1024*1024) {
         override fun sizeOf(key:String,value:Bitmap)=value.allocationByteCount
@@ -80,28 +88,55 @@ object ClipboardImages {
     internal fun cardRegion(width:Int,height:Int):android.graphics.Rect =
         android.graphics.Rect(0,0,width,minOf(height,width*2))
 
-    fun thumbnailAsync(store:ClipStore,entry:ClipEntry,maxDimension:Int=480,card:Boolean=false,done:(Bitmap?)->Unit) {
+    fun prefetch(store:ClipStore,entry:ClipEntry) {
+        if(decodes.queue.size<4)thumbnailAsync(store,entry,480,card=true,prefetch=true) { }
+    }
+    fun thumbnailAsync(store:ClipStore,entry:ClipEntry,maxDimension:Int=480,card:Boolean=false,prefetch:Boolean=false,done:(Bitmap?)->Unit):AutoCloseable {
         val key=thumbnailKey(entry,maxDimension,card)
-        thumbnails.get(key)?.let { done(it);return }
-        synchronized(pending) {
-            pending[key]?.let { it.add(done);return }
-            pending[key]=mutableListOf(done)
+        thumbnails.get(key)?.let { done(it);return AutoCloseable {} }
+        val request=Request(done)
+        val cancellation=AutoCloseable {
+            request.active=false
+            synchronized(pending) { pending[key]?.remove(request) }
         }
-        decodes.execute {
+        synchronized(pending) {
+            pending[key]?.let { it.add(request);return cancellation }
+            pending[key]=mutableListOf(request)
+        }
+        val work=work@{
+            val wanted=synchronized(pending) {
+                val active=pending[key]?.any { it.active }==true
+                if(!active)pending.remove(key)
+                active
+            }
+            if(!wanted)return@work Unit
             val bitmap=runCatching {
-                if(card && entry.imageHeight>entry.imageWidth*2.2f) {
-                    val png=store.readImage(entry)
-                    val decoder=android.graphics.BitmapRegionDecoder.newInstance(png,0,png.size,false)
-                    try {
-                        var sample=1
-                        while(entry.imageWidth/(sample*2)>=maxDimension)sample*=2
-                        decoder.decodeRegion(cardRegion(entry.imageWidth,entry.imageHeight),BitmapFactory.Options().apply{inSampleSize=sample})
-                    } finally {decoder.recycle()}
-                } else thumbnail(store,entry,maxDimension)
+                val disk=if(maxDimension<=480)store.readThumbnail(key) else null
+                val saved=disk?.let { BitmapFactory.decodeByteArray(it,0,it.size) }
+                if(saved!=null)saved else {
+                    val decoded=if(card && entry.imageHeight>entry.imageWidth*2.2f) {
+                        val png=store.readImage(entry)
+                        val decoder=android.graphics.BitmapRegionDecoder.newInstance(png,0,png.size,false)
+                        try {
+                            var sample=1
+                            while(entry.imageWidth/(sample*2)>=maxDimension)sample*=2
+                            decoder.decodeRegion(cardRegion(entry.imageWidth,entry.imageHeight),BitmapFactory.Options().apply{inSampleSize=sample})
+                        } finally {decoder.recycle()}
+                    } else thumbnail(store,entry,maxDimension)
+                    if(decoded!=null && maxDimension<=480) {
+                        val output=ByteArrayOutputStream()
+                        decoded.compress(Bitmap.CompressFormat.PNG,100,output)
+                        store.writeThumbnail(key,output.toByteArray())
+                    }
+                    decoded
+                }
             }.getOrNull()
             if(bitmap!=null)thumbnails.put(key,bitmap)
-            main.post { synchronized(pending){pending.remove(key)}.orEmpty().forEach{it(bitmap)} }
+            main.post { synchronized(pending){pending.remove(key)}.orEmpty().filter { it.active }.forEach{it.done(bitmap)} }
+            Unit
         }
+        if(maxDimension>480)previews.execute(work) else decodes.execute(DecodeTask(if(prefetch)10 else 0,sequence.incrementAndGet(),work))
+        return cancellation
     }
 
     fun copy(context:Context,store:ClipStore,entry:ClipEntry) {
@@ -117,7 +152,7 @@ object ClipboardImages {
             ))
         }
         val handle=FloatDialog.show(context,"图片预览",custom=frame,negative="关闭",positive="复制图片",onPositive={copy(context,store,entry);true})
-        thumbnailAsync(store,entry,4096) { bitmap ->
+        val request=thumbnailAsync(store,entry,4096) { bitmap ->
             if(!handle.dialog.isShowing)return@thumbnailAsync
             frame.removeAllViews()
             if(bitmap==null)frame.addView(android.widget.TextView(context).apply {
@@ -125,6 +160,7 @@ object ClipboardImages {
             },FrameLayout.LayoutParams(-1,height))
             else frame.addView(com.floatclip.app.ui.ZoomImageView(context).apply { setImageBitmap(bitmap) },FrameLayout.LayoutParams(-1,height))
         }
+        handle.dialog.setOnDismissListener { request.close() }
     }
     private class BoundedOutput(private val limit:Int):ByteArrayOutputStream() {
         override fun write(value:Int) { require(count<limit) { "图片超过 8 MiB" };super.write(value) }

@@ -22,6 +22,12 @@ class ClipboardHistoryList(context:Context):ListView(context) {
     private var emptyColor=Color.GRAY
     private var factory:((ClipEntry)->View)?=null
     private var filter=""
+    private val prefetch=Runnable {
+        val store=com.floatclip.app.clipboard.ClipStore(context)
+        rows.drop((lastVisiblePosition-headerViewsCount+1).coerceAtLeast(0)).asSequence().flatMap { it.entries.asSequence() }
+            .filter { it.kind=="image" }.take(3).forEach { com.floatclip.app.clipboard.ClipboardImages.prefetch(store,it) }
+    }
+    override fun onDetachedFromWindow() { removeCallbacks(prefetch);super.onDetachedFromWindow() }
     private val positions=linkedMapOf<String,Pair<Int,Int>>()
     private val historyAdapter=object:BaseAdapter() {
         override fun getCount()=rows.size.coerceAtLeast(1)
@@ -59,6 +65,15 @@ class ClipboardHistoryList(context:Context):ListView(context) {
         overScrollMode=View.OVER_SCROLL_NEVER
         isVerticalScrollBarEnabled=false
         clipToPadding=false
+        setOnScrollListener(object:android.widget.AbsListView.OnScrollListener {
+            override fun onScrollStateChanged(view:android.widget.AbsListView?,state:Int) {
+                removeCallbacks(prefetch)
+                if(state==android.widget.AbsListView.OnScrollListener.SCROLL_STATE_IDLE)postDelayed(prefetch,120)
+            }
+            override fun onScroll(view:android.widget.AbsListView?,first:Int,count:Int,total:Int) {
+                removeCallbacks(prefetch);postDelayed(prefetch,160)
+            }
+        })
     }
     fun attachHeader(header:View) {
         check(adapter==null)

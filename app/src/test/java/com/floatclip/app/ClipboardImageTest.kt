@@ -94,6 +94,25 @@ class ClipboardImageTest {
         (0 until tampered.length()).map { tampered.getJSONObject(it) }.first { it.optString("kind")=="image" }.put("imageSha256","0".repeat(64))
         assertFalse(store.importJson(tampered.toString()));assertEquals(before,store.exportJson())
     }
+    @Test fun repeatedRemoteImageMovesForwardAndRetainsOrganizationAndRetryIdentity() {
+        val store=ClipStore(context(),cipher)
+        val remote=com.floatclip.share.ClipboardSync.Device(java.util.UUID.randomUUID(),"电脑","windows")
+        val image=store.receiveSharedImage(java.util.UUID.randomUUID(),remote,png,1,1,1)
+        store.updateCategory(image.id,"工作");store.toggleLocked(image.id)
+        val other=store.addText("later text")!!
+        val fixture=store.unifiedSnapshot();val rows=fixture.getJSONArray("entries")
+        for(i in 0 until rows.length())rows.getJSONObject(i).put("createdAt",if(rows.getJSONObject(i).getString("id")==image.key)1L else 2L)
+        store.commitUnified(fixture.getString("revision"),rows)
+        assertEquals(other.key,store.entries().first().key)
+        val next=java.util.UUID.randomUUID()
+        store.receiveSharedImage(next,remote,png,1,1,1)
+        val newest=store.entries().first()
+        assertEquals(next.toString(),newest.key);assertEquals("工作",newest.category);assertTrue(newest.locked)
+        assertEquals(2,store.entries().size);assertArrayEquals(png,store.readImage(newest))
+        val before=store.unifiedSnapshot().toString()
+        store.receiveSharedImage(next,remote,png,1,1,1)
+        assertEquals(before,store.unifiedSnapshot().toString())
+    }
 
     @Test fun textOnlyWebCommitAndTextSyncKeepLocalImages() {
         val ctx=context();val store=ClipStore(ctx,cipher)
@@ -172,4 +191,17 @@ class ClipboardImageTest {
         val activity=ctx.packageManager.getActivityInfo(android.content.ComponentName(ctx,com.floatclip.app.clipboard.ImageImportActivity::class.java),0)
         assertTrue(activity.exported)
     }
+    @Test fun derivativeCacheIsEncryptedDisposableAndBoundedWithoutTouchingOriginals() {
+        val ctx=context();val cache=File(ctx.cacheDir,"clipboard-thumbnails");cache.deleteRecursively()
+        val store=ClipStore(ctx,cipher);val original=store.addImage(png)!!
+        repeat(110) { store.writeThumbnail("cache-test-$it",png) }
+        assertTrue(cache.listFiles()!!.count { it.extension=="bin" }<=96)
+        val reload=ClipStore(ctx,cipher)
+        assertArrayEquals(png,reload.readThumbnail("cache-test-109"))
+        assertFalse(cache.listFiles()!!.filter{it.extension=="bin"}.any { it.readBytes().contentEquals(png) })
+        cache.deleteRecursively()
+        assertNull(reload.readThumbnail("cache-test-109"))
+        assertArrayEquals(png,reload.readImage(original))
+    }
+
 }

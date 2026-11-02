@@ -64,7 +64,7 @@ public sealed class NativeClipboardSync: IDisposable
     public event Action? Changed;
     public event Action? HistoryChanged;
     public event Action<Session>? SessionOpened;
-    public int ConnectedCount=>links.Values.Count(link=>link.Ready);
+    public int ConnectedCount=>links.Where(pair=>pair.Value.Ready).Select(pair=>pairs.Describe(pair.Key)?.DeviceId?.ToString()??pair.Key).Distinct().Count();
     public string? ConnectionTransport(string key)=>links.TryGetValue(key,out var link)&&link.Ready?link.Kind:null;
     public PairStore Pairing=>pairs;
     public DesktopTransfers Transfers{get;}
@@ -255,7 +255,8 @@ public sealed class NativeClipboardSync: IDisposable
             string sha=entry["imageSha256"]?.GetValue<string>()??throw new IOException("图片校验信息缺失");
             int width=checked((int)(entry["imageWidth"]?.GetValue<long>()??0)),height=checked((int)(entry["imageHeight"]?.GetValue<long>()??0));
             long created=entry["createdAt"]?.GetValue<long>()??now;
-            Guid id=Guid.TryParse(entry["id"]?.GetValue<string>(),out var parsed)?parsed:Guid.NewGuid();
+            // A user copy is a new event; retries keep the ID stored in imageState.Pending.
+            Guid id=Guid.NewGuid();
             var peers=engine.Snapshot().Peers.Where(row=>row.Value.Enabled&&row.Value.Device!=null&&row.Value.Receive&&pairs.GetByKey(row.Key).Length==32).Select(row=>row.Key).ToHashSet();
             lock(imageGate)SaveImageStateLocked(peers.Count==0?null:new ImagePending{Id=id,ImageRef=imageRef,Sha256=sha,Width=width,Height=height,CreatedAt=created,QueuedAt=now,Peers=peers});
             imageSending.Clear();

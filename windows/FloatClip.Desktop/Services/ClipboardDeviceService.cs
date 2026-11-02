@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using FloatClip.Share;
 
 namespace FloatClip.Desktop.Services;
-public sealed record DevicePeerState(string Key,string Name,bool Enabled,bool CanConfigure,string Status);
 public sealed record DevicePanelState(bool Enabled,bool Send,bool Receive,bool Apply,bool Automatic,bool Images,string Status,bool Corrupt,IReadOnlyList<DevicePeerState> Peers);
 public interface IClipboardDeviceService:IDisposable
 {
@@ -32,13 +31,13 @@ public sealed class ClipboardDeviceService:IClipboardDeviceService
     public DevicePanelState Read()
     {
         var state=sync.Snapshot();
-        var peers=sync.Pairing.Keys().Select(key=>{
+        var relations=sync.Pairing.Keys().Select(key=>{
             state.Peers.TryGetValue(key,out var peer);var trusted=sync.Pairing.Describe(key);
             string? transport=sync.ConnectionTransport(key);
-            string status=!state.Enabled?"共享已关闭":peer?.Enabled==false?"此设备已暂停":transport=="lan"?"局域网已连接":transport=="bluetooth"?"蓝牙短连接中":!sync.Automatic?"自动连接已关闭":"已授权，等待自动连接";
-            if(peer?.Pending!=null)status="等待确认送达";
-            return new DevicePeerState(key,peer?.Device?.Name??trusted?.Name??"未命名设备",peer?.Enabled??true,peer!=null,status);
-        }).ToArray();
+            string? name=DevicePeerGrouping.UsefulName(trusted?.Name)?trusted!.Name:peer?.Device?.Name;
+            return new DeviceRelationState(key,trusted?.DeviceId??peer?.Device?.Id,name,peer?.Enabled??true,peer!=null,transport,peer?.Pending!=null);
+        });
+        var peers=DevicePeerGrouping.Group(relations,state.Enabled,sync.Automatic);
         return new(state.Enabled,state.Send,state.Receive,state.Apply,sync.Automatic,sync.ImageSharing,sync.Status,sync.Pairing.Corrupt,peers);
     }
     public void Configure(bool enabled,bool send,bool receive,bool apply,bool automatic)=>sync.Configure(enabled,send,receive,apply,automatic);

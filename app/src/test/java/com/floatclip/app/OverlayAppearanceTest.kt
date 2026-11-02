@@ -85,4 +85,32 @@ class OverlayAppearanceTest {
             assertTrue(card.minimumHeight>0)
         }
     }
+    @Test fun nonlinearCurveAndExtendedInteractionRangePersistAndReset() {
+        val prefs=reset()
+        prefs.saveTransitionDurationMs(0);prefs.saveSwitchAnimationMs(1000)
+        prefs.saveCardPressScalePercent(60);prefs.savePanelPressScalePercent(70)
+        assertEquals(0,prefs.transitionDurationMs());assertEquals(1000,prefs.switchAnimationMs())
+        assertEquals(60,prefs.cardPressScalePercent());assertEquals(70,prefs.panelPressScalePercent())
+        prefs.saveCurveControl(0,16);prefs.saveCurveControl(1,100);prefs.saveCurveControl(2,30);prefs.saveCurveControl(3,100)
+        assertTrue(prefs.motionInterpolator().getInterpolation(.5f)>.7f)
+        prefs.saveBackgroundMode("window");prefs.saveWindowAlphaPercent(45)
+        assertEquals("window",OverlayPreferences(RuntimeEnvironment.getApplication()).backgroundMode())
+        assertEquals(45,prefs.windowAlphaPercent())
+        prefs.saveInteractionRange("card",20,120);prefs.saveCardPressScalePercent(110)
+        assertEquals(110,prefs.cardPressScalePercent())
+        prefs.saveInteractionRange("transition",0,5000);prefs.saveTransitionDurationMs(3000)
+        assertEquals(3000,prefs.transitionDurationMs())
+        prefs.resetAppearance();assertEquals("transparent",prefs.backgroundMode());assertEquals(20,prefs.curveControl(0))
+    }
+    @Test fun cardOpacityNoLongerDependsOnSourceTintFlagAndSolidModeIsOpaque() {
+        val prefs=reset();val context=RuntimeEnvironment.getApplication()
+        prefs.saveTranslucentCards(false);prefs.saveCardAlphaPercent(55)
+        fun alpha():Int {
+            val card=ClipboardCard(context,ClipEntry(1,"a"),false,android.graphics.Color.BLACK,android.graphics.Color.WHITE)
+            return android.graphics.Color.alpha((card.background as android.graphics.drawable.GradientDrawable).color!!.defaultColor)
+        }
+        assertEquals(140,alpha())
+        prefs.saveBackgroundMode("solid");assertEquals(255,alpha())
+    }
+
 }

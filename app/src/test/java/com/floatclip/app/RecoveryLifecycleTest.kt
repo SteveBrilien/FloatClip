@@ -45,6 +45,8 @@ class RecoveryLifecycleTest {
     @Test fun fortyImmediateOpenCloseCyclesRestoreVisibleTouchableBallWithoutWaitingForFrames() {
         val owner=service();val service=owner.get()
         try {
+            // Zero is an explicit instant transition, still requiring no animation callback.
+            OverlayPreferences(service).saveTransitionDurationMs(0)
             val ball=field(service,"bubbleView") as View
             val ballParams=field(service,"bubbleParams") as WindowManager.LayoutParams
             val x=ballParams.x;val y=ballParams.y
@@ -69,6 +71,24 @@ class RecoveryLifecycleTest {
         } finally {
             OverlayPreferences(service).saveOverlayEnabled(false);owner.destroy()
         }
+    }
+    @Test fun interruptedCurvedCloseNeverHidesNewlyOpenedPanelOrBlocksRestoredBall() {
+        val owner=service();val service=owner.get()
+        try {
+            OverlayPreferences(service).saveTransitionDurationMs(300)
+            open(service);closePanel(service)
+            val ball=field(service,"bubbleParams") as WindowManager.LayoutParams
+            val panel=field(service,"panelParams") as WindowManager.LayoutParams
+            assertEquals(1f,ball.alpha,0f)
+            assertEquals(0,ball.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
+            assertTrue(panel.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE!=0)
+            open(service)
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(600))
+            assertEquals(true,field(service,"panelOpen"));assertEquals(1f,panel.alpha,0f)
+            closePanel(service)
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(600))
+            assertEquals(0f,panel.alpha,0f);assertEquals(1f,ball.alpha,0f)
+        } finally {OverlayPreferences(service).saveOverlayEnabled(false);owner.destroy()}
     }
     @Test fun stopWhileOpenAndLateCallbacksCannotReattachWindows() {
         val owner=service();val service=owner.get()

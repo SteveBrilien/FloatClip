@@ -85,7 +85,9 @@ class BluetoothSyncTransport(
         val deadline=timer.schedule({runCatching{socket.close()}},15,TimeUnit.SECONDS)
         try{
             check(!closed)
-            adapter.cancelDiscovery()
+            // Discovery cancellation is an optimization, with its own permission.
+            // A denied scan/admin grant must not prevent an already-paired connection.
+            try { adapter.cancelDiscovery() } catch (_: SecurityException) { }
             socket.connect()
             val secure=TransportCrypto.connect(socket.inputStream,socket.outputStream,peer.token)
             check(!closed&&secure.relationHex==peer.key&&authorized(peer.key)&&canAttach(peer.key)){"Trusted relation changed"}

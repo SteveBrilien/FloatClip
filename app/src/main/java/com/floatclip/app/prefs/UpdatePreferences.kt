@@ -9,6 +9,10 @@ enum class UpdateChannel(val label:String) {
 
 class UpdatePreferences(context:Context) {
     private val prefs=context.getSharedPreferences("floatclip_update",Context.MODE_PRIVATE)
+    fun checkOnLaunch()=prefs.getBoolean("check_on_launch",false)
+    fun saveCheckOnLaunch(value:Boolean) { prefs.edit().putBoolean("check_on_launch",value).apply() }
+    fun lastNotified()=prefs.getString("last_notified","")?:""
+    fun saveNotified(value:String) { prefs.edit().putString("last_notified",value).apply() }
     fun channel():UpdateChannel = runCatching {
         UpdateChannel.valueOf(prefs.getString("channel",UpdateChannel.PREVIEW.name) ?: UpdateChannel.PREVIEW.name)
     }.getOrDefault(UpdateChannel.PREVIEW)

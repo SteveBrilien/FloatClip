@@ -78,10 +78,56 @@ class ClipboardSyncStorageTest {
         val later=ClipboardSync.Entry(UUID.randomUUID(),remote,2,200,"remote text");store.receiveShared(later)
         val newest=store.entries().single();assertEquals(later.id.toString(),newest.key);assertTrue(newest.pinned);assertEquals("工作",newest.category);assertEquals(remote.id.toString(),newest.sourceDeviceId)
     }
+    @Test fun newTransportLearnsTheExistingAuthenticatedDeviceName() {
+        val context=context();val store=TrustedPeerStore(context,codec)
+        val first=ByteArray(32){it.toByte()};val second=ByteArray(32){(it+40).toByte()}
+        val a=TrustedPeerStore.hash(first);val b=TrustedPeerStore.hash(second)
+        store.putVerified(a,first);store.putVerified(b,second)
+        store.rememberDevice(a,remote)
+        store.rememberDevice(b,ClipboardSync.Device(remote.id,"未知设备",remote.platform))
+        assertEquals("电脑",store.get(b)!!.name)
+        store.rememberDevice(a,ClipboardSync.Device(remote.id,"unknown",remote.platform))
+        assertEquals("电脑",store.get(a)!!.name)
+        assertArrayEquals(first,store.get(a)!!.token);assertArrayEquals(second,store.get(b)!!.token)
+        assertThrows(java.io.IOException::class.java){store.rememberDevice(b,ClipboardSync.Device(UUID.randomUUID(),"电脑",remote.platform))}
+    }
     @Test fun localAndRemoteEqualTextRemainSeparate(){
         val store=ClipStore(context(),codec);store.addText("same");store.receiveShared(ClipboardSync.Entry(UUID.randomUUID(),remote,1,100,"same"))
         assertEquals(2,store.entries().size);assertEquals(2,store.entries().map{it.sourceDeviceId}.distinct().size)
     }
+    @Test fun repeatedRemoteCopyMovesToFrontButTransportRetryDoesNot() {
+        val store=ClipStore(context(),codec)
+        val first=ClipboardSync.Entry(UUID.randomUUID(),remote,1,100,"repeated")
+        val second=ClipboardSync.Entry(UUID.randomUUID(),remote,2,200,"another")
+        store.receiveShared(first);store.receiveShared(second)
+        val repeated=store.entries().first { it.key==first.id.toString() }
+        store.updateCategory(repeated.id,"工作");store.toggleLocked(repeated.id)
+        val fixture=store.unifiedSnapshot();val rows=fixture.getJSONArray("entries")
+        for(i in 0 until rows.length())rows.getJSONObject(i).put("createdAt",if(rows.getJSONObject(i).getString("id")==first.id.toString())1L else 2L)
+        store.commitUnified(fixture.getString("revision"),rows)
+        assertEquals("another",store.entries().first().text)
+        val copiedAgain=ClipboardSync.Entry(UUID.randomUUID(),remote,3,300,"repeated")
+        store.receiveShared(copiedAgain)
+        val newest=store.entries().first()
+        assertEquals("repeated",newest.text);assertEquals(2,store.entries().size)
+        assertEquals("工作",newest.category);assertTrue(newest.locked)
+        assertEquals(copiedAgain.id.toString(),newest.key)
+        val beforeRetry=store.unifiedSnapshot().toString()
+        store.receiveShared(copiedAgain)
+        assertEquals(beforeRetry,store.unifiedSnapshot().toString())
+    }
+    @Test fun imageOutboxSurvivesRestartAndExplicitClear() {
+        val context=context()
+        File(context.filesDir,"clipboard_image_sync.v1.bin").delete()
+        val storage=com.floatclip.app.sync.ClipboardImageSyncStorage(context,codec)
+        val pending=com.floatclip.app.sync.ClipboardImageSyncStorage.Pending(
+            UUID.randomUUID(),"a".repeat(32),"b".repeat(64),1920,1080,1000L,1100L,setOf("c".repeat(64)))
+        storage.save(pending)
+        assertEquals(pending,com.floatclip.app.sync.ClipboardImageSyncStorage(context,codec).load())
+        storage.save(null)
+        assertNull(com.floatclip.app.sync.ClipboardImageSyncStorage(context,codec).load())
+    }
+
     private class PolicyFixture {
         var saved: ByteArray?=null
         val frames=mutableListOf<ShareWire.Frame>()

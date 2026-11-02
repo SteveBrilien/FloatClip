@@ -192,7 +192,10 @@ static class Program
             host.ShowLibrary();Check(app.Windows.OfType<LocalClipboardWindow>().Count()==1,"legacy library reuses one clipboard window");
             var search=Field<TextBox>(window,"search");var list=Field<StackPanel>(window,"list");
             var dragRegion=Descendants(window).OfType<DockPanel>().Single(p=>System.Windows.Automation.AutomationProperties.GetAutomationId(p)=="WindowDragRegion");Check(dragRegion.Background!=null&&dragRegion.ActualWidth>=window.ActualWidth-12,"entire blank title region is hit-testable for dragging");
-            var pinButton=Descendants(dragRegion).OfType<Button>().Single(b=>b.Content is Wpf.Ui.Controls.SymbolIcon);Check(((Wpf.Ui.Controls.SymbolIcon)pinButton.Content).Filled,"pinned window uses a filled pin");host.SetPinned(false);Call(window,"BuildShellTitle");Check(!((Wpf.Ui.Controls.SymbolIcon)pinButton.Content).Filled,"unpinned window uses an outlined pin");host.SetPinned(true);Call(window,"BuildShellTitle");
+            var pinButton=Descendants(dragRegion).OfType<Button>().Single(b=>System.Windows.Automation.AutomationProperties.GetAutomationId(b)=="WindowPin");Check(((Wpf.Ui.Controls.SymbolIcon)pinButton.Content).Filled,"pinned window uses a filled pin");host.SetPinned(false);Call(window,"BuildShellTitle");Check(!((Wpf.Ui.Controls.SymbolIcon)pinButton.Content).Filled,"unpinned window uses an outlined pin");host.SetPinned(false);
+            var occluder=new Window{Title="FloatClip isolated occlusion check",Width=240,Height=180};occluder.Show();occluder.Activate();Pump(100);
+            Check(window.IsVisible&&!window.Topmost&&window.ShowInTaskbar,"unpinned window stays visible and can be covered like an ordinary window");
+            occluder.Close();host.SetPinned(true);window.Activate();Call(window,"BuildShellTitle");
             Check(search.Template.FindName("PART_ContentHost",search) is ScrollViewer&&!Descendants(search).OfType<Border>().Any(),"search has one outer focus boundary and no nested partial underline");
             void Query(string value,int count){search.Text=value;Pump(180);Check(list.Children.Count==count,"search TextChanged matches "+value);}
             Query("alpha",1);Query("工作",1);Query("图片",1);Query("👍🏽",1);Query("",4);
@@ -295,6 +298,16 @@ static class Program
                 Check(materialWindow.AllowsTransparency&&materialWindow.Opacity==1&&materialWindow.Topmost,"transparent surface uses per-pixel background while text stays opaque and pin remains active");
                 materialWindow.FocusSearch();Pump();Check(Field<TextBox>(materialWindow,"search").IsKeyboardFocusWithin,"transparent clipboard accepts normal keyboard focus");
                 Snapshot(materialWindow,"clipboard-transparent");materialWindow.OpenSettings();Pump();var settingsAlpha=((SolidColorBrush)materialWindow.Background).Color.A;Call(materialWindow,"Navigate",typeof(FilesPage));Pump();Check(((SolidColorBrush)materialWindow.Background).Color.A==settingsAlpha,"files and settings use the same application backdrop policy");Check(Field<FileShelfView>(materialWindow,"filesView").Background==Brushes.Transparent,"file page does not hide application backdrop");
+            }
+            using(var largeHost=new ClipboardHost(Path.Combine(dataRoot,"large-history"),false)) {
+                var largeVault=largeHost.Vault;var one=largeVault.AddImage(png,2,2)["entries"]!.AsArray()[0]!.AsObject();
+                var snapshot=largeVault.Load();var many=new JsonArray();
+                for(int i=0;i<500;i++){var item=(JsonObject)one.DeepClone();item["id"]=Guid.NewGuid().ToString();item["updatedAt"]=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()+i;many.Add(item);}
+                largeVault.Commit(snapshot["revision"]!.GetValue<string>(),many);largeHost.SetPinned(true);largeHost.ShowPopup();Pump(200);
+                var largeWindow=app.Windows.OfType<LocalClipboardWindow>().Single(w=>Field<ClipboardHost>(w,"host")==largeHost);
+                var largeList=Field<StackPanel>(largeWindow,"list");
+                Check(largeList.Children.Count<=12,"500-image history initially materializes one small page");
+                Call(largeWindow,"AppendHistoryPage");Check(largeList.Children.Count<=24,"scroll loading appends one bounded page");
             }
             File.WriteAllText(Path.Combine(output,"report.json"),JsonSerializer.Serialize(new{result="PASS",checks,isolated=true,userClipboardUntouched=true,uiFailures=host.UiFailureCount,utc=DateTime.UtcNow},new JsonSerializerOptions{WriteIndented=true}));
             if(args.Contains("--interactive"))

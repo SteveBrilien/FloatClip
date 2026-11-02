@@ -31,6 +31,14 @@ class OverlayPreferences(context: Context) {
     fun saveSourceColors(value: Boolean) { prefs.edit().putBoolean("source_colors",value).apply() }
     fun saveTranslucentCards(value: Boolean) { prefs.edit().putBoolean("translucent_cards",value).apply() }
 
+    fun backgroundMode():String=prefs.getString("panel_background_mode","transparent")?.takeIf { it in listOf("solid","transparent","frost","window") }?:"transparent"
+    fun saveBackgroundMode(value:String) { require(value in listOf("solid","transparent","frost","window"));prefs.edit().putString("panel_background_mode",value).apply() }
+    fun windowAlphaPercent()=prefs.getInt("window_alpha",100).coerceIn(20,100)
+    fun saveWindowAlphaPercent(value:Int) { prefs.edit().putInt("window_alpha",value.coerceIn(20,100)).apply() }
+    fun curveControl(index:Int):Int { require(index in 0..3);return prefs.getInt("motion_curve_"+index,listOf(20,80,20,100)[index]).coerceIn(0,100) }
+    fun saveCurveControl(index:Int,value:Int) { require(index in 0..3);prefs.edit().putInt("motion_curve_"+index,value.coerceIn(0,100)).apply() }
+    fun motionInterpolator():android.view.animation.Interpolator=android.view.animation.PathInterpolator(
+        curveControl(0)/100f,curveControl(1)/100f,curveControl(2)/100f,curveControl(3)/100f)
     fun panelAlphaPercent(): Int = prefs.getInt(KEY_PANEL_ALPHA_PERCENT, DEFAULT_PANEL_ALPHA_PERCENT).coerceIn(45, 100)
     fun panelWidthDp(): Int = prefs.getInt(KEY_PANEL_WIDTH_DP, DEFAULT_PANEL_WIDTH_DP).coerceIn(280, 420)
     fun panelHeightDp(): Int = prefs.getInt(KEY_PANEL_HEIGHT_DP, DEFAULT_PANEL_HEIGHT_DP).coerceIn(300, 620)
@@ -40,11 +48,24 @@ class OverlayPreferences(context: Context) {
     fun borderEnabled(): Boolean = prefs.getBoolean(KEY_BORDER_ENABLED, true)
     fun borderAlphaPercent(): Int = prefs.getInt(KEY_BORDER_ALPHA_PERCENT, DEFAULT_BORDER_ALPHA_PERCENT).coerceIn(5, 60)
     fun accentTheme(): String = prefs.getString(KEY_ACCENT_THEME, "blue") ?: "blue"
-    fun cardPressScalePercent(): Int = prefs.getInt(KEY_CARD_PRESS_SCALE_PERCENT, DEFAULT_CARD_PRESS_SCALE_PERCENT).coerceIn(94, 100)
-    fun bubblePressScalePercent(): Int = prefs.getInt(KEY_BUBBLE_PRESS_SCALE_PERCENT, DEFAULT_BUBBLE_PRESS_SCALE_PERCENT).coerceIn(90, 100)
-    fun panelPressScalePercent(): Int = prefs.getInt(KEY_PANEL_PRESS_SCALE_PERCENT, DEFAULT_PANEL_PRESS_SCALE_PERCENT).coerceIn(97, 100)
-    fun transitionDurationMs(): Int = prefs.getInt(KEY_TRANSITION_DURATION_MS, DEFAULT_TRANSITION_DURATION_MS).coerceIn(120, 480)
-    fun switchAnimationMs(): Int = prefs.getInt(KEY_SWITCH_ANIMATION_MS, DEFAULT_SWITCH_ANIMATION_MS).coerceIn(80, 300)
+    fun interactionRange(key:String):IntRange {
+        val fallback=when(key){"transition"->0..1500;"switch"->0..1000;else->50..100}
+        val hard=if(key in listOf("transition","switch"))0..5000 else 10..120
+        val min=prefs.getInt("range_min_"+key,fallback.first).coerceIn(hard)
+        val max=prefs.getInt("range_max_"+key,fallback.last).coerceIn(hard)
+        return if(min<max)min..max else fallback
+    }
+    fun saveInteractionRange(key:String,min:Int,max:Int) {
+        require(key in listOf("card","bubble","panel","transition","switch"))
+        val hard=if(key in listOf("transition","switch"))0..5000 else 10..120
+        require(min in hard && max in hard && min<max)
+        prefs.edit().putInt("range_min_"+key,min).putInt("range_max_"+key,max).apply()
+    }
+    fun cardPressScalePercent(): Int = prefs.getInt(KEY_CARD_PRESS_SCALE_PERCENT, DEFAULT_CARD_PRESS_SCALE_PERCENT).coerceIn(interactionRange("card"))
+    fun bubblePressScalePercent(): Int = prefs.getInt(KEY_BUBBLE_PRESS_SCALE_PERCENT, DEFAULT_BUBBLE_PRESS_SCALE_PERCENT).coerceIn(interactionRange("bubble"))
+    fun panelPressScalePercent(): Int = prefs.getInt(KEY_PANEL_PRESS_SCALE_PERCENT, DEFAULT_PANEL_PRESS_SCALE_PERCENT).coerceIn(interactionRange("panel"))
+    fun transitionDurationMs(): Int = prefs.getInt(KEY_TRANSITION_DURATION_MS, DEFAULT_TRANSITION_DURATION_MS).coerceIn(interactionRange("transition"))
+    fun switchAnimationMs(): Int = prefs.getInt(KEY_SWITCH_ANIMATION_MS, DEFAULT_SWITCH_ANIMATION_MS).coerceIn(interactionRange("switch"))
     fun detailedNotification(): Boolean = prefs.getBoolean(KEY_DETAILED_NOTIFICATION, false)
     fun panelFollowsBubble(): Boolean = prefs.getBoolean(KEY_PANEL_FOLLOWS_BUBBLE, false)
     fun savePanelFollowsBubble(value:Boolean) { prefs.edit().putBoolean(KEY_PANEL_FOLLOWS_BUBBLE,value).apply() }
@@ -105,11 +126,11 @@ class OverlayPreferences(context: Context) {
     fun saveBorderEnabled(value: Boolean) { prefs.edit().putBoolean(KEY_BORDER_ENABLED,value).apply() }
     fun saveBorderAlphaPercent(value: Int) { prefs.edit().putInt(KEY_BORDER_ALPHA_PERCENT,value.coerceIn(5,60)).apply() }
     fun saveAccentTheme(value: String) { prefs.edit().putString(KEY_ACCENT_THEME,value).apply() }
-    fun saveCardPressScalePercent(value: Int) { prefs.edit().putInt(KEY_CARD_PRESS_SCALE_PERCENT,value.coerceIn(94,100)).apply() }
-    fun saveBubblePressScalePercent(value: Int) { prefs.edit().putInt(KEY_BUBBLE_PRESS_SCALE_PERCENT,value.coerceIn(90,100)).apply() }
-    fun savePanelPressScalePercent(value: Int) { prefs.edit().putInt(KEY_PANEL_PRESS_SCALE_PERCENT,value.coerceIn(97,100)).apply() }
-    fun saveTransitionDurationMs(value: Int) { prefs.edit().putInt(KEY_TRANSITION_DURATION_MS,value.coerceIn(120,480)).apply() }
-    fun saveSwitchAnimationMs(value: Int) { prefs.edit().putInt(KEY_SWITCH_ANIMATION_MS,value.coerceIn(80,300)).apply() }
+    fun saveCardPressScalePercent(value: Int) { prefs.edit().putInt(KEY_CARD_PRESS_SCALE_PERCENT,value.coerceIn(interactionRange("card"))).apply() }
+    fun saveBubblePressScalePercent(value: Int) { prefs.edit().putInt(KEY_BUBBLE_PRESS_SCALE_PERCENT,value.coerceIn(interactionRange("bubble"))).apply() }
+    fun savePanelPressScalePercent(value: Int) { prefs.edit().putInt(KEY_PANEL_PRESS_SCALE_PERCENT,value.coerceIn(interactionRange("panel"))).apply() }
+    fun saveTransitionDurationMs(value: Int) { prefs.edit().putInt(KEY_TRANSITION_DURATION_MS,value.coerceIn(interactionRange("transition"))).apply() }
+    fun saveSwitchAnimationMs(value: Int) { prefs.edit().putInt(KEY_SWITCH_ANIMATION_MS,value.coerceIn(interactionRange("switch"))).apply() }
     fun saveDetailedNotification(value: Boolean) { prefs.edit().putBoolean(KEY_DETAILED_NOTIFICATION,value).apply() }
 
     fun savePanelPosition(x: Int, y: Int) {
@@ -122,6 +143,11 @@ class OverlayPreferences(context: Context) {
 
     fun resetAppearance() {
         prefs.edit()
+            .remove("panel_background_mode").remove("window_alpha")
+            .remove("range_min_card").remove("range_max_card").remove("range_min_bubble").remove("range_max_bubble")
+            .remove("range_min_panel").remove("range_max_panel").remove("range_min_transition").remove("range_max_transition")
+            .remove("range_min_switch").remove("range_max_switch")
+            .remove("motion_curve_0").remove("motion_curve_1").remove("motion_curve_2").remove("motion_curve_3")
             .remove(KEY_BUBBLE_SIZE_DP)
             .remove(KEY_BUBBLE_ALPHA_PERCENT)
             .remove(KEY_EDGE_HIDE_PERCENT)

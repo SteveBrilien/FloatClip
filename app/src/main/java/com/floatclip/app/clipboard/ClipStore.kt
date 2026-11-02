@@ -20,7 +20,25 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
 
     init { migrateLegacyIfNeeded() }
 
-    fun entries(): List<ClipEntry> = synchronized(LOCK) { parseEntries(readVaultJson()) }
+    fun entries(): List<ClipEntry> = synchronized(LOCK) {
+        val stamp=vaultFile.lastModified() to vaultFile.length()
+        val key=vaultFile.absolutePath
+        if(crypto is LocalVaultCrypto) metadata[key]?.takeIf { it.stamp==stamp }?.let { return@synchronized it.entries }
+        val result=parseEntries(readVaultJson())
+        if(crypto is LocalVaultCrypto) {
+            if(metadata.size>=4 && key !in metadata)metadata.remove(metadata.keys.first())
+            metadata[key]=Metadata(stamp,result)
+        }
+        result
+    }
+
+    private fun nextEntryId(current:List<ClipEntry>):Long {
+        val previous=maxOf(legacyPrefs.getLong("last_entry_id",0L),current.maxOfOrNull { it.id }?:0L)
+        check(previous<Long.MAX_VALUE){ "记录编号已满" }
+        val next=maxOf(System.currentTimeMillis(),previous+1)
+        check(legacyPrefs.edit().putLong("last_entry_id",next).commit()){ "无法保存记录编号" }
+        return next
+    }
 
     fun addText(text: String): ClipEntry? = synchronized(LOCK) {
         val trimmed = text.trim()
@@ -30,7 +48,7 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
         if (duplicate != null) current.remove(duplicate)
         val inferredCategory = ClipClassifier.classify(trimmed, categoryStore.categories()) ?: CategoryStore.DEFAULT_CATEGORY
         val entry = duplicate?.copy(createdAt = System.currentTimeMillis(), updatedAt = System.currentTimeMillis())
-            ?: ClipEntry(id = maxOf(System.currentTimeMillis(), (current.maxOfOrNull { it.id } ?: 0L) + 1), text = trimmed, category = inferredCategory)
+            ?: ClipEntry(id = nextEntryId(current), text = trimmed, category = inferredCategory)
         if (current.size >= MAX_ITEMS) {
             val oldest = current.filterNot { it.pinned || it.locked }.minByOrNull { it.updatedAt }
             if (oldest == null) return@synchronized null
@@ -65,10 +83,31 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
         }
         images.prune(referenced)
         val reference=images.write(png)
-        val entry=ClipEntry(id=maxOf(now,(current.maxOfOrNull { it.id } ?: 0)+1),text="图片",kind="image",imageRef=reference,
+        val entry=ClipEntry(id=nextEntryId(current),text="图片",kind="image",imageRef=reference,
             imageSha256=info.sha256,imageBytes=info.bytes,imageWidth=info.width,imageHeight=info.height)
         try { persist(listOf(entry)+current) } catch(e:Exception) { images.delete(reference);throw e }
         entry
+    }
+    internal fun readThumbnail(key:String):ByteArray?=runCatching {
+        val file=thumbnailFile(key)
+        if(file.length() !in 1..2_000_000L)return@runCatching null
+        crypto.decrypt(file.readBytes()).also { file.setLastModified(System.currentTimeMillis()) }
+    }.getOrNull()
+    internal fun writeThumbnail(key:String,png:ByteArray) {
+        if(png.size>1_500_000)return
+        synchronized(THUMBNAIL_LOCK) { runCatching {
+            val file=thumbnailFile(key)
+            val temp=File(file.parentFile,file.name+".tmp")
+            temp.writeBytes(crypto.encrypt(png));check(temp.renameTo(file))
+            val files=file.parentFile!!.listFiles().orEmpty().filter { it.extension=="bin" }.sortedByDescending{it.lastModified()}
+            var bytes=0L
+            files.forEachIndexed { index,f -> bytes+=f.length();if(index>=96 || bytes>32L*1024*1024)f.delete() }
+        } }
+    }
+    private fun thumbnailFile(key:String):File {
+        val directory=File(appContext.cacheDir,"clipboard-thumbnails").apply { mkdirs() }
+        val name=MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).joinToString(""){"%02x".format(it.toInt() and 255)}
+        return File(directory,name+".bin")
     }
     fun readImage(entry:ClipEntry):ByteArray {
         require(entry.kind=="image") { "这条记录不是图片" }
@@ -113,14 +152,14 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
         val reference=previous?.imageRef?.takeIf { it.isNotBlank() } ?: java.util.UUID.randomUUID().toString().replace("-","")
         val wasNew=previous==null
         images.write(png,reference)
-        val now=System.currentTimeMillis()
+        val now=maxOf(System.currentTimeMillis(),(current.maxOfOrNull { it.createdAt }?:0L)+1)
         val row=ClipEntry(
-            id=previous?.id ?: maxOf(now,(current.maxOfOrNull { it.id }?:0L)+1),
+            id=previous?.id ?: nextEntryId(current),
             text="图片",
             pinned=previous?.pinned?:false,
             locked=previous?.locked?:false,
             category=previous?.category?:CategoryStore.DEFAULT_CATEGORY,
-            createdAt=previous?.createdAt?:createdAt,
+            createdAt=now,
             key=key,
             updatedAt=now,
             sourceDeviceId=source.id.toString(),
@@ -177,10 +216,10 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
                 ?:error("置顶或保护记录已满")
             array.remove(removable)
         }
-        val now=System.currentTimeMillis()
+        val now=maxOf(System.currentTimeMillis(),(0 until array.length()).maxOfOrNull { array.getJSONObject(it).getLong("createdAt") }?.plus(1)?:0L)
         array.put(JSONObject().put("id",key).put("text",entry.text).put("pinned",old?.optBoolean("pinned")?:false)
             .put("locked",old?.optBoolean("locked")?:false)
-            .put("category",old?.optString("category")?:CategoryStore.DEFAULT_CATEGORY).put("createdAt",old?.optLong("createdAt")?:now).put("updatedAt",now)
+            .put("category",old?.optString("category")?:CategoryStore.DEFAULT_CATEGORY).put("createdAt",now).put("updatedAt",now)
             .put("source",JSONObject().put("id",entry.source.id.toString()).put("name",entry.source.name).put("platform",entry.source.platform)))
         commitUnified(snapshot.getString("revision"),array)
     }
@@ -274,6 +313,9 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
             vaultFile.writeBytes(encrypted)
             temp.delete()
         }
+        metadata.remove(vaultFile.absolutePath)
+        if(crypto is LocalVaultCrypto)metadata[vaultFile.absolutePath]=Metadata(
+            vaultFile.lastModified() to vaultFile.length(),items.sortedWith(compareByDescending<ClipEntry>{it.pinned}.thenByDescending{it.createdAt}))
         val generation=++backupGeneration
         backupWorker.execute { runCatching {
             if(com.floatclip.app.security.VaultSettings(appContext).backupWriteArmed()) {
@@ -443,6 +485,9 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
     }
 
     companion object {
+        private data class Metadata(val stamp:Pair<Long,Long>,val entries:List<ClipEntry>)
+        private val metadata=linkedMapOf<String,Metadata>()
+        private val THUMBNAIL_LOCK = Any()
         private val LOCK = Any()
         private const val KEY_ITEMS = "items"
         private const val MAX_ITEMS = 500

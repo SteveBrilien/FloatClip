@@ -3,6 +3,8 @@ package com.floatclip.app.sync
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import com.floatclip.app.clipboard.ClipboardWrites
 import com.floatclip.share.ShareWire
 import java.lang.ref.WeakReference
@@ -21,6 +23,7 @@ object SyncRuntime {
     }
     @Volatile private var runtime: WeakReference<ClipboardSyncService>?=null
     @Volatile private var observer: WeakReference<Observer>?=null
+    private val main=Handler(Looper.getMainLooper())
     fun attach(service: ClipboardSyncService){runtime=WeakReference(service)}
     fun detach(service: ClipboardSyncService){if(runtime?.get()===service)runtime=null}
     fun current()=runtime?.get()
@@ -28,15 +31,24 @@ object SyncRuntime {
     fun clearObserver(value: Observer){if(observer?.get()===value){observer=null;current()?.answerPairing(false)}}
     fun hasObserver()=observer?.get()!=null
     const val STATE_CHANGED="com.floatclip.app.SYNC_STATE_CHANGED"
-    fun changed(){current()?.let{
-        observer?.get()?.changed(it)
-        it.sendBroadcast(Intent(STATE_CHANGED).setPackage(it.packageName),it.packageName+".permission.INTERNAL")
-    }}
+    fun changed(){
+        val service=current()?:return
+        val deliver=Runnable {
+            if(current()!==service)return@Runnable
+            observer?.get()?.changed(service)
+            service.sendBroadcast(Intent(STATE_CHANGED).setPackage(service.packageName),service.packageName+".permission.INTERNAL")
+        }
+        if(Looper.myLooper()==Looper.getMainLooper())deliver.run() else main.post(deliver)
+    }
     fun verify(code: String,answer: Consumer<Boolean>){val ui=observer?.get();if(ui==null)answer.accept(false) else ui.verify(code,answer)}
     fun offer(peer: String,offer: ShareWire.Offer){observer?.get()?.offer(peer,offer)}
     fun progress(name: String,done: Long,total: Long,outgoing: Boolean){observer?.get()?.progress(name,done,total,outgoing)}
     fun file(offer: ShareWire.Offer,file: File,outgoing: Boolean){observer?.get()?.file(offer,file,outgoing)}
-    fun pair(context: Context){check(SyncPreferences(context).enabled()){ "请先开启剪贴板共享" };context.startForegroundService(Intent(context,ClipboardSyncService::class.java).setAction(ClipboardSyncService.PAIR))}
+    fun pair(context: Context){
+        val prefs=SyncPreferences(context);check(prefs.enabled()){ "请先开启剪贴板共享" }
+        prefs.saveConnectionsPaused(false);current()?.resumeConnections()
+        context.startForegroundService(Intent(context,ClipboardSyncService::class.java).setAction(ClipboardSyncService.PAIR))
+    }
     fun refresh(context: Context) {
         val intent=Intent(context,ClipboardSyncService::class.java)
         if(SyncPreferences(context).enabled())context.startForegroundService(intent)

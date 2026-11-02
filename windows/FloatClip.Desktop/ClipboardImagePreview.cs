@@ -11,12 +11,36 @@ namespace FloatClip.Desktop;
 public sealed partial class LocalClipboardWindow
 {
     readonly Dictionary<string,System.Windows.Media.Imaging.BitmapSource> thumbnails=new();
-    System.Windows.Media.Imaging.BitmapSource Thumbnail(JsonObject clip)
+    readonly System.Threading.SemaphoreSlim thumbnailWorkers=new(2);
+    readonly object thumbnailLock=new();
+    async System.Threading.Tasks.Task<System.Windows.Media.Imaging.BitmapSource?> ThumbnailAsync(JsonObject clip,System.Threading.CancellationToken token)
     {
         string key=clip["imageRef"]!.GetValue<string>()+":"+clip["imageSha256"]!.GetValue<string>();
-        if(thumbnails.TryGetValue(key,out var cached))return cached;
-        var thumbnail=DecodeImage(vault.ReadImage(clip),Math.Min(400,(int)clip["imageWidth"]!.GetValue<long>()));
-        if(thumbnails.Count>=24)thumbnails.Remove(thumbnails.Keys.First());thumbnails.Add(key,thumbnail);return thumbnail;
+        lock(thumbnailLock)if(thumbnails.TryGetValue(key,out var cached))return cached;
+        try {
+            await thumbnailWorkers.WaitAsync(token).ConfigureAwait(false);
+            try {
+                return await System.Threading.Tasks.Task.Run(()=>{
+                    token.ThrowIfCancellationRequested();
+                    lock(thumbnailLock)if(thumbnails.TryGetValue(key,out var existing))return existing;
+                    long width=clip["imageWidth"]!.GetValue<long>(),height=clip["imageHeight"]!.GetValue<long>();
+                    using var stream=new System.IO.MemoryStream(vault.ReadImage(clip));
+                    var image=new System.Windows.Media.Imaging.BitmapImage();image.BeginInit();image.CacheOption=System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    if(height>width)image.DecodePixelHeight=(int)Math.Min(400,height);else image.DecodePixelWidth=(int)Math.Min(400,width);
+                    image.StreamSource=stream;image.EndInit();image.Freeze();token.ThrowIfCancellationRequested();
+                    lock(thumbnailLock){if(thumbnails.Count>=24)thumbnails.Remove(thumbnails.Keys.First());thumbnails[key]=image;}
+                    return (System.Windows.Media.Imaging.BitmapSource)image;
+                },token).ConfigureAwait(false);
+            } finally { thumbnailWorkers.Release(); }
+        } catch(System.OperationCanceledException){return null;} catch(System.IO.IOException){return null;} catch(System.Exception){return null;}
+    }
+    async void LoadThumbnail(Image target,JsonObject clip,System.Threading.CancellationToken token)
+    {
+        var bitmap=await ThumbnailAsync(clip,token);
+        if(!token.IsCancellationRequested && !Dispatcher.HasShutdownStarted) {
+            target.Source=bitmap;
+            System.Windows.Automation.AutomationProperties.SetName(target,bitmap==null?"图片暂不可用":"图片缩略图");
+        }
     }
     void PreviewImage(JsonObject clip)
     {

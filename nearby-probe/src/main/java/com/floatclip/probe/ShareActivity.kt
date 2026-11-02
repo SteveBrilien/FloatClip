@@ -35,6 +35,7 @@ open class ShareActivity : Activity() {
     protected open fun stopManagedPairing(): Boolean = false
     protected open fun pauseManagedConnections(): Boolean = false
     protected open fun clearManagedTrust(): Boolean = false
+    protected open fun managedDeviceRows(): List<Pair<String,String>> = emptyList()
     protected open fun hostTheme(): String? = null
     protected fun managedState(active: ShareSession?,summary: String,allowing: Boolean) {
         session=active;status=summary;discovering=allowing;invitation="";render()
@@ -368,7 +369,8 @@ open class ShareActivity : Activity() {
             if(session!=null) {
                 button("开始共享",true) { switchTab(0) }
                 button(if(managedConnections()) "暂停共享" else "断开连接",false) { disconnect(); render() }
-            } else {
+            }
+            if(session==null || managedConnections()) {
                 button(if(discovering) "重新开放配对窗口" else if(managedConnections()) "添加设备" else "允许附近设备连接",true) {
                     if(managedConnections()) beginManagedPairing()
                     else {
@@ -385,7 +387,8 @@ open class ShareActivity : Activity() {
             }
         }
         card {
-            addView(settingRow("设备授权","",ShareGlyph.SHIELD,"${trust.all.size} 台",R.id.menu_trust) { navigate(Detail.TRUST) })
+            val count=if(managedConnections()) managedDeviceRows().size else trust.all.count { it.key.startsWith("peer-") && it.value==true }
+            addView(settingRow("设备授权","",ShareGlyph.SHIELD,"$count 台",R.id.menu_trust) { navigate(Detail.TRUST) })
             if(clipboardHost) {
                 divider(this)
                 addView(settingRow("跨网设备（iPad / Web）","远程设备也会作为独立剪贴板来源",ShareGlyph.DEVICES) { openWebDevices() })
@@ -464,8 +467,14 @@ open class ShareActivity : Activity() {
     }
     private fun trustPage() {
         card {
-            cardTitle("已授权 ${trust.all.size} 台设备", "首次核对识别码后自动记住")
-            addView(text("记住的设备可直接重连；移除授权后，需要再次核对识别码。",14,p.muted).apply { setPadding(0,dp(14),0,0) })
+            val rows=managedDeviceRows()
+            val count=if(managedConnections()) rows.size else trust.all.count { it.key.startsWith("peer-") && it.value==true }
+            cardTitle("已授权 $count 台设备", "首次核对识别码后自动记住")
+            rows.forEach { (name,state) ->
+                divider(this)
+                addView(text(name,15,p.text,true).apply { setPadding(0,dp(12),0,0) })
+                addView(text(state,12,p.muted).apply { setPadding(0,dp(4),0,dp(12)) })
+            }
             if(trust.all.isNotEmpty()) button("移除所有设备授权",false) {
                 dialog().setTitle("移除所有设备授权？").setMessage("所有已记住的电脑都需要重新配对。")
                     .setNegativeButton("取消",null).setPositiveButton("移除授权") { _,_ ->

@@ -21,12 +21,12 @@ public sealed class CategoryService(ClipboardVault vault,string root)
         if(new FileInfo(PathName).Length>65536)throw new IOException("分类配置过大，请保留数据后检查");
         return JsonSerializer.Deserialize<Dictionary<string,string>>(File.ReadAllText(PathName))??throw new IOException("分类配置无法读取");
     }
-    public CategoryDefinition[] List()
+    public CategoryDefinition[] List(JsonArray? entries=null)
     {
         var saved=Load();
         var hidden=ReadPreference<string[]>("category-hidden.json")??[];
         var icons=ReadPreference<Dictionary<string,string>>("category-icons.json")??new();
-        var names=new[]{"未分类","工作","学习","生活"}.Where(n=>n=="未分类"||!hidden.Contains(n)).Concat(saved.Keys).Concat(vault.Load()["entries"]!.AsArray().OfType<JsonObject>().Select(c=>c["category"]?.GetValue<string>()??"未分类"));
+        var names=new[]{"未分类","工作","学习","生活"}.Where(n=>n=="未分类"||!hidden.Contains(n)).Concat(saved.Keys).Concat((entries??vault.Load()["entries"]!.AsArray()).OfType<JsonObject>().Select(c=>c["category"]?.GetValue<string>()??"未分类"));
         return names.Distinct(StringComparer.Ordinal).Select(name=>new CategoryDefinition(name,saved.TryGetValue(name,out var color)&&Colors.Any(c=>c.Id==color)?color:"blue",icons.TryGetValue(name,out var icon)&&Icons.Any(c=>c.Id==icon)?icon:"folder")).ToArray();
     }
     T? ReadPreference<T>(string file){var path=Path.Combine(root,file);if(!File.Exists(path))return default;if(new FileInfo(path).Length>65536)throw new IOException("分类配置过大");return JsonSerializer.Deserialize<T>(File.ReadAllText(path));}

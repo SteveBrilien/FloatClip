@@ -20,6 +20,8 @@ import com.floatclip.app.clipboard.ClipboardImages
 class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foreground: Int,
     surface: Int, compact: Boolean = false) : FrameLayout(context) {
     private var loadImage:(()->Unit)?=null
+    private var retryImage:(()->Unit)?=null
+    private var imageRequest:AutoCloseable?=null
     private val visibleImageListener=android.view.ViewTreeObserver.OnPreDrawListener {
         if(loadImage!=null && isShown && getGlobalVisibleRect(android.graphics.Rect())) {
             val load=loadImage;loadImage=null;load?.invoke()
@@ -32,6 +34,8 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
     }
     override fun onDetachedFromWindow() {
         if(viewTreeObserver.isAlive)viewTreeObserver.removeOnPreDrawListener(visibleImageListener)
+        imageRequest?.close();imageRequest=null
+        if(retryImage!=null)loadImage=retryImage
         super.onDetachedFromWindow()
     }
     init {
@@ -56,7 +60,7 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
         minimumHeight = dp(if(entry.kind=="image")132 else minHeight)
         background = GradientDrawable().apply {
             val tinted = if(prefs.translucentCards()) mix(surface,accent,if(dark) .10f else .055f) else surface
-            val cardColor = if(prefs.translucentCards()) {
+            val cardColor = if(prefs.backgroundMode()!="solid") {
                 val alpha=(255f*prefs.cardAlphaPercent()/100f).toInt().coerceIn(0,255)
                 Color.argb(alpha, Color.red(tinted), Color.green(tinted), Color.blue(tinted))
             } else tinted
@@ -94,12 +98,14 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
             }
             if(longImage)preview.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> positionLongImage() }
             loadImage = {
-              ClipboardImages.thumbnailAsync(ClipStore(context),entry,480,card=true) { image ->
+              imageRequest=ClipboardImages.thumbnailAsync(ClipStore(context),entry,480,card=true) { image ->
+                retryImage=null
                 preview.setImageBitmap(image)
                 preview.contentDescription=if(image==null)"图片暂不可用" else "图片 ${entry.imageWidth} × ${entry.imageHeight}"
                 if(image==null)label.text="图片暂不可用" else if(longImage)positionLongImage()
               }
             }
+            retryImage=loadImage
         } else addView(TextView(context).apply {
             text = entry.text; textSize = if(compact) 15f else 16f
             setTextColor(foreground); includeFontPadding = false; setLineSpacing(dp(2).toFloat(),1f)

@@ -8,6 +8,9 @@ import com.floatclip.app.sync.SyncRuntime
 import com.floatclip.app.sync.SyncPreferences
 import com.floatclip.app.sync.ClipboardSyncService
 import com.floatclip.app.sync.TrustedPeerStore
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import com.floatclip.app.ui.FloatDialog
 import com.floatclip.share.ShareWire
 import java.io.File
@@ -16,21 +19,53 @@ import java.util.function.Consumer
 /** The device route writes into the same native vault as the clipboard and floating panel. */
 class DeviceActivity : ShareActivity(),SyncRuntime.Observer {
     private var syncDialog: android.app.Dialog?=null
+    private var pairAfterBluetoothPermission=false
+    private val bluetoothPermissionRequest=7312
     // This activity always belongs to the managed clipboard-sync architecture.
     // The master switch controls the service; it must never make this screen fall back
     // to the legacy foreground-only ShareActivity connection lifecycle.
     override fun managedConnections()=true
     override fun hostTheme()=com.floatclip.app.prefs.OverlayPreferences(this).themeMode().name.lowercase()
+    override fun managedDeviceRows(): List<Pair<String,String>> {
+        val trusted=getSharedPreferences("share-pairs",MODE_PRIVATE).all.filter { it.key.startsWith("peer-") && it.value==true }.keys.map { it.removePrefix("peer-") }
+        val remembered=runCatching { TrustedPeerStore(this).peers().associateBy { it.key } }.getOrDefault(emptyMap())
+        val service=SyncRuntime.current()
+        val peers=service?.peers().orEmpty().associateBy { it.key }
+        fun useful(name:String?)=name?.trim()?.takeIf { it.isNotEmpty() && !it.equals("unknown device",true) && !it.equals("unknown",true) && it!="未知设备" && it!="已授权设备" }
+        return trusted.groupBy { key -> remembered[key]?.deviceId?.toString() ?: peers[key]?.device?.id?.toString() ?: key }.values.map { keys ->
+            val name=keys.firstNotNullOfOrNull { useful(remembered[it]?.name) }
+                ?: keys.firstNotNullOfOrNull { useful(peers[it]?.device?.name) } ?: "已授权设备"
+            val state=when {
+                !SyncPreferences(this).enabled() -> "共享已关闭"
+                SyncPreferences(this).connectionsPaused() -> "共享连接已暂停"
+                keys.any { service?.session(it)!=null } -> "已连接"
+                else -> "已授权，等待连接"
+            }
+            name to state
+        }
+    }
     override fun beginManagedPairing(): Boolean {
         if(!SyncPreferences(this).enabled()) {
             managedState(null,"共享已关闭，请先在剪贴板设置中开启",false)
             android.widget.Toast.makeText(this,"请先开启剪贴板共享",android.widget.Toast.LENGTH_SHORT).show()
             return true
         }
+        if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.S && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED){
+            pairAfterBluetoothPermission=true
+            requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT),bluetoothPermissionRequest)
+            return true
+        }
         SyncRuntime.pair(this);return true
     }
     override fun stopManagedPairing(): Boolean {SyncRuntime.current()?.closePairing();return true}
-    override fun pauseManagedConnections(): Boolean {SyncPreferences(this).save(enabled=false);SyncRuntime.refresh(this);return true}
+    override fun pauseManagedConnections(): Boolean {
+        val prefs=SyncPreferences(this)
+        if(!prefs.enabled())return true
+        prefs.saveConnectionsPaused(true)
+        val service=SyncRuntime.current()
+        if(service!=null)service.pauseConnections() else SyncRuntime.refresh(this)
+        return true
+    }
     override fun clearManagedTrust(): Boolean {
         val cleared=getSharedPreferences("share-pairs",MODE_PRIVATE).edit().clear().commit()
         if(cleared)runCatching{TrustedPeerStore(this).clear()}.onSuccess{SyncRuntime.current()?.refreshUi()}.onFailure{
@@ -40,6 +75,15 @@ class DeviceActivity : ShareActivity(),SyncRuntime.Observer {
         // Returning true means the managed sync layer handled the request. A storage failure
         // must never fall back to disconnect(), because that would also disable the master switch.
         return true
+    }
+    override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,grantResults:IntArray){
+        super.onRequestPermissionsResult(requestCode,permissions,grantResults)
+        if(requestCode!=bluetoothPermissionRequest)return
+        val resume=pairAfterBluetoothPermission;pairAfterBluetoothPermission=false
+        if(grantResults.firstOrNull()==PackageManager.PERMISSION_GRANTED){
+            SyncRuntime.refresh(this)
+            if(resume)window.decorView.post{runCatching{SyncRuntime.pair(this)}.onFailure{android.widget.Toast.makeText(this,it.message?:"无法打开配对窗口",android.widget.Toast.LENGTH_SHORT).show()}}
+        }else android.widget.Toast.makeText(this,"蓝牙短连接需要“附近设备”权限；仍可使用局域网配对",android.widget.Toast.LENGTH_LONG).show()
     }
     override fun onResume(){
         super.onResume()

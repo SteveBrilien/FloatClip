@@ -43,6 +43,11 @@ static class NativeSyncChecks
                 check(a.ConnectedCount==1&&b.ConnectedCount==1,"copying an image preserves the existing connection and file channel");
                 var received=bVault.Load()["entries"]!.AsArray().OfType<System.Text.Json.Nodes.JsonObject>().Single(c=>ClipboardVault.Kind(c)=="image");
                 check(bVault.ReadImage(received).SequenceEqual(png),"received image bytes survive encrypted storage without alteration");
+                Wait(()=>((ConcurrentDictionary<string,Guid>)typeof(NativeClipboardSync).GetField("imageSending",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(a)!).IsEmpty,"first image copy is acknowledged before another user copy");
+                string firstImageId=received["id"]!.GetValue<string>();
+                a.CopiedImage(image);
+                Wait(()=>bVault.Load()["entries"]!.AsArray().OfType<System.Text.Json.Nodes.JsonObject>().Single(c=>ClipboardVault.Kind(c)=="image")["id"]!.GetValue<string>()!=firstImageId,"copying the same image again creates a new delivery event and refreshes its remote row");
+                Wait(()=>((ConcurrentDictionary<string,Guid>)typeof(NativeClipboardSync).GetField("imageSending",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(a)!).IsEmpty,"second image copy is acknowledged before resuming text");
                 a.Copied("text after image");Wait(()=>applied.Contains("text after image")&&a.Snapshot().Peers[key].Pending==null,"text resumes on the same session after image transfer");
                 a.SetPeerEnabled(key,false);Wait(()=>b.ConnectedCount==0,"native host pause disconnects only the selected peer");a.SetPeerEnabled(key,true);
                 a.Copied("offline latest 👨‍👩‍👧‍👦");check(a.Snapshot().Peers[key].Pending!=null,"native host keeps offline text durable");

@@ -138,16 +138,43 @@ static class Program
             vault.ReceiveShared(delivered);vault.ReceiveShared(delivered);Check(vault.Load()["entries"]!.AsArray().Count==4,"delivery idempotence");
             var organized=vault.Load();var remoteRow=organized["entries"]!.AsArray().OfType<JsonObject>().Single(c=>c["id"]!.GetValue<string>()==delivered.Id.ToString());remoteRow["pinned"]=true;remoteRow["category"]="同步分类";vault.Commit(organized["revision"]!.GetValue<string>(),organized["entries"]!.AsArray());
             var newCopy=delivered with {Id=Guid.NewGuid(),Clock=2};vault.ReceiveShared(newCopy);var preserved=vault.Load()["entries"]!.AsArray().OfType<JsonObject>().Single(c=>c["id"]!.GetValue<string>()==newCopy.Id.ToString());Check(preserved["pinned"]!.GetValue<bool>()&&preserved["category"]!.GetValue<string>()=="同步分类","repeated copy keeps organization");
+            var orderVault=new ClipboardVault(Path.Combine(root,"RepeatOrder"),Protect,Unprotect);
+            var oldCopy=new SyncEntry(Guid.NewGuid(),remote,10,10,"repeat order");orderVault.ReceiveShared(oldCopy);
+            orderVault.ReceiveShared(new SyncEntry(Guid.NewGuid(),remote,11,11,"other order"));
+            var orderFixture=orderVault.Load();foreach(var item in orderFixture["entries"]!.AsArray().OfType<JsonObject>())item["updatedAt"]=item["id"]!.GetValue<string>()==oldCopy.Id.ToString()?1L:2L;
+            orderVault.Commit(orderFixture["revision"]!.GetValue<string>(),orderFixture["entries"]!.AsArray());
+            var freshCopy=oldCopy with{Id=Guid.NewGuid(),Clock=12};orderVault.ReceiveShared(freshCopy);
+            var ordered=orderVault.Load()["entries"]!.AsArray().OfType<JsonObject>().OrderByDescending(c=>c["updatedAt"]!.GetValue<long>()).ToArray();
+            Check(ordered.Length==2&&ordered[0]["id"]!.GetValue<string>()==freshCopy.Id.ToString(),"new copy of remote text moves the existing content to newest position");
+            string orderRevision=orderVault.Load()["revision"]!.GetValue<string>();orderVault.ReceiveShared(freshCopy);
+            Check(orderVault.Load()["revision"]!.GetValue<string>()==orderRevision,"network retransmission does not reshuffle clipboard history");
             string pairRoot=Path.Combine(root,"Pairing"),pin=new string('a',64);byte[] credential=RandomNumberGenerator.GetBytes(32);var pairs=new PairStore(pairRoot,Protect,Unprotect);pairs.Put(pin,credential);
             string relation=Convert.ToHexString(SHA256.HashData(credential)).ToLowerInvariant();
             Check(pairs.KeyForPin(pin)==relation&&pairs.GetByKey(relation).AsSpan().SequenceEqual(credential),"relation key is credential hash");
             var rememberedDevice=new SyncDevice(Guid.NewGuid(),"手机","android");pairs.RememberDevice(relation,rememberedDevice);var described=pairs.Describe(relation);Check(described?.DeviceId==rememberedDevice.Id&&described.Name=="手机","trusted device metadata persisted");
+            pairs.RememberDevice(relation,new SyncDevice(rememberedDevice.Id,"未知设备","android"));Check(pairs.Describe(relation)?.Name=="手机","generic transport name must not overwrite trusted name");
             Check(new PairStore(pairRoot,Protect,Unprotect).Get(pin).AsSpan().SequenceEqual(credential),"authorization survives restart");
             Check(new PairStore(pairRoot,Protect,Unprotect).Describe(relation)?.DeviceId==rememberedDevice.Id,"trusted relation metadata survives restart");
             pairs.RememberBluetooth(relation,0xAABBCCDDEEFF);Check(new PairStore(pairRoot,Protect,Unprotect).Describe(relation)?.BluetoothAddress==0xAABBCCDDEEFF,"trusted Bluetooth locator survives restart");
             byte[] btOnly=RandomNumberGenerator.GetBytes(32);string btOnlyKey=pairs.PutBluetooth(btOnly,0x112233445566);Check(pairs.GetByKey(btOnlyKey).AsSpan().SequenceEqual(btOnly),"Bluetooth-first relation token saved");pairs.RemoveKey(btOnlyKey);
             Check(!Encoding.UTF8.GetString(File.ReadAllBytes(Path.Combine(pairRoot,"paired-devices.dat"))).Contains(Convert.ToBase64String(credential)),"authorization persisted as plaintext");
             var failedPairStore=new PairStore(pairRoot,_=>throw new IOException("disk error"),Unprotect);Throws(()=>failedPairStore.Put(new string('b',64),RandomNumberGenerator.GetBytes(32)),"credential failure accepted");Check(new PairStore(pairRoot,Protect,Unprotect).Count==1,"credential failure lost existing grants");
+            var groupedId=Guid.NewGuid();
+            var grouped=FloatClip.Desktop.Services.DevicePeerGrouping.Group(new[]{
+                new FloatClip.Desktop.Services.DeviceRelationState("lan-key",groupedId,"我的手机",true,true,"lan",false),
+                new FloatClip.Desktop.Services.DeviceRelationState("bt-key",groupedId,"未知设备",true,true,null,false)
+            },true,true);
+            Check(grouped.Length==1&&grouped[0].Name=="我的手机"&&grouped[0].RelatedKeys!.Count==2,"one authenticated identity groups LAN and Bluetooth without losing its name");
+            Check(grouped[0].Status=="局域网已连接","offline Bluetooth credential cannot hide a live LAN connection");
+            var reversed=FloatClip.Desktop.Services.DevicePeerGrouping.Group(new[]{
+                new FloatClip.Desktop.Services.DeviceRelationState("bt-key",groupedId,"unknown",true,true,null,false),
+                new FloatClip.Desktop.Services.DeviceRelationState("lan-key",groupedId,"我的手机",true,true,"lan",false)
+            },true,true);
+            Check(reversed[0].Key==grouped[0].Key,"adding a transport preserves the device row identity");
+            Check(FloatClip.Desktop.Services.DevicePeerGrouping.Group(new[]{
+                new FloatClip.Desktop.Services.DeviceRelationState("a",Guid.NewGuid(),"同名设备",true,true,null,false),
+                new FloatClip.Desktop.Services.DeviceRelationState("b",Guid.NewGuid(),"同名设备",true,true,null,false)
+            },true,true).Length==2,"device names alone never merge separate authorizations");
             pairs.Remove(pin);Check(new PairStore(pairRoot,Protect,Unprotect).Count==0,"revoked grant returned after restart");
             string legacyRoot=Path.Combine(root,"LegacyPairing");Directory.CreateDirectory(legacyRoot);string legacyPath=Path.Combine(legacyRoot,"paired-devices.dat");
             byte[] legacyToken=RandomNumberGenerator.GetBytes(32);string legacyPin=new string('c',64);File.WriteAllBytes(legacyPath,Protect(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new System.Collections.Generic.Dictionary<string,string>{{legacyPin,Convert.ToBase64String(legacyToken)}})));

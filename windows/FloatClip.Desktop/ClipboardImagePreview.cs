@@ -36,11 +36,13 @@ public sealed partial class LocalClipboardWindow
     }
     async void LoadThumbnail(Image target,JsonObject clip,System.Threading.CancellationToken token)
     {
-        var bitmap=await ThumbnailAsync(clip,token);
-        if(!token.IsCancellationRequested && !Dispatcher.HasShutdownStarted) {
+        var bitmap=await ThumbnailAsync(clip,token).ConfigureAwait(false);
+        if(token.IsCancellationRequested || Dispatcher.HasShutdownStarted)return;
+        await Dispatcher.InvokeAsync(()=>{
+            if(token.IsCancellationRequested)return;
             target.Source=bitmap;
             System.Windows.Automation.AutomationProperties.SetName(target,bitmap==null?"图片暂不可用":"图片缩略图");
-        }
+        });
     }
     void PreviewImage(JsonObject clip)
     {

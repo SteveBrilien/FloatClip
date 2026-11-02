@@ -3,12 +3,12 @@
   "platforms": {
     "android": {
       "version": "0.7.9",
-      "build": 38,
+      "build": 39,
       "review": "docs/INTERACTION_PERFORMANCE_2026-11-03.md"
     },
     "windows": {
       "version": "0.7.9",
-      "build": 38,
+      "build": 39,
       "review": "docs/INTERACTION_PERFORMANCE_2026-11-03.md"
     }
   }

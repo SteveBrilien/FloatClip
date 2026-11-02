@@ -193,7 +193,7 @@ static class Program
             var search=Field<TextBox>(window,"search");var list=Field<StackPanel>(window,"list");
             var dragRegion=Descendants(window).OfType<DockPanel>().Single(p=>System.Windows.Automation.AutomationProperties.GetAutomationId(p)=="WindowDragRegion");Check(dragRegion.Background!=null&&dragRegion.ActualWidth>=window.ActualWidth-12,"entire blank title region is hit-testable for dragging");
             var pinButton=Descendants(dragRegion).OfType<Button>().Single(b=>System.Windows.Automation.AutomationProperties.GetAutomationId(b)=="WindowPin");Check(((Wpf.Ui.Controls.SymbolIcon)pinButton.Content).Filled,"pinned window uses a filled pin");host.SetPinned(false);Call(window,"BuildShellTitle");Check(!((Wpf.Ui.Controls.SymbolIcon)pinButton.Content).Filled,"unpinned window uses an outlined pin");host.SetPinned(false);
-            var occluder=new Window{Title="FloatClip isolated occlusion check",Width=240,Height=180};occluder.Show();occluder.Activate();Pump(100);
+            var occluder=new Window{Title="FloatClip isolated occlusion check",Width=240,Height=180,AllowsTransparency=false};occluder.Show();occluder.Activate();Pump(100);
             Check(window.IsVisible&&!window.Topmost&&window.ShowInTaskbar,"unpinned window stays visible and can be covered like an ordinary window");
             occluder.Close();host.SetPinned(true);window.Activate();Call(window,"BuildShellTitle");
             Check(search.Template.FindName("PART_ContentHost",search) is ScrollViewer&&!Descendants(search).OfType<Border>().Any(),"search has one outer focus boundary and no nested partial underline");

@@ -1,16 +1,16 @@
 {
   "version": "0.7.9",
-  "build": 39,
-  "sourceCommit": "d0031f80e40ded35433f8c7f64cbb85475833f49",
+  "build": 40,
+  "sourceCommit": "7a0a3d7fa39ed8d44c5495f5154f4d4eb46dc6c9",
   "android": {
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-0542407b97de4b94a2510e33513242fe/FloatClip-Android-0.7.9-build39-interaction-candidate.apk?exp=0&sig=82a50e54a36fc25fef770fd5eeb2f62d5af756c3063606ec990f0548daae7187",
-    "sha256": "4972937a63447ba9057a66973c7506dba2edd5360e27bc375ef779483fe35921",
-    "bytes": 3939165
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-5d7663cdd44a4aae8a7d3b745001fee5/FloatClip-Android-0.7.9-build40-photo-candidate.apk?exp=0&sig=a69b2599aeaebc535490cb0d62daf9dc2cc396887509b5b4ed5a0f08366b33ba",
+    "sha256": "24d12dc362d0be627e2ca6b34b0a2ccf595d2b6ab1d33ddd3e16e5f5c082ba2f",
+    "bytes": 3968857
   },
   "windows": {
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-0cf1030c0cbb4bcb854f87cfa9a884ad/FloatClip-Windows-0.7.9-build39.zip?exp=0&sig=1691b5c9982951e7eb332263099959873c14d6a30b6d4fb87f8245298999f40f",
-    "sha256": "f1b0f3832e1ec0949eec7298a11290013ca02c15e9c7d29f08e1544eb0d4ab35",
-    "bytes": 78906107
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-94129d0b0a774869bbe454bc40eedd58/FloatClip-Windows-0.7.9-build40-photo-candidate.zip?exp=0&sig=6063476feb244599593e037543d15b1aa37f6ee06ab483d5c4797eafc5bd7dfe",
+    "sha256": "71f9fe9e9d0c9453e366af66d319f5ccca0dea017208649d61f257134bd21116",
+    "bytes": 78906077
   },
-  "notes": "图片按需加载、后台缩略图、有界缓存与少量预取；Windows 非置顶按普通窗口显示，标题按钮补悬停和红色关闭反馈；手机支持非线性曲线、参数上下限、透明/雾化模式和可选启动更新检测。\n\n验证：Android 97 项回归、lint 0 error；Windows 236 项原生隔离检查（界面异常 0）、93 项数据和 47 项更新检查通过。\n\nMCP 直连：[Android APK](https://mcp.wmy-cloud.cn/artifacts/pub-0542407b97de4b94a2510e33513242fe/FloatClip-Android-0.7.9-build39-interaction-candidate.apk?exp=0&sig=82a50e54a36fc25fef770fd5eeb2f62d5af756c3063606ec990f0548daae7187) · [Windows ZIP](https://mcp.wmy-cloud.cn/artifacts/pub-0cf1030c0cbb4bcb854f87cfa9a884ad/FloatClip-Windows-0.7.9-build39.zip?exp=0&sig=1691b5c9982951e7eb332263099959873c14d6a30b6d4fb87f8245298999f40f)。\n\n两端 Remote 当前离线，尚未覆盖安装到用户设备；物理 DPI、OEM 动画观感未验收。雾化为半透明表面，正式应用内更新源仍待原签名器恢复。"
+  "notes": "相机照片按预算采样导入，支持相册 ClipData/data URI 与 EXIF 方向校正；保留原图，必要时缩小导入副本。悬浮剪贴板新增查看全文、图片全屏缩放，返回后恢复面板；复制图片有按压、忙碌、成功/失败反馈。保留 build39 的按需历史、缓存/预取、窗口层级和动画设置。\n\n验证：Android 107 项回归、lint 0 error/25 warnings；Windows 236 项原生隔离检查（界面异常 0）及 48 项更新检查通过。APK 保持原包名和升级签名。\n\nMCP 直连：[Android APK](https://mcp.wmy-cloud.cn/artifacts/pub-5d7663cdd44a4aae8a7d3b745001fee5/FloatClip-Android-0.7.9-build40-photo-candidate.apk?exp=0&sig=a69b2599aeaebc535490cb0d62daf9dc2cc396887509b5b4ed5a0f08366b33ba) · [Windows ZIP](https://mcp.wmy-cloud.cn/artifacts/pub-94129d0b0a774869bbe454bc40eedd58/FloatClip-Windows-0.7.9-build40-photo-candidate.zip?exp=0&sig=6063476feb244599593e037543d15b1aa37f6ee06ab483d5c4797eafc5bd7dfe)。\n\n两端 Remote 当前离线，未覆盖安装到用户设备；真机相册格式/OEM 观感仍待验收。正式应用内更新源仍待 Windows 原签名器恢复。"
 }

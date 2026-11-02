@@ -159,6 +159,7 @@ open class MainActivity : Activity() {
 
     override fun onNewIntent(intent:Intent) {
         super.onNewIntent(intent);setIntent(intent)
+        if(intent.action==Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER) && UpdatePreferences(this).checkOnLaunch())checkClientUpdate(silent=true)
         if(intent.getBooleanExtra("floatclip_update",false))checkClientUpdate()
         if(intent.getStringExtra("floatclip_page")=="clipboard_sync") {
             currentPage=PAGE_SETTINGS;settingsSection="剪贴板共享"
@@ -1413,9 +1414,9 @@ open class MainActivity : Activity() {
                     1 -> showCategoryPicker(entry)
                     2 -> { clipStore.toggleLocked(entry.id); refreshHistory(); notifyOverlayAppearanceChanged() }
                     3 -> { clipStore.togglePinned(entry.id); refreshHistory(); notifyOverlayAppearanceChanged() }
-                    4 -> runCatching {
-                        if(entry.kind=="image")ClipboardImages.copy(this,clipStore,entry)
-                        else ClipboardWrites.copyByUser(this,getSystemService(ClipboardManager::class.java),entry.text)
+                    4 -> if(entry.kind=="image")ClipboardImages.copyWithFeedback(this,clipStore,entry)
+                    else runCatching {
+                        ClipboardWrites.copyByUser(this,getSystemService(ClipboardManager::class.java),entry.text)
                         Toast.makeText(this,"已复制",Toast.LENGTH_SHORT).show()
                     }.onFailure{Toast.makeText(this,it.message?:"复制未完成",Toast.LENGTH_LONG).show()}
                     else -> deleteEntry(entry)
@@ -1457,6 +1458,7 @@ open class MainActivity : Activity() {
     }
     private fun checkClientUpdate(silent:Boolean=false) {
         if(isFinishing || isDestroyed)return
+        if(silent && (updateDialog?.dialog?.isShowing==true || updateAwaitingInstallPermission))return
         val existing=updateCheck
         if(existing?.state?.phase==com.floatclip.app.ui.ClientUpdateCheck.Phase.CHECKING)return
         silentUpdateCheck=silent

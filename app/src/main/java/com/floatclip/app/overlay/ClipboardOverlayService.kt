@@ -134,6 +134,16 @@ class ClipboardOverlayService : Service() {
             handler.postDelayed(refreshAppearanceRunnable, 80L)
         }
     }
+    private var pendingViewerToken:String?=null
+    private val viewerReturn=object:BroadcastReceiver() {
+        override fun onReceive(context:Context?,intent:Intent?) {
+            val token=intent?.getStringExtra(com.floatclip.app.clipboard.ClipViewerActivity.EXTRA_RETURN)
+            if(!stopping && token!=null && token==pendingViewerToken) {
+                pendingViewerToken=null
+                if(overlayPreferences.overlayEnabled())expandPanel(false)
+            }
+        }
+    }
     private var lastSystemNight = false
     private val systemAppearanceReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -190,6 +200,9 @@ class ClipboardOverlayService : Service() {
                 addAction(Intent.ACTION_SCREEN_ON)
             },
         )
+        val viewerFilter=IntentFilter(com.floatclip.app.clipboard.ClipViewerActivity.RETURN_ACTION)
+        if(android.os.Build.VERSION.SDK_INT>=33)registerReceiver(viewerReturn,viewerFilter,"$packageName.permission.INTERNAL",null,Context.RECEIVER_NOT_EXPORTED)
+        else registerReceiver(viewerReturn,viewerFilter,"$packageName.permission.INTERNAL",null)
         overlayPreferences.saveOverlayEnabled(true)
         showBubble()
     }
@@ -258,6 +271,8 @@ class ClipboardOverlayService : Service() {
         panelScrimParams = null
         panelPinButton = null
         entryActionLayer = null
+        pendingViewerToken=null
+        runCatching { unregisterReceiver(viewerReturn) }
         runCatching { unregisterReceiver(appearanceReceiver) }
         runCatching { unregisterReceiver(sharedHistoryChanged) }
         runCatching { unregisterReceiver(systemAppearanceReceiver) }
@@ -1090,9 +1105,10 @@ class ClipboardOverlayService : Service() {
                 }
             }
         } else {
-            if(entry.kind=="image")row("查看图片") { showImagePreview(entry) }
+            row(if(entry.kind=="image")"全屏查看图片" else "查看全文") { openEntryViewer(entry) }
             row(if(entry.kind=="image") "复制图片" else "复制") {
-                runCatching { if(entry.kind=="image")ClipboardImages.copy(this,store,entry) else clipboard.writeText(entry.text) }
+                if(entry.kind=="image")ClipboardImages.copyWithFeedback(this,store,entry)
+                else runCatching { clipboard.writeText(entry.text) }
                     .onSuccess { Toast.makeText(this,"已复制",Toast.LENGTH_SHORT).show() }
                     .onFailure { Toast.makeText(this,it.message ?: "复制未完成",Toast.LENGTH_LONG).show() }
                 dismissEntryActionLayer()
@@ -1144,41 +1160,16 @@ class ClipboardOverlayService : Service() {
         entryActionLayer = layer
     }
 
-    private fun showImagePreview(entry:ClipEntry) {
-        val expectedPanel=panelView ?: return
-        Toast.makeText(this,"正在打开图片…",Toast.LENGTH_SHORT).show()
-        ClipboardImages.thumbnailAsync(store,entry,4096) { bitmap ->
-            val panel=panelView
-            if(bitmap==null||panel==null||panel!==expectedPanel||!panelOpen||panelCollapsing) {
-                if(bitmap==null)Toast.makeText(this,"图片暂不可用，请保留本机数据",Toast.LENGTH_LONG).show()
-                return@thumbnailAsync
-            }
-            dismissEntryActionLayer(animated=false)
-            val palette=themeProvider.palette()
-            val layer=LinearLayout(this).apply {
-                orientation=LinearLayout.VERTICAL;isClickable=true
-                background=roundedBackground(palette.panelBackground,16f)
-                setPadding(dp(10),dp(6),dp(10),dp(8))
-            }
-            val header=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL }
-            header.addView(TextView(this).apply {
-                text="图片 ${entry.imageWidth} × ${entry.imageHeight}";textSize=14f;setTextColor(palette.primaryText)
-            },LinearLayout.LayoutParams(0,dp(44),1f))
-            header.addView(iconButton(R.drawable.ic_close,"关闭图片预览",palette.secondaryText) { dismissEntryActionLayer() },LinearLayout.LayoutParams(dp(44),dp(44)))
-            layer.addView(header)
-            layer.addView(com.floatclip.app.ui.ZoomImageView(this).apply { setImageBitmap(bitmap) },LinearLayout.LayoutParams(-1,0,1f))
-            layer.addView(TextView(this).apply {
-                text="复制图片";textSize=15f;gravity=Gravity.CENTER;minimumHeight=dp(48);setTextColor(accentColor(palette))
-                background=roundedBackground(withAlpha(accentColor(palette),if(palette.isDark)45 else 24),12f)
-                setOnClickListener {
-                    runCatching { ClipboardImages.copy(this@ClipboardOverlayService,store,entry) }
-                        .onSuccess { Toast.makeText(this@ClipboardOverlayService,"已复制图片",Toast.LENGTH_SHORT).show() }
-                        .onFailure { Toast.makeText(this@ClipboardOverlayService,it.message ?: "复制未完成",Toast.LENGTH_LONG).show() }
-                }
-            })
-            panel.dragEnabled=false
-            panel.addView(layer,FrameLayout.LayoutParams(-1,-1))
-            entryActionLayer=layer
+    private fun showImagePreview(entry:ClipEntry)=openEntryViewer(entry)
+    private fun openEntryViewer(entry:ClipEntry) {
+        val token=java.util.UUID.randomUUID().toString()
+        pendingViewerToken=token
+        dismissEntryActionLayer(animated=false)
+        collapsePanel()
+        runCatching { com.floatclip.app.clipboard.ClipViewerActivity.open(this,entry,token) }.onFailure {
+            pendingViewerToken=null
+            expandPanel(false)
+            Toast.makeText(this,it.message?:"无法打开预览",Toast.LENGTH_LONG).show()
         }
     }
 

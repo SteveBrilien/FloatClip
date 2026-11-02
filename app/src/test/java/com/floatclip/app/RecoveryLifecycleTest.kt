@@ -90,6 +90,23 @@ class RecoveryLifecycleTest {
             assertEquals(0f,panel.alpha,0f);assertEquals(1f,ball.alpha,0f)
         } finally {OverlayPreferences(service).saveOverlayEnabled(false);owner.destroy()}
     }
+    @Test fun fullscreenViewerReturnTokenRestoresRetainedPanelAndLateReturnCannotReviveStoppedService() {
+        val owner=service();val service=owner.get()
+        try {
+            open(service)
+            val panel=field(service,"panelView")
+            service.javaClass.getDeclaredMethod("openEntryViewer",com.floatclip.app.model.ClipEntry::class.java).apply{isAccessible=true}
+                .invoke(service,com.floatclip.app.model.ClipEntry(40,"全文"))
+            assertEquals(false,field(service,"panelOpen"))
+            val token=field(service,"pendingViewerToken") as String
+            val receiver=field(service,"viewerReturn") as android.content.BroadcastReceiver
+            fun back(value:String)=android.content.Intent(com.floatclip.app.clipboard.ClipViewerActivity.RETURN_ACTION).putExtra(com.floatclip.app.clipboard.ClipViewerActivity.EXTRA_RETURN,value)
+            receiver.onReceive(service,back("other"));assertEquals(false,field(service,"panelOpen"))
+            receiver.onReceive(service,back(token));assertEquals(true,field(service,"panelOpen"));assertSame(panel,field(service,"panelView"))
+            OverlayPreferences(service).saveOverlayEnabled(false);owner.destroy()
+            receiver.onReceive(service,back(token));assertNull(field(service,"panelView"))
+        } finally {if(field(service,"stopping")!=true){OverlayPreferences(service).saveOverlayEnabled(false);owner.destroy()}}
+    }
     @Test fun stopWhileOpenAndLateCallbacksCannotReattachWindows() {
         val owner=service();val service=owner.get()
         open(service)

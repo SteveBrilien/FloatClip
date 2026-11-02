@@ -53,23 +53,17 @@ object ClipboardImages {
         return importUri(context,uri,store)
     }
     /** Explicit picker/share import also works when a screenshot was never put in ClipData. */
-    fun importUri(context:Context,uri:android.net.Uri,store:ClipStore):ClipEntry? {
+    data class ImportResult(val entry:ClipEntry?,val resized:Boolean)
+    fun importUri(context:Context,uri:android.net.Uri,store:ClipStore):ClipEntry?=importSelected(context,uri,store).entry
+    fun importSelected(context:Context,uri:android.net.Uri,store:ClipStore):ImportResult {
         require(uri.scheme=="content") { "仅收录获授权的剪贴板图片" }
         val encoded=context.contentResolver.openInputStream(uri)?.use { input ->
-            val output=BoundedOutput(ImageBlobStore.MAX_IMAGE_BYTES)
+            val output=BoundedOutput(ClipboardPhotoImporter.MAX_SOURCE_BYTES,"原图片超过 32 MiB，请先在相册缩小后分享")
             input.copyTo(output);output.toByteArray()
-        } ?: return null
-        val bounds=BitmapFactory.Options().apply { inJustDecodeBounds=true }
-        BitmapFactory.decodeByteArray(encoded,0,encoded.size,bounds)
-        require(bounds.outWidth in 1..16384 && bounds.outHeight in 1..16384 && bounds.outWidth.toLong()*bounds.outHeight<=ImageBlobStore.MAX_PIXELS) { "图片尺寸超过 6400 万像素" }
-        val bitmap=BitmapFactory.decodeByteArray(encoded,0,encoded.size) ?: error("图片无法读取")
-        return try {
-            // Screenshots already in PNG retain their exact pixels/metadata and avoid recompression.
-            if(encoded.take(8).toByteArray().contentEquals(byteArrayOf(137.toByte(),80,78,71,13,10,26,10)))return store.addImage(encoded)
-            val output=BoundedOutput(ImageBlobStore.MAX_IMAGE_BYTES)
-            check(bitmap.compress(Bitmap.CompressFormat.PNG,100,output)) { "图片转换失败" }
-            store.addImage(output.toByteArray())
-        } finally { bitmap.recycle() }
+        } ?: error("未能读取图片，请在相册重新选择")
+        val prepared=ClipboardPhotoImporter.prepare(encoded)
+        if(Thread.currentThread().isInterrupted)throw InterruptedException("图片导入已取消")
+        return ImportResult(store.addImage(prepared.png),prepared.resized)
     }
     fun thumbnail(store:ClipStore,entry:ClipEntry,maxDimension:Int=480):Bitmap?=runCatching {
         val key=entry.imageRef+":"+entry.imageSha256+":"+maxDimension
@@ -139,31 +133,36 @@ object ClipboardImages {
         return cancellation
     }
 
-    fun copy(context:Context,store:ClipStore,entry:ClipEntry) {
-        store.readImage(entry) // Fail before replacing the system clipboard if an attachment is damaged.
+    private val copies=java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task,"FloatClip image copy").apply {isDaemon=true} }
+    private fun publishCopy(context:Context,entry:ClipEntry) {
         ClipboardWrites.writeImage(context,context.getSystemService(ClipboardManager::class.java),ClipboardImageProvider.uri(context.packageName,entry.imageRef))
         com.floatclip.app.sync.SyncRuntime.userCopiedImage(context,entry)
     }
-    fun preview(context:Context,store:ClipStore,entry:ClipEntry) {
-        val height=(context.resources.displayMetrics.heightPixels*.6f).toInt()
-        val frame=FrameLayout(context).apply {
-            addView(ProgressBar(context),FrameLayout.LayoutParams(
-                (42*resources.displayMetrics.density).toInt(),(42*resources.displayMetrics.density).toInt(),Gravity.CENTER
-            ))
-        }
-        val handle=FloatDialog.show(context,"图片预览",custom=frame,negative="关闭",positive="复制图片",onPositive={copy(context,store,entry);true})
-        val request=thumbnailAsync(store,entry,4096) { bitmap ->
-            if(!handle.dialog.isShowing)return@thumbnailAsync
-            frame.removeAllViews()
-            if(bitmap==null)frame.addView(android.widget.TextView(context).apply {
-                text="图片暂不可用，请保留本机数据";gravity=Gravity.CENTER
-            },FrameLayout.LayoutParams(-1,height))
-            else frame.addView(com.floatclip.app.ui.ZoomImageView(context).apply { setImageBitmap(bitmap) },FrameLayout.LayoutParams(-1,height))
-        }
-        handle.dialog.setOnDismissListener { request.close() }
+    fun copy(context:Context,store:ClipStore,entry:ClipEntry) {
+        store.readImage(entry)
+        publishCopy(context,entry)
     }
-    private class BoundedOutput(private val limit:Int):ByteArrayOutputStream() {
-        override fun write(value:Int) { require(count<limit) { "图片超过 8 MiB" };super.write(value) }
-        override fun write(bytes:ByteArray,offset:Int,length:Int) { require(count.toLong()+length<=limit) { "图片超过 8 MiB" };super.write(bytes,offset,length) }
+    fun copyAsync(context:Context,store:ClipStore,entry:ClipEntry,done:(Result<Unit>)->Unit):AutoCloseable {
+        val active=java.util.concurrent.atomic.AtomicBoolean(true)
+        copies.execute {
+            val validation=runCatching { store.readImage(entry);Unit }
+            main.post {
+                if(active.get())done(validation.fold({runCatching {publishCopy(context,entry)}},{Result.failure(it)}))
+            }
+        }
+        return AutoCloseable {active.set(false)}
+    }
+    fun copyWithFeedback(context:Context,store:ClipStore,entry:ClipEntry) {
+        val notice=android.widget.Toast.makeText(context,"正在复制图片…",android.widget.Toast.LENGTH_SHORT)
+        notice.show()
+        copyAsync(context,store,entry) { result ->
+            notice.cancel()
+            android.widget.Toast.makeText(context,if(result.isSuccess)"已复制图片" else result.exceptionOrNull()?.message?:"复制未完成",android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+    fun preview(context:Context,store:ClipStore,entry:ClipEntry) { ClipViewerActivity.open(context,entry) }
+    private class BoundedOutput(private val limit:Int,private val message:String="图片超过 8 MiB"):ByteArrayOutputStream() {
+        override fun write(value:Int) { require(count<limit) { message };super.write(value) }
+        override fun write(bytes:ByteArray,offset:Int,length:Int) { require(count.toLong()+length<=limit) { message };super.write(bytes,offset,length) }
     }
 }

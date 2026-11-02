@@ -25,3 +25,5 @@ APK原包名及证书SHA-256 `0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c
 [Android APK](https://mcp.wmy-cloud.cn/artifacts/pub-5d7663cdd44a4aae8a7d3b745001fee5/FloatClip-Android-0.7.9-build40-photo-candidate.apk?exp=0&sig=a69b2599aeaebc535490cb0d62daf9dc2cc396887509b5b4ed5a0f08366b33ba) · [Windows ZIP](https://mcp.wmy-cloud.cn/artifacts/pub-94129d0b0a774869bbe454bc40eedd58/FloatClip-Windows-0.7.9-build40-photo-candidate.zip?exp=0&sig=6063476feb244599593e037543d15b1aa37f6ee06ab483d5c4797eafc5bd7dfe)。GitHub候选由 `Verified native candidate` 工作流核验上述不可变制品后发布到 `v0.7.9-build40-candidate`，不替换旧版。
 
 正式主源和备用源仍保持原钥签名build29；原私钥只留在离线Windows，不导出、不替换。`updates/share-preview.json`仅工作区待签名信息，不提交到公共主分支。两端Remote离线，因此未安装到用户设备。
+
+GitHub候选发布已完成并核对实际两份附件大小与digest：[build40 Release](https://github.com/SteveBrilien/FloatClip/releases/tag/v0.7.9-build40-candidate)，[制品核验发布工作流](https://github.com/SteveBrilien/FloatClip/actions/runs/41525603464)通过。原工作区待签名manifest已准备为40；仅含公开文件的恢复包 `analysis/deliveries/FloatClip-build40-public-signing-kit.zip`（10289字节，SHA-256 `b48c24dc810be5f96a29989fe4894879afef5ea894d0df89b8ca1e7bef7ab051`）留在远端，不包含私钥。正式签名feed仍29。

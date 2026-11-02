@@ -111,4 +111,40 @@ class PhotoImportViewerTest {
         complete!!(Result.failure(java.io.IOException("image missing")))
         assertTrue(button.isEnabled);assertEquals("复制未完成",button.text.toString())
     }
+    private fun awaitCopy(done:()->Boolean) {
+        val deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(4)
+        while(!done()&&System.nanoTime()<deadline) { shadowOf(Looper.getMainLooper()).idle();Thread.sleep(5) }
+        assertTrue("copy callback must finish",done())
+    }
+    @Test fun imageCopyValidatesOffMainAndOnlyThenChangesClipboard() {
+        java.io.File(context.filesDir,"floatclip_vault.bin").delete()
+        val thread=java.util.concurrent.atomic.AtomicReference<String>()
+        val store=ClipStore(context,object:VaultCipher {
+            override fun encrypt(value:ByteArray)=value
+            override fun decrypt(value:ByteArray):ByteArray {thread.set(Thread.currentThread().name);return value}
+        })
+        val row=store.addImage(png())!!
+        val manager=context.getSystemService(android.content.ClipboardManager::class.java)
+        manager.setPrimaryClip(ClipData.newPlainText("before","unchanged"))
+        var result:Result<Unit>?=null
+        val request=ClipboardImages.copyAsync(context,store,row){result=it}
+        assertEquals("unchanged",manager.primaryClip!!.getItemAt(0).text.toString())
+        awaitCopy{result!=null}
+        assertTrue(result!!.isSuccess);assertEquals("FloatClip image copy",thread.get())
+        assertEquals(row.imageRef,ClipboardImageProvider.reference(manager.primaryClip!!.getItemAt(0).uri,context.packageName))
+        request.close()
+    }
+    @Test fun corruptImageCopyLeavesSystemClipboardAndProtectedRecordUntouched() {
+        val store=store();val keep=store.addText("protected")!!;store.togglePinned(keep.id)
+        val row=store.addImage(png())!!
+        java.io.File(context.filesDir,"clipboard-images/"+row.imageRef+".bin").writeBytes(byteArrayOf())
+        val manager=context.getSystemService(android.content.ClipboardManager::class.java)
+        manager.setPrimaryClip(ClipData.newPlainText("before","unchanged"))
+        var result:Result<Unit>?=null
+        val request=ClipboardImages.copyAsync(context,store,row){result=it}
+        awaitCopy{result!=null}
+        assertTrue(result!!.isFailure);assertEquals("unchanged",manager.primaryClip!!.getItemAt(0).text.toString())
+        assertTrue(store.entries().first{it.id==keep.id}.pinned);request.close()
+    }
+
 }

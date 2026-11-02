@@ -30,7 +30,7 @@ import org.robolectric.annotation.ConscryptMode
 @GraphicsMode(GraphicsMode.Mode.LEGACY)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 class PhotoImportViewerTest {
-    private val context get()=RuntimeEnvironment.getApplication<android.app.Application>()
+    private val context get()=RuntimeEnvironment.getApplication()
     private fun png():ByteArray {
         val bitmap=Bitmap.createBitmap(12,8,Bitmap.Config.ARGB_8888)
         return java.io.ByteArrayOutputStream().also{bitmap.compress(Bitmap.CompressFormat.PNG,100,it);bitmap.recycle()}.toByteArray()

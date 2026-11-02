@@ -29,7 +29,18 @@
 | 性能结论 | 工作量有明确上限，不能把模拟器/离屏测试写成真机帧率或响应时间 |
 | 原生设备/发布 | 本轮 Windows/手机 Remote 与正式ADB均离线，未覆盖安装；正式签名更新源需电脑上原签名器恢复后推进，不能用未签名数据覆盖 |
 
-候选制品、SHA-256、最终检查和 GitHub 状态在交付时追加；未发布候选不得覆盖旧版本同名资产。
+候选包必须使用下面的不可变制品；旧候选不可覆盖。
+
+## 最终验证
+
+Android build39：97 tests / 0 failures / 0 errors；assembleDebug、testDebugUnitTest、lintDebug通过。原安装证书SHA-256仍为 `0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c`。Windows在GitHub Windows runner通过236项原生隔离检查、界面异常0、测试不接触用户剪贴板；UpdateChecks47项通过，LibraryChecks93项应用源未再修改。原生证据：[Windows WPF CI](https://github.com/SteveBrilien/FloatClip/actions/runs/41511842281)，源码 `d0031f80e40ded35433f8c7f64cbb85475833f49`；测试夹具调整前后的应用源相同，双端包源一致。
+
+| 平台 | 字节数 | SHA-256 |
+| --- | ---: | --- |
+| Android APK | 3939165 | `4972937a63447ba9057a66973c7506dba2edd5360e27bc375ef779483fe35921` |
+| Windows ZIP | 78906107 | `f1b0f3832e1ec0949eec7298a11290013ca02c15e9c7d29f08e1544eb0d4ab35` |
+
+下载与GitHub候选发布输入见 `updates/native-candidate.json`。GitHub只发布核对SHA、APK身份及原生检查后的预发行包，不提升正式更新通道。主源两个RS256通道已重新验签，仍为build29；签名器私钥留在离线Windows设备上，未输出或复制。
 
 ## build38 撤回
 

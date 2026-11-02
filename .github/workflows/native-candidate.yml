@@ -1,0 +1,95 @@
+name: Verified native candidate
+on:
+  push:
+    branches: [codex/wpf-design-system-077]
+    paths: [updates/native-candidate.json, .github/workflows/native-candidate.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: verified-native-candidate
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '12266719'
+          packages: 'build-tools;35.0.1'
+          log-accepted-android-sdk-licenses: false
+      - name: Verify source, packages and prior native checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,subprocess,urllib.request,urllib.parse,zipfile
+          m=json.loads(pathlib.Path('updates/native-candidate.json').read_text())
+          version=m['version'];build=m['build'];source=m['sourceCommit']
+          assert re.fullmatch(r'\d+\.\d+\.\d+',version) and isinstance(build,int) and build>0
+          assert re.fullmatch(r'[0-9a-f]{40}',source)
+          subprocess.run(['git','merge-base','--is-ancestor',source,'HEAD'],check=True)
+          subprocess.run(['git','diff','--quiet',source,'HEAD','--','app','nearby-probe','share-core','windows'],check=True)
+          runs=json.loads(subprocess.check_output(['gh','api',f'repos/{os.environ["GITHUB_REPOSITORY"]}/actions/runs?head_sha={source}&per_page=30']))['workflow_runs']
+          assert any(r['path']=='.github/workflows/windows.yml' and r['head_sha']==source and r['conclusion']=='success' for r in runs),'Native checks must pass for the package source commit'
+          out=pathlib.Path('analysis/verified-candidate');out.mkdir(parents=True,exist_ok=True)
+          for platform,extension,limit in [('android','apk',100*1024*1024),('windows','zip',400*1024*1024)]:
+              row=m[platform];url=urllib.parse.urlsplit(row['url'])
+              assert url.scheme=='https' and url.hostname=='mcp.wmy-cloud.cn' and url.port in (None,443) and not url.username
+              assert re.fullmatch('[0-9a-f]{64}',row['sha256']) and 0<row['bytes']<=limit
+              name=f'FloatClip-{platform.title()}-{version}-build{build}.{extension}'
+              dest=out/name;digest=hashlib.sha256();total=0
+              with urllib.request.urlopen(row['url'],timeout=90) as response,dest.open('xb') as target:
+                  assert urllib.parse.urlsplit(response.url).hostname=='mcp.wmy-cloud.cn'
+                  while chunk:=response.read(1024*1024):
+                      total+=len(chunk);assert total<=row['bytes']
+                      digest.update(chunk);target.write(chunk)
+              assert total==row['bytes'] and digest.hexdigest()==row['sha256']
+          sdk=pathlib.Path(os.environ['ANDROID_HOME'])/'build-tools'/'35.0.1'
+          apk=out/f'FloatClip-Android-{version}-build{build}.apk'
+          cert=subprocess.check_output([str(sdk/'apksigner'),'verify','--print-certs',str(apk)],text=True)
+          expected=json.loads(pathlib.Path('updates/android-identity.json').read_text())
+          digests=re.findall(r'Signer #\d+ certificate SHA-256 digest: ([0-9a-f]+)',cert)
+          assert digests==[expected['signerSha256']]
+          badging=subprocess.check_output([str(sdk/'aapt'),'dump','badging',str(apk)],text=True)
+          assert f"name='{expected['package']}'" in badging.splitlines()[0]
+          assert f"versionCode='{build}'" in badging.splitlines()[0] and f"versionName='{version}'" in badging.splitlines()[0]
+          with zipfile.ZipFile(out/f'FloatClip-Windows-{version}-build{build}.zip') as z:
+              assert z.testzip() is None and 'FloatClip/FloatClip.exe' in z.namelist()
+              assert all(not n.startswith('/') and '..' not in pathlib.PurePosixPath(n).parts for n in z.namelist())
+              assert sum(n.startswith('FloatClip/licenses/') for n in z.namelist())>=9
+          tag=f'v{version}-build{build}-candidate'
+          with open(os.environ['GITHUB_ENV'],'a') as f:f.write(f'CANDIDATE_TAG={tag}\n')
+          (out/'notes.md').write_text(m['notes']+'\n\n这是候选版；正式应用内更新源尚未推进。原始升级签名、包名及安装数据保持。\n')
+          print('Verified source, APK identity, sizes and SHA-256; no signing keys used by CI.')
+          PY
+      - name: Publish immutable prerelease assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$CANDIDATE_TAG" >/dev/null 2>&1; then
+            gh release create "$CANDIDATE_TAG" --target "$GITHUB_SHA" --prerelease --latest=false --title "FloatClip $CANDIDATE_TAG" --notes-file analysis/verified-candidate/notes.md
+          fi
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,subprocess
+          release=json.loads(subprocess.check_output(['gh','api',f'repos/{os.environ["GITHUB_REPOSITORY"]}/releases/tags/{os.environ["CANDIDATE_TAG"]}']))
+          assert release['prerelease'] and not release['draft']
+          assets={a['name']:a for a in release['assets']}
+          for f in sorted(pathlib.Path('analysis/verified-candidate').glob('FloatClip-*')):
+              existing=assets.get(f.name)
+              if existing:
+                  assert existing.get('digest')=='sha256:'+hashlib.sha256(f.read_bytes()).hexdigest(),'Refusing to replace an existing release asset'
+              else:subprocess.run(['gh','release','upload',os.environ['CANDIDATE_TAG'],str(f)],check=True)
+          PY

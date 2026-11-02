@@ -72,7 +72,10 @@ class PhotoImportViewerTest {
     @Test fun malformedImageDoesNotReplaceExistingProtectedHistory() {
         val store=store();val row=store.addText("keep")!!;store.togglePinned(row.id)
         val before=store.exportJson()
-        assertTrue(runCatching {ClipboardPhotoImporter.prepare(byteArrayOf(1,2,3))}.isFailure)
+        // Legacy graphics otherwise fabricates a bitmap for arbitrary bytes.
+        org.robolectric.shadows.ShadowBitmapFactory.setAllowInvalidImageData(false)
+        try { assertTrue(runCatching {ClipboardPhotoImporter.prepare(byteArrayOf(1,2,3))}.isFailure) }
+        finally { org.robolectric.shadows.ShadowBitmapFactory.setAllowInvalidImageData(true) }
         assertEquals(before,store.exportJson())
     }
     @Test fun fullscreenViewerShowsSelectableUntruncatedTextAndCopySuccess() {

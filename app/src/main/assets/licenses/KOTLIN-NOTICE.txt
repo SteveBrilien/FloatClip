@@ -6,3 +6,8 @@
 
    Kotlin Compiler
    Copyright 2010-2024 JetBrains s.r.o and respective authors and developers
+
+
+Additional bundled runtime dependency: JetBrains Java Annotations
+Project: https://github.com/JetBrains/java-annotations
+License: Apache License 2.0 (license text is included above).

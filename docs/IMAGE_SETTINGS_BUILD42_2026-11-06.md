@@ -43,7 +43,7 @@ Copy still uses Android ClipData.newUri plus URI read grants. PNG-suffixed URIs 
 | Startup update check | Retained |
 | Update channel | Inside About & Updates |
 | Backup | Manual encrypted export/import, preview and safe merge |
-| About | Dedicated page; version/build, permission purposes, offline Kotlin license |
+| About | Dedicated page; version/build, permission purposes, offline Kotlin and Java Annotations license notices |
 | Categories / overlay master / help | Retained |
 
 Android 12+ uses blur-behind only when the system reports support. Android 11 explicitly shows a high-opacity fallback, not a claim of real cross-window blur.

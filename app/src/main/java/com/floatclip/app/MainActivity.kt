@@ -927,14 +927,16 @@ open class MainActivity : Activity() {
                 updatePreview()
                 addView(preview,LinearLayout.LayoutParams(-1,dp(92)).apply { topMargin=dp(8);bottomMargin=dp(8) })
                 if(overlayPreferences.backgroundMode()!="solid") {
-                    addView(sliderSetting("背景透明度",0,75,overlayPreferences.surfaceTransparencyPercent(),"%") {
+                    val blur=android.os.Build.VERSION.SDK_INT>=31 &&
+                        runCatching { getSystemService(android.view.WindowManager::class.java).isCrossWindowBlurEnabled }.getOrDefault(false)
+                    val maximum=if(overlayPreferences.backgroundMode()=="frost") {if(blur)65 else 15} else 75
+                    val actual=100-overlayPreferences.surfacePanelAlphaPercent(blur)
+                    addView(sliderSetting("背景透明度",0,maximum,actual,"%") {
                         overlayPreferences.saveSurfaceTransparencyPercent(it)
                         updatePreview()
                         notifyOverlayAppearanceChanged()
                     })
                     if(overlayPreferences.backgroundMode()=="frost") {
-                        val blur=android.os.Build.VERSION.SDK_INT>=31 &&
-                            runCatching { getSystemService(android.view.WindowManager::class.java).isCrossWindowBlurEnabled }.getOrDefault(false)
                         addView(textView(if(blur)"背景使用系统模糊。" else "当前系统不支持实时背景模糊，使用高对比度半透明表面。",12f,false,colors.secondaryText))
                     }
                 }

@@ -26,6 +26,8 @@ class ZoomImageView(context: Context) : View(context) {
     private var detailRect = Rect()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val matrix = Matrix()
+    private val imageDestination = RectF()
+    private val detailDestination = RectF()
     private var zoom = 1f
     private var minimum = 1f
     private var maximum = 8f
@@ -113,8 +115,10 @@ class ZoomImageView(context: Context) : View(context) {
         matrix.setScale(zoom, zoom); matrix.postTranslate(offsetX, offsetY)
         val saved = canvas.save()
         canvas.concat(matrix)
-        bitmap?.let { canvas.drawBitmap(it, null, RectF(0f, 0f, originalWidth.toFloat(), originalHeight.toFloat()), paint) }
-        detail?.let { canvas.drawBitmap(it, null, RectF(detailRect), paint) }
+        imageDestination.set(0f, 0f, originalWidth.toFloat(), originalHeight.toFloat())
+        detailDestination.set(detailRect)
+        bitmap?.let { canvas.drawBitmap(it, null, imageDestination, paint) }
+        detail?.let { canvas.drawBitmap(it, null, detailDestination, paint) }
         canvas.restoreToCount(saved)
     }
     override fun onDetachedFromWindow() {

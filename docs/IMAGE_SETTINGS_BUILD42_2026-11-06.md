@@ -6,7 +6,7 @@ Source: floatclip-cloud, isolated analysis/cloud-workspace-build25 repository. T
 
 Originals were already separate encrypted files in files/clipboard-images, with references/dimensions in the metadata vault. The old lightbox requested an 8192-dimension / 8-million-pixel bitmap through the 8 MiB card cache, causing repeated decoding and eviction.
 
-Now: 480 thumbnail first; one decoder for the current original; visible-region decoding capped at 3 million pixels; coalesced viewport requests; stale delivery rejected; current source released on close/page. Thumbnail upgrades preserve original-image zoom/scroll coordinates. Card cache stays at 8 MiB. Long cards decode their top region only.
+Now: 480 thumbnail first; one decoder for the current original; visible-region decoding capped at 3 million pixels; coalesced viewport requests; stale delivery rejected; current source released on close/page. Thumbnail upgrades preserve original-image zoom/scroll coordinates. Card cache stays at 8 MiB. Zoom drawing reuses destination rectangles instead of allocating temporary objects per frame. Long cards decode their top region only.
 
 Copy still uses Android ClipData.newUri plus URI read grants. PNG-suffixed URIs and a seekable proxy descriptor improve receiving-app compatibility; old URI grants and the pipe fallback remain supported. SIZE queries use metadata. A target editor must still support image content; an ordinary overlay cannot provide every IME-specific insertion path.
 

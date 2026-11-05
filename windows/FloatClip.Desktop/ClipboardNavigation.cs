@@ -67,15 +67,15 @@ public sealed partial class LocalClipboardWindow
         navigation.Background=Brushes.Transparent;navigation.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");shell.Children.Add(navigation);
         navigation.Resources["NavigationViewContentBackground"]=Brushes.Transparent;
         if(Content is Border border)border.Child=shell;else Content=shell;
-        shellReady=true;UpdateNavigation();Loaded+=(_,_)=>Navigate(currentPage);Closed+=(_,_)=>{devicesView?.Dispose();filesView?.Dispose();};
+        shellReady=true;UpdateNavigation();SizeChanged+=(_,_)=>UpdateNavigation();Loaded+=(_,_)=>Navigate(currentPage);Closed+=(_,_)=>{devicesView?.Dispose();filesView?.Dispose();};
     }
     void BuildShellTitle()
     {
         var title=(DockPanel)shell.Children[0];var pin=(System.Windows.Controls.Button)title.Children[1];
-        pin.Content=new SymbolIcon(SymbolRegular.Pin24){Filled=host.Pinned,FontSize=DesignTokens.Number("Icon.Small")};pin.ToolTip=host.Pinned?"取消固定面板":"固定面板";
+        pin.Content=Glyph(host.Pinned?"\uE77A":"\uE718",(int)DesignTokens.Number("Icon.Small"));pin.ToolTip=host.Pinned?"取消固定面板":"固定面板";
         System.Windows.Automation.AutomationProperties.SetName(pin,host.Pinned?"取消固定面板":"固定面板");
     }
-    void UpdateNavigation(){navigation.PaneDisplayMode=NavigationViewPaneDisplayMode.Left;navigation.IsPaneOpen=expandedNavigation;}
+    void UpdateNavigation(){navigation.PaneDisplayMode=NavigationViewPaneDisplayMode.Left;navigation.IsPaneOpen=expandedNavigation&&ActualWidth>=500;}
     void Navigate(Type type){currentPage=type;if(type==typeof(SettingsPage))categorySettingsModel?.Reload();if(shellReady)navigation.Navigate(type);}
     public void OpenFiles()=>Navigate(typeof(FilesPage));
     FrameworkElement SettingRow(string title,string detail,FrameworkElement control)
@@ -84,12 +84,13 @@ public sealed partial class LocalClipboardWindow
         grid.RowDefinitions.Add(new(){Height=GridLength.Auto});grid.RowDefinitions.Add(new(){Height=GridLength.Auto});
         var labels=new StackPanel{VerticalAlignment=VerticalAlignment.Center};
         labels.Children.Add(new System.Windows.Controls.TextBlock{Text=title,FontSize=DesignTokens.Number("Font.Body"),TextWrapping=TextWrapping.NoWrap,TextTrimming=TextTrimming.CharacterEllipsis,ToolTip=title});
-        if(detail.Length>0){var hint=MutedLabel(detail,(Thickness)Application.Current.FindResource("FloatClip.Margin.Top4"));hint.FontSize=DesignTokens.Number("Font.Caption");hint.LineHeight=DesignTokens.Number("Setting.DetailLineHeight");hint.MaxHeight=DesignTokens.Number("Setting.DetailMaxHeight");hint.TextTrimming=TextTrimming.CharacterEllipsis;labels.Children.Add(hint);}
+        if(detail.Length>0){var hint=MutedLabel(detail,(Thickness)Application.Current.FindResource("FloatClip.Margin.Top4"));hint.FontSize=DesignTokens.Number("Font.Caption");hint.LineHeight=DesignTokens.Number("Setting.DetailLineHeight");hint.MaxHeight=DesignTokens.Number("Setting.DetailLineHeight");hint.TextWrapping=TextWrapping.NoWrap;hint.TextTrimming=TextTrimming.CharacterEllipsis;hint.ToolTip=detail;labels.Children.Add(hint);}
         grid.Children.Add(labels);control.VerticalAlignment=VerticalAlignment.Center;control.HorizontalAlignment=HorizontalAlignment.Right;grid.Children.Add(control);
         void Arrange(){
-            bool stack=grid.ActualWidth<DesignTokens.Number("Setting.StackWidth");
+            bool compact=grid.ActualWidth>0&&grid.ActualWidth<DesignTokens.Number("Setting.StackWidth");
+            bool stack=grid.ActualWidth>0&&grid.ActualWidth<208;
             Grid.SetColumn(control,stack?0:1);Grid.SetRow(control,stack?1:0);Grid.SetColumnSpan(control,stack?2:1);Grid.SetColumnSpan(labels,stack?2:1);
-            control.Margin=stack?(Thickness)Application.Current.FindResource("FloatClip.Margin.Top8"):new Thickness(DesignTokens.Number("Space.16"),0,0,0);
+            control.Margin=stack?(Thickness)Application.Current.FindResource("FloatClip.Margin.Top8"):new Thickness(compact?DesignTokens.Number("Space.8"):DesignTokens.Number("Space.16"),0,0,0);
             if(grid.ActualWidth>0)control.MaxWidth=grid.ActualWidth;
         }
         grid.SizeChanged+=(_,_)=>Arrange();Arrange();

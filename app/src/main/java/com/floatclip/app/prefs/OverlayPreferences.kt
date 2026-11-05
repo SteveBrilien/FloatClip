@@ -11,15 +11,84 @@ enum class OverlayThemeMode {
 class OverlayPreferences(context: Context) {
     private val prefs = context.getSharedPreferences("floatclip_overlay", Context.MODE_PRIVATE)
 
+    init {
+        // One-time migration: removed controls must not leave invisible custom behavior behind.
+        if (!prefs.getBoolean("simple_feedback_v1", false)) {
+            val edit = prefs.edit().putBoolean("simple_feedback_v1", true)
+                .putInt("feedback_strength", 1)
+                .remove(KEY_MOTION_PRESET)
+            (0..3).forEach { edit.remove("motion_curve_" + it) }
+            listOf("card", "bubble", "panel", "transition", "switch").forEach {
+                edit.remove("range_min_" + it).remove("range_max_" + it)
+            }
+            edit.remove(KEY_CARD_PRESS_SCALE_PERCENT).remove(KEY_BUBBLE_PRESS_SCALE_PERCENT)
+                .remove(KEY_PANEL_PRESS_SCALE_PERCENT).apply()
+        }
+    }
+    init {
+        if (!prefs.getBoolean("simple_surface_v1", false)) {
+            val oldMode=prefs.getString("panel_background_mode","transparent")
+            val alpha=if(oldMode=="window")prefs.getInt("window_alpha",100) else prefs.getInt(KEY_PANEL_ALPHA_PERCENT,90)
+            prefs.edit().putBoolean("simple_surface_v1",true)
+                .putInt("surface_transparency",(100-alpha).coerceIn(0,75))
+                .putString("panel_background_mode",if(oldMode=="window")"transparent" else oldMode)
+                .remove(KEY_BORDER_ENABLED).remove(KEY_BORDER_ALPHA_PERCENT)
+                .remove(KEY_CARD_ALPHA_PERCENT).remove(KEY_FROST_STRENGTH_PERCENT).apply()
+        }
+    }
+    fun surfaceTransparencyPercent():Int = prefs.getInt("surface_transparency",10).coerceIn(0,75)
+    fun saveSurfaceTransparencyPercent(value:Int) { prefs.edit().putInt("surface_transparency",value.coerceIn(0,75)).apply() }
+    fun surfacePanelAlphaPercent(blurAvailable:Boolean=false):Int = when(backgroundMode()) {
+        "solid" -> 100
+        "frost" -> (100-surfaceTransparencyPercent()).coerceAtLeast(if(blurAvailable)35 else 85)
+        else -> 100-surfaceTransparencyPercent()
+    }
+    fun surfaceCardAlphaPercent():Int = if(backgroundMode()=="solid")100 else 100-surfaceTransparencyPercent()/12
+    fun surfaceBorderAlphaPercent(dark:Boolean):Int = if(dark)18 else 10
+
+    init {
+        if(!prefs.getBoolean("simple_motion_speed_v1",false)) {
+            prefs.edit().putBoolean("simple_motion_speed_v1",true)
+                .remove(KEY_TRANSITION_DURATION_MS).remove(KEY_SWITCH_ANIMATION_MS).apply()
+        }
+    }
+    init {
+        if(!prefs.getBoolean("simple_background_v1",false))
+            prefs.edit().putBoolean("simple_background_v1",true)
+                .putBoolean(KEY_KEEP_ALIVE_ENABLED,true).putBoolean(KEY_DETAILED_NOTIFICATION,false).apply()
+    }
+    fun motionSpeed():Int=prefs.getInt("motion_speed",1).coerceIn(0,2)
+    fun saveMotionSpeed(value:Int) {
+        require(value in 0..2)
+        prefs.edit().putInt("motion_speed",value)
+            .putInt(KEY_TRANSITION_DURATION_MS,listOf(200,300,440)[value])
+            .putInt(KEY_SWITCH_ANIMATION_MS,listOf(100,140,180)[value]).apply()
+    }
+    fun panelMotionDurationMs(open:Boolean):Int {
+        val duration=transitionDurationMs()
+        return if(open || duration==0)duration else (duration*.55f).toInt().coerceIn(70,200)
+    }
+
+    fun feedbackStrength(): Int = prefs.getInt("feedback_strength", 1).coerceIn(0, 2)
+    fun saveFeedbackStrength(value: Int) {
+        require(value in 0..2)
+        val scales = when(value) {
+            0 -> listOf(99, 98, 100)
+            2 -> listOf(96, 93, 98)
+            else -> listOf(98, 96, 99)
+        }
+        prefs.edit().putInt("feedback_strength", value)
+            .putInt(KEY_CARD_PRESS_SCALE_PERCENT, scales[0])
+            .putInt(KEY_BUBBLE_PRESS_SCALE_PERCENT, scales[1])
+            .putInt(KEY_PANEL_PRESS_SCALE_PERCENT, scales[2]).apply()
+    }
+
     fun bubbleY(defaultValue: Int): Int = prefs.getInt(KEY_BUBBLE_Y, defaultValue)
     fun bubbleOnRight(): Boolean = prefs.getBoolean(KEY_BUBBLE_RIGHT, false)
     fun bubbleSizeDp(): Int = prefs.getInt(KEY_BUBBLE_SIZE_DP, DEFAULT_BUBBLE_SIZE_DP).coerceIn(42, 64)
     fun bubbleAlphaPercent(): Int = prefs.getInt(KEY_BUBBLE_ALPHA_PERCENT, DEFAULT_BUBBLE_ALPHA_PERCENT).coerceIn(35, 100)
-    fun edgeHidePercent(): Int = prefs.getInt(KEY_EDGE_HIDE_PERCENT, DEFAULT_EDGE_HIDE_PERCENT).coerceIn(0, 55)
-    fun bubbleMotionSensitivityPercent(): Int = prefs.getInt(
-        KEY_BUBBLE_MOTION_SENSITIVITY_PERCENT,
-        DEFAULT_BUBBLE_MOTION_SENSITIVITY_PERCENT,
-    ).coerceIn(30, 120)
+    fun edgeHidePercent(): Int = DEFAULT_EDGE_HIDE_PERCENT
+    fun bubbleMotionSensitivityPercent():Int = DEFAULT_BUBBLE_MOTION_SENSITIVITY_PERCENT
     fun keepAliveEnabled(): Boolean = prefs.getBoolean(KEY_KEEP_ALIVE_ENABLED, true)
     fun overlayEnabled(): Boolean = prefs.getBoolean(KEY_OVERLAY_ENABLED, false)
     fun twoColumnClipboard(): Boolean = prefs.getBoolean("clipboard_two_columns", false)
@@ -27,8 +96,8 @@ class OverlayPreferences(context: Context) {
     fun mergeRemoteImages(): Boolean = prefs.getBoolean("clipboard_merge_remote_images", true)
     fun saveMergeRemoteImages(value: Boolean) { prefs.edit().putBoolean("clipboard_merge_remote_images", value).apply() }
     fun sourceColors(): Boolean = prefs.getBoolean("source_colors", true)
-    fun translucentCards(): Boolean = prefs.getBoolean("translucent_cards", true)
-    fun saveSourceColors(value: Boolean) { prefs.edit().putBoolean("source_colors",value).apply() }
+    fun translucentCards(): Boolean = sourceColors()
+    fun saveSourceColors(value: Boolean) { prefs.edit().putBoolean("source_colors",value).putBoolean("translucent_cards",value).apply() }
     fun saveTranslucentCards(value: Boolean) { prefs.edit().putBoolean("translucent_cards",value).apply() }
 
     fun backgroundMode():String=prefs.getString("panel_background_mode","transparent")?.takeIf { it in listOf("solid","transparent","frost","window") }?:"transparent"
@@ -73,7 +142,7 @@ class OverlayPreferences(context: Context) {
     fun frostStrengthPercent(): Int = prefs.getInt(KEY_FROST_STRENGTH_PERCENT, DEFAULT_FROST_STRENGTH_PERCENT).coerceIn(0, 100)
     fun borderEnabled(): Boolean = prefs.getBoolean(KEY_BORDER_ENABLED, true)
     fun borderAlphaPercent(): Int = prefs.getInt(KEY_BORDER_ALPHA_PERCENT, DEFAULT_BORDER_ALPHA_PERCENT).coerceIn(5, 60)
-    fun accentTheme(): String = prefs.getString(KEY_ACCENT_THEME, "blue") ?: "blue"
+    fun accentTheme(): String = "blue"
     fun interactionRange(key:String):IntRange {
         val fallback=when(key){"transition"->0..1500;"switch"->0..1000;else->50..100}
         val hard=if(key in listOf("transition","switch"))0..5000 else 10..120
@@ -93,7 +162,7 @@ class OverlayPreferences(context: Context) {
     fun transitionDurationMs(): Int = prefs.getInt(KEY_TRANSITION_DURATION_MS, DEFAULT_TRANSITION_DURATION_MS).coerceIn(interactionRange("transition"))
     fun switchAnimationMs(): Int = prefs.getInt(KEY_SWITCH_ANIMATION_MS, DEFAULT_SWITCH_ANIMATION_MS).coerceIn(interactionRange("switch"))
     fun detailedNotification(): Boolean = prefs.getBoolean(KEY_DETAILED_NOTIFICATION, false)
-    fun panelFollowsBubble(): Boolean = prefs.getBoolean(KEY_PANEL_FOLLOWS_BUBBLE, false)
+    fun panelFollowsBubble(): Boolean = true
     fun savePanelFollowsBubble(value:Boolean) { prefs.edit().putBoolean(KEY_PANEL_FOLLOWS_BUBBLE,value).apply() }
     fun panelX(defaultValue: Int): Int = prefs.getInt(KEY_PANEL_X, defaultValue)
     fun panelY(defaultValue: Int): Int = prefs.getInt(KEY_PANEL_Y, defaultValue)
@@ -175,6 +244,9 @@ class OverlayPreferences(context: Context) {
             .remove("range_min_switch").remove("range_max_switch")
             .remove("motion_curve_0").remove("motion_curve_1").remove("motion_curve_2").remove("motion_curve_3")
             .remove(KEY_MOTION_PRESET)
+            .remove("feedback_strength")
+            .remove("motion_speed")
+            .remove("surface_transparency")
             .remove(KEY_BUBBLE_SIZE_DP)
             .remove(KEY_BUBBLE_ALPHA_PERCENT)
             .remove(KEY_EDGE_HIDE_PERCENT)
@@ -219,7 +291,7 @@ class OverlayPreferences(context: Context) {
         const val DEFAULT_CARD_PRESS_SCALE_PERCENT = 98
         const val DEFAULT_BUBBLE_PRESS_SCALE_PERCENT = 96
         const val DEFAULT_PANEL_PRESS_SCALE_PERCENT = 99
-        const val DEFAULT_TRANSITION_DURATION_MS = 240
+        const val DEFAULT_TRANSITION_DURATION_MS = 300
         const val DEFAULT_SWITCH_ANIMATION_MS = 140
 
         private const val KEY_BUBBLE_Y = "bubble_y"

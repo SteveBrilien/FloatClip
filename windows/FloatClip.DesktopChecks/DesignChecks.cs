@@ -31,6 +31,11 @@ static class DesignChecks
         foreach(string theme in new[]{"light","dark"})
         {
             DesignTheme.Apply(theme);
+            var caption=new Wpf.Ui.Controls.Button { Style=(Style)app.FindResource("FloatClip.Button.CaptionClose") };
+            check(((SolidColorBrush)caption.Background).Color.A==0,theme+": close caption is transparent at rest");
+            check(ReferenceEquals(caption.Foreground,DesignTokens.Brush("TextPrimary")),theme+": close caption uses neutral text at rest");
+            check(caption.BorderThickness==new Thickness(0),theme+": caption has no permanent border");
+
             foreach(var pair in new[]{("TextPrimary","Surface"),("TextSecondary","Surface"),("TextSecondary","Background"),("DisabledText","DisabledSurface"),("OnAccent","Accent"),("OnAccent","AccentHover"),("OnAccent","AccentPressed")})
                 check(Contrast(pair.Item1,pair.Item2)>=4.5,$"{theme}: readable {pair.Item1} on {pair.Item2}");
             check(ReferenceEquals(app.Resources["FloatClip.Muted"],app.Resources["FloatClip.TextSecondary"]),theme+": legacy brush alias shares one semantic resource");

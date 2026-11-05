@@ -121,10 +121,10 @@ class OverlayHistoryTest {
         assertEquals(PanelGeometry.Box(40,354,352,430),p.placement(400,800,panel,right,true,8,16))
         assertEquals(panel,p.placement(400,800,panel,right,false,8,16))
         val prefs=OverlayPreferences(RuntimeEnvironment.getApplication())
-        prefs.resetAppearance();assertFalse(prefs.panelFollowsBubble())
+        prefs.resetAppearance();assertTrue(prefs.panelFollowsBubble())
         prefs.savePanelFollowsBubble(true)
         assertTrue(OverlayPreferences(RuntimeEnvironment.getApplication()).panelFollowsBubble())
-        prefs.resetAppearance();assertFalse(prefs.panelFollowsBubble())
+        prefs.resetAppearance();assertTrue(prefs.panelFollowsBubble())
     }
 
 }

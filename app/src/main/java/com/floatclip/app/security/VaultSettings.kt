@@ -7,6 +7,10 @@ import android.util.Base64
 class VaultSettings(context: Context) {
     private val prefs = context.getSharedPreferences("floatclip_security", Context.MODE_PRIVATE)
     private val localCrypto = LocalVaultCrypto()
+    init {
+        if(!prefs.getBoolean("manual_migration_v1",false))
+            prefs.edit().putBoolean("manual_migration_v1",true).putBoolean("backup_write_armed",false).apply()
+    }
 
     fun hasPin(): Boolean = !prefs.getString(KEY_PIN, null).isNullOrBlank()
 

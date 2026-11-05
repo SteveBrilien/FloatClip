@@ -17,8 +17,12 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
     private val vaultFile = File(appContext.filesDir, "floatclip_vault.bin")
     private val images = ImageBlobStore(File(appContext.filesDir,"clipboard-images"),crypto)
     private val categoryStore = CategoryStore(appContext)
+    internal val imageCacheScope = appContext.filesDir.absolutePath
 
-    init { migrateLegacyIfNeeded() }
+    init {
+        if(File(vaultFile.path+".bak").exists())runCatching {android.util.AtomicFile(vaultFile).openRead().close()}
+        migrateLegacyIfNeeded()
+    }
 
     fun entries(): List<ClipEntry> = synchronized(LOCK) {
         val stamp=vaultFile.lastModified() to vaultFile.length()
@@ -271,6 +275,28 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
         return array.toString()
     }
 
+    /** Validate and commit the union atomically; never evict current history to fit an import. */
+    fun mergeImportJson(raw:String):Boolean = synchronized(LOCK) {
+        runCatching {
+            if(vaultFile.exists())readStrict()
+            require(raw.length<=MAX_PORTABLE_CHARACTERS)
+            val incoming=JSONArray(raw)
+            val merged=JSONArray(exportEntries(entries()))
+            val keys=(0 until merged.length()).map { merged.getJSONObject(it).optString("key",merged.getJSONObject(it).getLong("id").toString()) }.toMutableSet()
+            var next=maxOf(System.currentTimeMillis(),entries().maxOfOrNull {it.id}?:0L)
+            for(index in 0 until incoming.length()) {
+                val row=incoming.getJSONObject(index)
+                val key=row.optString("key",row.getLong("id").toString())
+                if(keys.add(key)) {
+                    check(next<Long.MAX_VALUE);row.put("id",++next)
+                    merged.put(row)
+                }
+            }
+            require(merged.length()<=MAX_ITEMS)
+            importJson(merged.toString())
+        }.getOrDefault(false)
+    }
+
     fun importJson(raw: String): Boolean = synchronized(LOCK) {
         val written=mutableListOf<String>()
         try {
@@ -307,11 +333,14 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
         val raw = buildJson(items)
         require(raw.toByteArray(Charsets.UTF_8).size<=16*1024*1024) { "剪贴板库超过 16 MiB" }
         val encrypted = crypto.encrypt(raw.toByteArray(Charsets.UTF_8))
-        val temp = File(vaultFile.parentFile, "${vaultFile.name}.tmp")
-        temp.writeBytes(encrypted)
-        if (!temp.renameTo(vaultFile)) {
-            vaultFile.writeBytes(encrypted)
-            temp.delete()
+        val atomic=android.util.AtomicFile(vaultFile)
+        val output=atomic.startWrite()
+        try {
+            output.write(encrypted)
+            atomic.finishWrite(output)
+        } catch(error:Exception) {
+            atomic.failWrite(output)
+            throw error
         }
         metadata.remove(vaultFile.absolutePath)
         if(crypto is LocalVaultCrypto)metadata[vaultFile.absolutePath]=Metadata(
@@ -327,7 +356,7 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
 
     private fun readVaultJson(): String {
         if (!vaultFile.exists()) return "[]"
-        return runCatching { crypto.decrypt(vaultFile.readBytes()).toString(Charsets.UTF_8) }.getOrDefault("[]")
+        return runCatching { crypto.decrypt(android.util.AtomicFile(vaultFile).readFully()).toString(Charsets.UTF_8) }.getOrDefault("[]")
     }
 
     private fun parseEntries(raw: String): List<ClipEntry> = runCatching {
@@ -375,7 +404,7 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
 
     private fun readStrict(): String {
         if (!vaultFile.exists()) return "[]"
-        val raw = crypto.decrypt(vaultFile.readBytes()).toString(Charsets.UTF_8)
+        val raw = crypto.decrypt(android.util.AtomicFile(vaultFile).readFully()).toString(Charsets.UTF_8)
         check(parseEntries(raw).size == JSONArray(raw).length()) { "本机剪贴板损坏，请保留数据并从备份恢复" }
         return raw
     }

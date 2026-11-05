@@ -15,6 +15,19 @@ import com.floatclip.app.overlay.ui.EntryGestureRow
 
 /** Only visible rows are materialized. Detached row containers are recycled by ListView. */
 class ClipboardHistoryList(context:Context):ListView(context) {
+    var automaticImageColumns=false
+    private data class Submission(val entries:List<ClipEntry>,val columns:Boolean,val key:String,val hint:String,val color:Int,val create:(ClipEntry)->View)
+    private var submission:Submission?=null
+    private val reflow=Runnable {
+        submission?.let { submit(it.entries,it.columns,it.key,it.hint,it.color,it.create) }
+    }
+    private fun wideEnough(pixels:Int)=pixels/resources.displayMetrics.density>=400f
+    override fun onSizeChanged(w:Int,h:Int,oldw:Int,oldh:Int) {
+        super.onSizeChanged(w,h,oldw,oldh)
+        if(automaticImageColumns && wideEnough(w)!=wideEnough(oldw)) {
+            removeCallbacks(reflow);post(reflow)
+        }
+    }
     private data class Row(val entries:List<ClipEntry>,val columns:Boolean)
     private class Holder(context:Context):FrameLayout(context) { var row:Row?=null }
     private var rows=emptyList<Row>()
@@ -27,7 +40,7 @@ class ClipboardHistoryList(context:Context):ListView(context) {
         rows.drop((lastVisiblePosition-headerViewsCount+1).coerceAtLeast(0)).asSequence().flatMap { it.entries.asSequence() }
             .filter { it.kind=="image" }.take(3).forEach { com.floatclip.app.clipboard.ClipboardImages.prefetch(store,it) }
     }
-    override fun onDetachedFromWindow() { removeCallbacks(prefetch);super.onDetachedFromWindow() }
+    override fun onDetachedFromWindow() { removeCallbacks(reflow);removeCallbacks(prefetch);super.onDetachedFromWindow() }
     private val positions=linkedMapOf<String,Pair<Int,Int>>()
     private val historyAdapter=object:BaseAdapter() {
         override fun getCount()=rows.size.coerceAtLeast(1)
@@ -81,6 +94,8 @@ class ClipboardHistoryList(context:Context):ListView(context) {
         adapter=historyAdapter
     }
     fun submit(entries:List<ClipEntry>,twoColumnImages:Boolean,filterKey:String,hint:String,color:Int,create:(ClipEntry)->View) {
+        submission=Submission(entries,twoColumnImages,filterKey,hint,color,create)
+        val columns=if(automaticImageColumns)wideEnough(if(width>0)width else resources.displayMetrics.widthPixels) else twoColumnImages
         val changedFilter=filter!=filterKey
         if(changedFilter) {
             positions[filter]=firstVisiblePosition to (getChildAt(0)?.top?:0)
@@ -90,9 +105,9 @@ class ClipboardHistoryList(context:Context):ListView(context) {
             var index=0
             while(index<entries.size) {
                 val first=entries[index++]
-                val group=if(twoColumnImages && first.kind=="image" && index<entries.size && entries[index].kind=="image")
+                val group=if(columns && first.kind=="image" && index<entries.size && entries[index].kind=="image")
                     listOf(first,entries[index++]) else listOf(first)
-                add(Row(group,twoColumnImages))
+                add(Row(group,columns))
             }
         }
         factory=create;emptyColor=color

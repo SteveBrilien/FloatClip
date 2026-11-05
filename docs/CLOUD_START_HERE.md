@@ -1,5 +1,9 @@
 # FloatClip 当前续接入口（2026-10-28，恢复候选）
 
+## 当前续接：2026-11-06 build42
+
+图片按可见区域解码、33项设置确认后的精简、边缘拖动改尺寸、快速收回与换机迁移、独立关于/权限/许可页，见 [build42记录](IMAGE_SETTINGS_BUILD42_2026-11-06.md)。Windows恢复build40视觉并保留加载优化。最终Android验证任务为floatclip_build42_android_verify，制品与测试报告在analysis/build42。两端Remote及ADB离线，不声称已安装或完成60/120Hz视觉/粘贴/后台真机验收；正式签名更新源保持不变。
+
 ## 当前续接：2026-11-03 build40
 
 照片导入、全文/全屏查看及复制反馈已完成，MCP/GitHub候选已发布；制品与验证记录见 [build40](PHOTO_VIEWER_2026-11-03.md)。此前build39已发布候选并合并main；其正式更新源仍待Windows原签名器。

@@ -23,6 +23,30 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.LEGACY)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 class ClipboardScreenTest {
+    @Test fun aboutHasRealPagesForPermissionsAndOfflineOpenSourceLicense() {
+        val controller=Robolectric.buildActivity(UnifiedActivity::class.java).setup()
+        val activity=controller.get()
+        fun views(view:View):List<View> = listOf(view)+if(view is ViewGroup)(0 until view.childCount).flatMap {views(view.getChildAt(it))} else emptyList()
+        fun click(label:String) {
+            val text=views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().first {it.text.toString()==label}
+            var target=text as View
+            while(!target.isClickable && target.parent is View)target=target.parent as View
+            assertTrue(target.performClick())
+        }
+        try {
+            activity.findViewById<View>(R.id.clipboard_settings).performClick()
+            click("关于与更新")
+            val labels=views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().map{it.text.toString()}
+            assertTrue(labels.contains("FloatClip"));assertTrue(labels.any {it.contains(" · build ")})
+            click("权限声明")
+            assertTrue(views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().any {it.text.toString().contains("你主动选择的文字粘贴")})
+            activity.findViewById<View>(R.id.clipboard_back).performClick()
+            click("关于与更新")
+            click("开源组件")
+            click("Kotlin 标准库")
+            assertTrue(views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().any {it.text.toString().contains("Apache License")&&it.isTextSelectable})
+        } finally {controller.pause().stop().destroy()}
+    }
     @Test fun bulkClearButtonPreservesProtectionWithoutUndo() {
         val controller=Robolectric.buildActivity(UnifiedActivity::class.java).setup()
         val activity=controller.get()

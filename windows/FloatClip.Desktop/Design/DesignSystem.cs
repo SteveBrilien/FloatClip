@@ -20,32 +20,14 @@ public static class DesignTokens
 }
 public static class DesignTheme
 {
-    public static bool Apply(string mode,DesignPreferences? preferences=null)
+    public static bool Apply(string mode)
     {
-        bool dark=mode is "dark" or "tokyo-night"||mode=="system"&&(int?)Registry.GetValue("HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize","AppsUseLightTheme",1)==0;
+        bool dark=mode is "dark" or "tokyo-night"||mode=="system"&&(int?)Registry.GetValue("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize","AppsUseLightTheme",1)==0;
         var palette=new ResourceDictionary{Source=new Uri("pack://application:,,,/FloatClip;component/Design/"+(dark?"TokyoNight":"Light")+".xaml")};
         SolidColorBrush B(string name)=>(SolidColorBrush)palette["FloatClip."+name];
-        static Color Mix(Color a,Color b,double amount)=>Color.FromRgb(
-            (byte)Math.Clamp(a.R*(1-amount)+b.R*amount,0,255),
-            (byte)Math.Clamp(a.G*(1-amount)+b.G*amount,0,255),
-            (byte)Math.Clamp(a.B*(1-amount)+b.B*amount,0,255));
-        if(preferences?.FollowSystemAccent==true)
-        {
-            Color system=SystemParameters.WindowGlassColor;
-            if(system.A>24)
-            {
-                system=Color.FromRgb(system.R,system.G,system.B);
-                palette["FloatClip.Accent"]=new SolidColorBrush(system);
-                palette["FloatClip.AccentHover"]=new SolidColorBrush(Mix(system,dark?Colors.White:Colors.Black,.12));
-                palette["FloatClip.AccentPressed"]=new SolidColorBrush(Mix(system,dark?Colors.White:Colors.Black,.22));
-                palette["FloatClip.Selected"]=new SolidColorBrush(Mix(B("Background").Color,system,dark ? .24 : .12));
-                palette["FloatClip.SelectedHover"]=new SolidColorBrush(Mix(B("Background").Color,system,dark ? .34 : .20));
-            }
-        }
-        if(preferences?.WhiteBorders==true)
-            palette["FloatClip.Border"]=new SolidColorBrush(Color.FromArgb((byte)(dark?118:210),255,255,255));
         DesktopFluent.Apply(dark,B("Background"),B("Surface"),B("TextPrimary"),B("TextSecondary"),B("Border"),B("Hover"),B("Accent"));
         var resources=Application.Current.Resources;foreach(object key in palette.Keys)resources[key]=palette[key];
+        // Compatibility names reference the same brush instances, not second palettes.
         resources["FloatClip.Text"]=B("TextPrimary");resources["FloatClip.Muted"]=B("TextSecondary");resources["FloatClip.Line"]=B("Border");resources["FloatClip.Tint"]=B("Selected");return dark;
     }
 }
@@ -56,8 +38,6 @@ public sealed class DesignPreferences
     public double WindowOpacity{get;set;}=1;
     public string ClipboardBackground{get;set;}="solid";
     public double BackgroundOpacity{get;set;}=.88;
-    public bool FollowSystemAccent{get;set;}=true;
-    public bool WhiteBorders{get;set;}
     public static bool ReducedMotion{get;private set;}
     public static DesignPreferences Load(string root){try{var p=JsonSerializer.Deserialize<DesignPreferences>(File.ReadAllText(Path.Combine(root,"design-preferences.json")))??new();p.WindowOpacity=Math.Clamp(p.WindowOpacity,.2,1);p.BackgroundOpacity=Math.Clamp(p.BackgroundOpacity,.2,1);if(p.ClipboardBackground is not ("solid" or "acrylic" or "transparent" or "window"))p.ClipboardBackground="solid";ReducedMotion=p.ReduceMotion;return p;}catch{ReducedMotion=false;return new();}}
     public void Save(string root){string path=Path.Combine(root,"design-preferences.json");File.WriteAllText(path+".tmp",JsonSerializer.Serialize(this));File.Move(path+".tmp",path,true);ReducedMotion=ReduceMotion;}

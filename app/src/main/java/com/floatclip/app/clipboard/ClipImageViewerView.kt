@@ -37,6 +37,8 @@ class ClipImageViewerView(
     private val size = TextView(context)
     private val copyButton: CopyFeedbackButton
     private var imageRequest: AutoCloseable? = null
+    private var imageSource: ClipImageSource? = null
+    private var zoomView: ZoomImageView? = null
     private var copyRequest: AutoCloseable? = null
     private var index = images.indexOfFirst { it.id == startId }.let { if (it >= 0) it else 0 }
     private var current: ClipEntry? = images.getOrNull(index)
@@ -138,47 +140,64 @@ class ClipImageViewerView(
         val entry = images.getOrNull(position) ?: return
         current = entry
         imageRequest?.close()
+        imageSource?.close()
+        zoomView?.clearImages()
         imageHost.animate().cancel()
         imageHost.removeAllViews()
         counter.text = if (images.size > 1) "${position + 1} / ${images.size}" else ""
         size.text = listOf(entry.imageWidth, entry.imageHeight).takeIf { it.all { value -> value > 0 } }
             ?.let { "${it[0]} × ${it[1]}" }.orEmpty()
 
-        val progress = ProgressBar(context).apply {
-            indeterminateTintList = ColorStateList.valueOf(Color.WHITE)
+        val progress = ProgressBar(context).apply { indeterminateTintList = ColorStateList.valueOf(Color.WHITE) }
+        val zoom = ZoomImageView(context).apply {
+            onHorizontalPage = { delta -> page(delta) }
+            setOnClickListener { toggleChrome() }
         }
+        zoomView = zoom
+        imageHost.addView(zoom, LayoutParams(-1, -1))
         imageHost.addView(progress, LayoutParams(dp(40), dp(40), Gravity.CENTER))
-        imageRequest = ClipboardImages.thumbnailAsync(store, entry, 8192) { bitmap ->
-            if (closed || current?.id != entry.id) return@thumbnailAsync
-            imageHost.removeAllViews()
-            if (bitmap == null) {
+        var hasImage = false
+        val source = ClipImageSource(store, entry) {
+            if (!closed && current?.id == entry.id && !hasImage) {
+                progress.visibility = View.GONE
                 imageHost.addView(TextView(context).apply {
                     text = "图片暂不可用，请保留本机数据"
                     gravity = Gravity.CENTER
                     textSize = 14f
                     setTextColor(Color.argb(190, 255, 255, 255))
                 }, LayoutParams(-1, -1))
-                return@thumbnailAsync
             }
-            val zoom = ZoomImageView(context).apply {
-                setImageBitmap(bitmap)
-                onHorizontalPage = { delta -> page(delta) }
-                setOnClickListener { toggleChrome() }
+        }
+        imageSource = source
+        zoom.onViewportChanged = { rect, scale ->
+            source.request(rect, ClipImageSource.sample(rect.width(), rect.height(), scale)) { bitmap, region ->
+                if (!closed && current?.id == entry.id) {
+                    hasImage = true
+                    progress.visibility = View.GONE
+                    zoom.setImageRegion(bitmap, region)
+                }
             }
-            imageHost.addView(zoom, LayoutParams(-1, -1))
-            if (animated && android.animation.ValueAnimator.areAnimatorsEnabled()) {
-                imageHost.alpha = 0f
-                imageHost.translationX = dp(if (direction > 0) 28 else -28).toFloat()
-                imageHost.animate()
-                    .alpha(1f)
-                    .translationX(0f)
-                    .setInterpolator(appearance.motionInterpolator())
-                    .setDuration((appearance.transitionDurationMs() * 0.72f).roundToLong().coerceIn(90L, 420L))
-                    .start()
-            } else {
-                imageHost.alpha = 1f
-                imageHost.translationX = 0f
+        }
+        zoom.setImageDimensions(entry.imageWidth.coerceAtLeast(1), entry.imageHeight.coerceAtLeast(1))
+        // A cheap full-image thumbnail appears first. Detail is a bounded region from the same
+        // original attachment; switching/closing releases its decoder and does not evict card cache.
+        imageRequest = ClipboardImages.thumbnailAsync(store, entry, 480) { bitmap ->
+            if (!closed && current?.id == entry.id && bitmap != null) {
+                hasImage = true
+                progress.visibility = View.GONE
+                zoom.setImageBitmap(bitmap, entry.imageWidth, entry.imageHeight)
             }
+        }
+        if (animated && android.animation.ValueAnimator.areAnimatorsEnabled()) {
+            imageHost.alpha = 0f
+            imageHost.translationX = dp(if (direction > 0) 28 else -28).toFloat()
+            imageHost.animate().alpha(1f).translationX(0f)
+                .setInterpolator(appearance.motionInterpolator())
+                .setDuration((appearance.transitionDurationMs() * 0.72f).roundToLong().coerceIn(0L, 420L))
+                .start()
+        } else {
+            imageHost.alpha = 1f
+            imageHost.translationX = 0f
         }
     }
 
@@ -206,6 +225,10 @@ class ClipImageViewerView(
         closed = true
         imageRequest?.close()
         imageRequest = null
+        imageSource?.close()
+        imageSource = null
+        zoomView?.clearImages()
+        zoomView = null
         copyRequest?.close()
         copyRequest = null
         animate().cancel()

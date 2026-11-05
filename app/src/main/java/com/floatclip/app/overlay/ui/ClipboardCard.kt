@@ -61,12 +61,12 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
         background = GradientDrawable().apply {
             val tinted = if(prefs.translucentCards()) mix(surface,accent,if(dark) .10f else .055f) else surface
             val cardColor = if(prefs.backgroundMode()!="solid") {
-                val alpha=(255f*prefs.cardAlphaPercent()/100f).toInt().coerceIn(0,255)
+                val alpha=(255f*prefs.surfaceCardAlphaPercent()/100f).toInt().coerceIn(0,255)
                 Color.argb(alpha, Color.red(tinted), Color.green(tinted), Color.blue(tinted))
             } else tinted
             setColor(cardColor)
-            if(prefs.borderEnabled()) {
-                val alpha=(255f*prefs.borderAlphaPercent()/100f).toInt().coerceIn(0,255)
+            run {
+                val alpha=(255f*prefs.surfaceBorderAlphaPercent(dark)/100f).toInt().coerceIn(0,255)
                 setStroke(dp(1), if(dark) Color.argb(alpha,255,255,255) else Color.argb(alpha,25,40,63))
             }
             cornerRadius = dp(16).toFloat()

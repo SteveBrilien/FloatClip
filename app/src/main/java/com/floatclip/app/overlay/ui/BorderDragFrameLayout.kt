@@ -21,6 +21,8 @@ class BorderDragFrameLayout(context: Context) : FrameLayout(context) {
     var topDragHeightPx: Int = 0
     var topActionReservePx: Int = 0
     var listener: DragListener? = null
+    var resizeEdges:Int=0
+        private set
     private var dragging = false
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
     private var dragDownRawX = 0f
@@ -30,6 +32,7 @@ class BorderDragFrameLayout(context: Context) : FrameLayout(context) {
     override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
         if (!dragEnabled) return false
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            resizeEdges=PanelGeometry.resizeEdges(event.x,event.y,width,height,borderDragPx)
             dragging = isDragZone(event.x, event.y)
             if (dragging) {
                 dragDownRawX = event.rawX

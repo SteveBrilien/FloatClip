@@ -37,7 +37,7 @@ class OverlayAppearanceTest {
         assertTrue(prefs.borderEnabled())
         assertEquals(98,prefs.cardPressScalePercent())
         assertEquals(96,prefs.bubblePressScalePercent())
-        assertEquals(240,prefs.transitionDurationMs())
+        assertEquals(300,prefs.transitionDurationMs())
         assertEquals("soft",prefs.motionPreset())
         assertEquals("blue",prefs.accentTheme())
     }
@@ -53,7 +53,7 @@ class OverlayAppearanceTest {
         prefs.resetAppearance()
         assertTrue(prefs.sourceColors())
         assertTrue(prefs.translucentCards())
-        assertEquals(240, prefs.transitionDurationMs())
+        assertEquals(300, prefs.transitionDurationMs())
         assertTrue(prefs.detailedNotification())
         org.junit.Assert.assertFalse(prefs.keepAliveEnabled())
         assertTrue(prefs.overlayEnabled())
@@ -114,7 +114,7 @@ class OverlayAppearanceTest {
             val card=ClipboardCard(context,ClipEntry(1,"a"),false,android.graphics.Color.BLACK,android.graphics.Color.WHITE)
             return android.graphics.Color.alpha((card.background as android.graphics.drawable.GradientDrawable).color!!.defaultColor)
         }
-        assertEquals(140,alpha())
+        assertTrue(alpha()>=239)
         prefs.saveBackgroundMode("solid");assertEquals(255,alpha())
     }
 

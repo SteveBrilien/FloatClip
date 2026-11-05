@@ -1,0 +1,67 @@
+# FloatClip 0.7.9 build42 — 2026-11-06
+
+Source: floatclip-cloud, isolated analysis/cloud-workspace-build25 repository. The older root workspace and unrelated updates/share-preview.json changes are preserved.
+
+## Images
+
+Originals were already separate encrypted files in files/clipboard-images, with references/dimensions in the metadata vault. The old lightbox requested an 8192-dimension / 8-million-pixel bitmap through the 8 MiB card cache, causing repeated decoding and eviction.
+
+Now: 480 thumbnail first; one decoder for the current original; visible-region decoding capped at 3 million pixels; coalesced viewport requests; stale delivery rejected; current source released on close/page. Thumbnail upgrades preserve original-image zoom/scroll coordinates. Card cache stays at 8 MiB. Long cards decode their top region only.
+
+Copy still uses Android ClipData.newUri plus URI read grants. PNG-suffixed URIs and a seekable proxy descriptor improve receiving-app compatibility; old URI grants and the pipe fallback remain supported. SIZE queries use metadata. A target editor must still support image content; an ordinary overlay cannot provide every IME-specific insertion path.
+
+## User-confirmed settings
+
+| Item | Final behavior |
+| --- | --- |
+| Theme | System / Light / Dark, fixed blue accent |
+| Device colors / source tint | One device-color switch |
+| Image columns | Automatic by available width; text full-width |
+| Cross-device image grouping | Both choices retained |
+| Bubble size | Small / Medium / Large |
+| Bubble opacity | Independent slider retained |
+| Sensitivity | Fixed density-aware response |
+| Edge hiding | Default partial hiding; no ratio slider |
+| Panel placement | Follows floating ball |
+| Panel dimensions | Drag borders/corners, persist size; title drag moves |
+| Text preview lines | Retained |
+| Material | Solid / Frost / Transparent plus preview |
+| Transparency | One slider; readable foreground; cards >=94% opacity |
+| Borders | Theme-managed |
+| Curve / Bézier / range editors | Removed and legacy values migrated |
+| Press scales | Weak / Standard / Strong |
+| Motion speed | Fast / Standard / Slow; faster close, at most 200ms; toggles follow |
+| Reset | Retained; service consent/history untouched |
+| Share master | Retained |
+| Reconnect / survive task removal | Follow sharing; no duplicate switches |
+| Text send/receive | One bidirectional sync toggle |
+| Image sync / apply incoming clipboard | Independent toggles retained |
+| ADB capture | Advanced sharing |
+| Detailed notification | Simple default; mandatory foreground notification retained |
+| Overlay recovery | Follows overlay master |
+| Permissions | Central system grant/settings page |
+| Startup update check | Retained |
+| Update channel | Inside About & Updates |
+| Backup | Manual encrypted export/import, preview and safe merge |
+| About | Dedicated page; version/build, permission purposes, offline Kotlin license |
+| Categories / overlay master / help | Retained |
+
+Android 12+ uses blur-behind only when the system reports support. Android 11 explicitly shows a high-opacity fallback, not a claim of real cross-window blur.
+
+Migration preserves previous backup files and stops the old automatic export loop. Portable exports include images and protection flags. Import verifies the envelope, previews counts, then merges in a worker. Existing keys win; incoming IDs/image references are local. Capacity/attachment/corrupt-current-vault failures preserve current history. Pairing secrets are not exported.
+
+Animation uses vsync-driven ViewPropertyAnimator, with generation guards, faster close and invisible final surfaces. Ball touchability recovers immediately, independently of animation completion, preserving prior quick-open/close recovery.
+
+## Windows
+
+Restored pre-build41 Light/Tokyo Night palette and appearance controls; removed system accent, white boundaries and added card color/opacity overrides. Kept independent loading/storage/window work and native whole-window alpha compatibility. Close is neutral/transparent at rest, danger only on hover/press. Pin uses native system glyphs without a permanent colored border. Build metadata is 42.
+
+## Verification
+
+Windows: 93 data checks, 47 update checks, desktop and desktop-checks cross-build, self-contained packaging. Desktop build had 0 warnings/errors. Native WPF execution, physical DPI, actual hover/DWM remain unverified after Remote went offline.
+
+Final Android evidence belongs to the final build42 job and analysis/build42/android-verification.json. The earlier 114-test pass predates the final resize/migration/about changes and must not be presented as final verification.
+
+Both Remotes and ADB were offline in the final phase. No installation, actual 60/120Hz smoothness, OEM task-clear behavior, proxy URI behavior or paste into the user's target editor is claimed. Foreground service and task-removed recovery remain enabled by the corresponding master switches. Force-stop/OEM suppression cannot be guaranteed away.
+
+Signed public update feeds remain unchanged.

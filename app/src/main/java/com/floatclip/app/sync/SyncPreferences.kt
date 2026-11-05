@@ -6,6 +6,16 @@ import java.util.UUID
 /** Desired policy is committed before the asynchronous service sees it. Trust lives separately. */
 class SyncPreferences(context: Context) {
     private val prefs=context.getSharedPreferences("floatclip_sync",Context.MODE_PRIVATE)
+    init {
+        if(!prefs.getBoolean("simple_sync_v1",false)) {
+            val text=prefs.getBoolean("send",true)||prefs.getBoolean("receive",true)
+            check(prefs.edit().putBoolean("simple_sync_v1",true)
+                .putBoolean("reconnect",true).putBoolean("keep_alive",true)
+                .putBoolean("send",text).putBoolean("receive",text)
+                .putString("send_generation",UUID.randomUUID().toString())
+                .putString("receive_generation",UUID.randomUUID().toString()).commit()) {"共享设置未保存"}
+        }
+    }
     data class Policy(val enabled: Boolean,val reconnect: Boolean,val sending: Boolean,val receiving: Boolean,val applying: Boolean,
         val sendGeneration: String,val receiveGeneration: String,val applyGeneration: String,
         val appliedSend: String,val appliedReceive: String,val appliedApply: String)

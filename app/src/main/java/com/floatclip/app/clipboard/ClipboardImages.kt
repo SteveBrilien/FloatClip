@@ -66,17 +66,17 @@ object ClipboardImages {
         return ImportResult(store.addImage(prepared.png),prepared.resized)
     }
     fun thumbnail(store:ClipStore,entry:ClipEntry,maxDimension:Int=480):Bitmap?=runCatching {
-        val key=entry.imageRef+":"+entry.imageSha256+":"+maxDimension
+        val key=thumbnailKey(store,entry,maxDimension,false)
         thumbnails.get(key)?.let { return@runCatching it }
         val png=store.readImage(entry)
-        val scale=maxOf(entry.imageWidth,entry.imageHeight)/maxDimension
+        val scale=(maxOf(entry.imageWidth,entry.imageHeight)+maxDimension-1)/maxDimension
         var sample=1
         while(sample*2<=scale || entry.imageWidth.toLong()/sample*(entry.imageHeight/sample)>8_000_000)sample*=2
-        BitmapFactory.decodeByteArray(png,0,png.size,BitmapFactory.Options().apply { inSampleSize=sample })?.also { thumbnails.put(key,it) }
+        BitmapFactory.decodeByteArray(png,0,png.size,BitmapFactory.Options().apply { inSampleSize=sample })?.also { if(it.allocationByteCount<=2*1024*1024)thumbnails.put(key,it) }
     }.getOrNull()
 
-    private fun thumbnailKey(entry:ClipEntry,maxDimension:Int,card:Boolean)=
-        entry.imageRef+":"+entry.imageSha256+":"+maxDimension+if(card && entry.imageHeight>entry.imageWidth*2.2f)":card" else ""
+    private fun thumbnailKey(store:ClipStore,entry:ClipEntry,maxDimension:Int,card:Boolean)=
+        store.imageCacheScope+":"+entry.imageRef+":"+entry.imageSha256+":"+maxDimension+if(card && entry.imageHeight>entry.imageWidth*2.2f)":card" else ""
 
     /** Long cards decode only their visible top region; the full preview remains independent. */
     internal fun cardRegion(width:Int,height:Int):android.graphics.Rect =
@@ -86,7 +86,7 @@ object ClipboardImages {
         if(decodes.queue.size<4)thumbnailAsync(store,entry,480,card=true,prefetch=true) { }
     }
     fun thumbnailAsync(store:ClipStore,entry:ClipEntry,maxDimension:Int=480,card:Boolean=false,prefetch:Boolean=false,done:(Bitmap?)->Unit):AutoCloseable {
-        val key=thumbnailKey(entry,maxDimension,card)
+        val key=thumbnailKey(store,entry,maxDimension,card)
         thumbnails.get(key)?.let { done(it);return AutoCloseable {} }
         val request=Request(done)
         val cancellation=AutoCloseable {
@@ -113,7 +113,7 @@ object ClipboardImages {
                         val decoder=android.graphics.BitmapRegionDecoder.newInstance(png,0,png.size,false)
                         try {
                             var sample=1
-                            while(entry.imageWidth/(sample*2)>=maxDimension)sample*=2
+                            while((entry.imageWidth+sample-1)/sample>maxDimension)sample*=2
                             decoder.decodeRegion(cardRegion(entry.imageWidth,entry.imageHeight),BitmapFactory.Options().apply{inSampleSize=sample})
                         } finally {decoder.recycle()}
                     } else thumbnail(store,entry,maxDimension)
@@ -125,7 +125,7 @@ object ClipboardImages {
                     decoded
                 }
             }.getOrNull()
-            if(bitmap!=null)thumbnails.put(key,bitmap)
+            if(bitmap!=null && bitmap.allocationByteCount<=2*1024*1024)thumbnails.put(key,bitmap)
             main.post { synchronized(pending){pending.remove(key)}.orEmpty().filter { it.active }.forEach{it.done(bitmap)} }
             Unit
         }

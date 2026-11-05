@@ -65,3 +65,19 @@ Final Android evidence belongs to the final build42 job and analysis/build42/and
 Both Remotes and ADB were offline in the final phase. No installation, actual 60/120Hz smoothness, OEM task-clear behavior, proxy URI behavior or paste into the user's target editor is claimed. Foreground service and task-removed recovery remain enabled by the corresponding master switches. Force-stop/OEM suppression cannot be guaranteed away.
 
 Signed public update feeds remain unchanged.
+
+## Final delivery evidence
+
+- Source checkpoint packaged for Android: ac302a0b163e7d17c6b861f5aba49cb7fe4cb1d2.
+- Android verification/package job: task-floatclip_build42_android_verify-6ceb9c36b8c749bbb57e — succeeded.
+- Android tests: 118 passed, 0 failures/errors/skipped.
+- Android lint: 0 errors, 28 warnings; DrawAllocation warnings: 0.
+- Android package ID: com.floatclip.probe; version 0.7.9 / build42.
+- Signing certificate SHA-256: 0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c, matched against build41.
+- APK: FloatClip-Android-0.7.9-build42.apk, 4169885 bytes; SHA-256 7d7d32a635fc51bbc546dfdc31b1cb6949ac730f5378fe2190c08ec670d43e32.
+- Windows package job: task-floatclip_build42_windows_package-72b1037f9b0a4eeb8baf — succeeded.
+- Windows: 93 data checks, 47 updater checks; WPF/desktop-checks cross-build and self-contained package succeeded.
+- ZIP: FloatClip-Windows-0.7.9-build42-candidate.zip, 79057838 bytes; SHA-256 ccfbd38da68a9602400fe869f88c7ccbc8b2430dbf5c9d9406d4e90c4b6e42c2. Includes 9 license files.
+- Both packages published with non-expiring Artifact publications; live download bytes verified against ZIP/APK magic.
+- Devices were offline; no installation or native visual, 60/120Hz, OEM background-duration or app-specific paste acceptance is claimed.
+- Public update feeds were not replaced. Existing external backups/history were not removed.

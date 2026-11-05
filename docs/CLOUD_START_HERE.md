@@ -2,7 +2,7 @@
 
 ## 当前续接：2026-11-06 build42
 
-图片按可见区域解码、33项设置确认后的精简、边缘拖动改尺寸、快速收回与换机迁移、独立关于/权限/许可页，见 [build42记录](IMAGE_SETTINGS_BUILD42_2026-11-06.md)。Windows恢复build40视觉并保留加载优化。最终Android验证任务为floatclip_build42_android_verify，制品与测试报告在analysis/build42。两端Remote及ADB离线，不声称已安装或完成60/120Hz视觉/粘贴/后台真机验收；正式签名更新源保持不变。
+图片按可见区域解码、33项设置确认后的精简、边缘拖动改尺寸、快速收回与换机迁移、独立关于/权限/许可页，见 [build42记录](IMAGE_SETTINGS_BUILD42_2026-11-06.md)。Windows恢复build40视觉并保留加载优化。最终Android验证任务task-floatclip_build42_android_verify-6ceb9c36b8c749bbb57e成功：118项测试全绿，lint0错误/28警告，签名与build41一致；制品与测试报告在analysis/build42。两端Remote及ADB离线，不声称已安装或完成60/120Hz视觉/粘贴/后台真机验收；正式签名更新源保持不变。
 
 ## 当前续接：2026-11-03 build40
 

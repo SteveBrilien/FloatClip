@@ -73,6 +73,7 @@ open class MainActivity : Activity() {
     private lateinit var colors: AppColors
     private var searchQuery: String = ""
     private var currentPage: Int = PAGE_CLIPBOARD
+    private var renderedRoute: String? = null
     private var updateCheck:com.floatclip.app.ui.ClientUpdateCheck?=null
     private var updateDialog:FloatDialog.Handle?=null
     private var updateStatusText:TextView?=null
@@ -268,6 +269,8 @@ open class MainActivity : Activity() {
     }
 
     private fun render() {
+        val nextRoute=renderRouteKey()
+        val previousRoute=renderedRoute
         historyList=null
         undoBar=null
         colors = resolveAppColors()
@@ -303,6 +306,35 @@ open class MainActivity : Activity() {
             else -> renderClipboardPage()
         }
         root.requestFocus()
+        renderedRoute=nextRoute
+        if(previousRoute!=null && previousRoute!=nextRoute) animateRouteIn(root,previousRoute,nextRoute)
+    }
+
+    private fun renderRouteKey():String=when {
+        currentPage==PAGE_CLIPBOARD && categoryManagement -> "clipboard/category"
+        currentPage==PAGE_SETTINGS && settingsSection.isNotEmpty() -> "settings/"+settingsSection
+        currentPage==PAGE_SETTINGS -> "settings"
+        else -> "clipboard"
+    }
+
+    private fun routeDepth(route:String):Int=when {
+        route=="clipboard" -> 0
+        route=="settings" || route=="clipboard/category" -> 1
+        else -> 2
+    }
+
+    private fun animateRouteIn(root:View,from:String,to:String) {
+        if(!android.animation.ValueAnimator.areAnimatorsEnabled())return
+        val duration=(overlayPreferences.transitionDurationMs()*0.72f).toLong().coerceIn(0L,420L)
+        if(duration<=0L)return
+        val direction=if(routeDepth(to)>=routeDepth(from))1 else -1
+        root.alpha=0f
+        root.translationX=dp(14*direction).toFloat()
+        root.animate().cancel()
+        root.animate().alpha(1f).translationX(0f)
+            .setDuration(duration)
+            .setInterpolator(overlayPreferences.motionInterpolator())
+            .start()
     }
 
     private fun headerIcon(icon: Int, label: String, action: () -> Unit): View =
@@ -968,22 +1000,27 @@ open class MainActivity : Activity() {
 
         sectionTitle("动画与交互")
         addCard(card().apply {
-            addView(settingRow("动画曲线","","调整") {
-                val names=listOf("舒缓","利落","线性","自定义")
-                FloatDialog.choices(this@MainActivity,"动画曲线",names,3) { index ->
-                    if(index<3) {
-                        val values=listOf(listOf(20,80,20,100),listOf(16,100,30,100),listOf(0,0,100,100))[index]
-                        values.forEachIndexed { i,v -> overlayPreferences.saveCurveControl(i,v) }
-                        notifyOverlayAppearanceChanged();render()
-                    } else {
-                        val controls=LinearLayout(this@MainActivity).apply { orientation=LinearLayout.VERTICAL }
-                        listOf("X1","Y1","X2","Y2").forEachIndexed { i,label ->
-                            controls.addView(sliderSetting(label,0,100,overlayPreferences.curveControl(i),"%") { overlayPreferences.saveCurveControl(i,it) })
-                        }
-                        FloatDialog.show(this@MainActivity,"贝塞尔曲线",custom=controls,negative="完成",positive=null)
-                    }
-                }
+            val motionPreset=overlayPreferences.motionPreset()
+            val motionIndex=when(motionPreset){"soft"->0;"snappy"->1;"linear"->2;else->3}
+            addView(segmentedSetting(
+                "动画曲线",
+                listOf(0 to "舒缓",1 to "利落",2 to "线性",3 to "自定义"),
+                motionIndex,
+            ) { index ->
+                overlayPreferences.saveMotionPreset(listOf("soft","snappy","linear","custom")[index])
+                notifyOverlayAppearanceChanged()
+                render()
             })
+            if(motionIndex==3) {
+                addView(divider())
+                listOf("X1","Y1","X2","Y2").forEachIndexed { i,label ->
+                    addView(sliderSetting(label,0,100,overlayPreferences.curveControl(i),"%") {
+                        overlayPreferences.saveCurveControl(i,it)
+                        notifyOverlayAppearanceChanged()
+                    })
+                    if(i<3)addView(divider())
+                }
+            }
             addView(divider())
             addView(settingRow("滑条范围","","调整") {
                 val labels=listOf("卡片缩放","悬浮球缩放","拖动缩放","打开/收回时长","开关时长")

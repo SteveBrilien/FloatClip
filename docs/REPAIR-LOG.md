@@ -9,3 +9,16 @@ Files:
 - `dist/release.env`
 - `dist/README.md`
 - `CHANGELOG.md`
+
+## 2026-11-05T13:53:42.540406Z — FIX: Repair Android image lightbox, action icons, and navigation motion
+
+Floating image preview now stays in an overlay lightbox with swipe paging; action icons are distinct; motion curves use inline presets/custom controls; internal routes and standalone Activities have natural transitions. Final verify: 108 unit tests, lint, assemble all passed. Vivo rescue install was not completed because the remote ADB transfer hit the 300s transport timeout; existing phone data/app remained unchanged.
+
+Files:
+- `app/src/main/java/com/floatclip/app/MainActivity.kt`
+- `app/src/main/java/com/floatclip/app/clipboard/ClipImageViewerView.kt`
+- `app/src/main/java/com/floatclip/app/overlay/ClipboardOverlayService.kt`
+- `app/src/main/java/com/floatclip/app/prefs/OverlayPreferences.kt`
+- `app/src/main/java/com/floatclip/app/ui/ZoomImageView.kt`
+- `app/src/main/res/values/themes.xml`
+- `docs/UI_MOTION_FIX_2026-11-05.md`

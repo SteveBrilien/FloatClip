@@ -6,5 +6,12 @@
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:navigationBarColor">#FFFFFFFF</item>
         <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowAnimationStyle">@style/Animation.FloatClip</item>
+    </style>
+    <style name="Animation.FloatClip" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/floatclip_activity_open_enter</item>
+        <item name="android:activityOpenExitAnimation">@anim/floatclip_activity_open_exit</item>
+        <item name="android:activityCloseEnterAnimation">@anim/floatclip_activity_close_enter</item>
+        <item name="android:activityCloseExitAnimation">@anim/floatclip_activity_close_exit</item>
     </style>
 </resources>

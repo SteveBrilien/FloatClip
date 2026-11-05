@@ -10,6 +10,7 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import android.widget.ImageView
 import com.floatclip.app.clipboard.*
 import com.floatclip.app.model.ClipEntry
 import com.floatclip.app.security.VaultCipher
@@ -106,6 +107,27 @@ class PhotoImportViewerTest {
             assertEquals(1,views(content).filterIsInstance<CopyFeedbackButton>().size)
         } finally {owner.pause().stop().destroy()}
     }
+    @Test fun sharedImageLightboxPagesWithinImageSequenceAndKeepsTopRightClose() {
+        val store=store()
+        val first=store.addImage(png())!!
+        val alternate=Bitmap.createBitmap(12,8,Bitmap.Config.ARGB_8888).let { bitmap ->
+            bitmap.setPixel(0,0,android.graphics.Color.WHITE)
+            java.io.ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG,100,it);bitmap.recycle() }.toByteArray()
+        }
+        val second=store.addImage(alternate)!!
+        val images=store.entries().filter { it.kind=="image" }
+        val viewer=ClipImageViewerView(context,store,images,second.id) {}
+        try {
+            assertEquals(second.id,viewer.currentEntryId())
+            assertTrue(viewer.page(1))
+            assertEquals(first.id,viewer.currentEntryId())
+            assertFalse(viewer.page(1))
+            assertTrue(viewer.page(-1))
+            assertEquals(second.id,viewer.currentEntryId())
+            assertEquals(1,views(viewer).filterIsInstance<ImageView>().count { it.contentDescription=="关闭图片查看" })
+        } finally { viewer.close() }
+    }
+
     @Test fun copyFeedbackStaysBusyUntilCompletionAndFailureNeverSaysCopied() {
         var complete:((Result<Unit>)->Unit)?=null;var calls=0
         val button=CopyFeedbackButton(context,"复制图片","已复制图片"){calls++;complete=it}

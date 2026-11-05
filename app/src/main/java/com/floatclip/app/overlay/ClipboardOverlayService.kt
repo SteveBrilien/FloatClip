@@ -41,6 +41,7 @@ import com.floatclip.app.clipboard.ClipStore
 import com.floatclip.app.clipboard.ClipboardSources
 import com.floatclip.app.clipboard.ClipboardRepository
 import com.floatclip.app.clipboard.ClipboardImages
+import com.floatclip.app.clipboard.ClipImageViewerView
 import com.floatclip.app.integration.AccessibilityPasteBridge
 import com.floatclip.app.integration.IntegrationRegistry
 import com.floatclip.app.model.ClipEntry
@@ -83,6 +84,7 @@ class ClipboardOverlayService : Service() {
     private var panelScrimParams: WindowManager.LayoutParams? = null
     private var panelPinButton: ImageView? = null
     private var entryActionLayer: View? = null
+    private var imageViewerView: ClipImageViewerView? = null
     private var historyList: ClipboardHistoryList? = null
     private var historySnapshot=emptyList<ClipEntry>()
     private var historyLoaded=false
@@ -262,6 +264,8 @@ class ClipboardOverlayService : Service() {
         clearMotion(bubbleView)
         clearMotion(panelView)
         clearMotion(panelSurfaceView)
+        imageViewerView?.close()
+        imageViewerView = null
         if(::overlayWindows.isInitialized)overlayWindows.close()
         bubbleView = null
         panelOpen = false
@@ -1052,12 +1056,18 @@ class ClipboardOverlayService : Service() {
                 setBackgroundColor(withAlpha(palette.secondaryText, 35))
             }, LinearLayout.LayoutParams(-1, dp(1)).apply { setMargins(dp(10), dp(3), dp(10), dp(3)) })
             val icon = when {
-                label == "复制" || label == "粘贴" -> R.drawable.ic_copy_paste
+                label == "全屏查看图片" || label == "查看图片" -> R.drawable.ic_image
+                label == "查看全文" -> R.drawable.ic_document
+                label == "复制" || label == "复制图片" -> R.drawable.ic_copy_paste
+                label == "粘贴" -> R.drawable.ic_paste
                 label.contains("置顶") -> R.drawable.ic_pin
                 label.contains("保护") -> R.drawable.ic_lock
+                label == "更改分类" -> R.drawable.ic_category
                 label == "删除" || label == "确认删除" -> R.drawable.ic_delete
-                label.contains("返回") || label == "取消" -> R.drawable.ic_chevron_left
-                choosingCategory && label in categoryStore.categories() -> CategoryIcons.resource(categoryStore.iconKey(label))
+                label.contains("返回") -> R.drawable.ic_chevron_left
+                label == "取消" -> R.drawable.ic_close
+                choosingCategory && label.removePrefix("✓  ") in categoryStore.categories() ->
+                    CategoryIcons.resource(categoryStore.iconKey(label.removePrefix("✓  ")))
                 else -> R.drawable.ic_folder
             }
             sheet.addView(LinearLayout(this).apply {
@@ -1105,7 +1115,9 @@ class ClipboardOverlayService : Service() {
                 }
             }
         } else {
-            row(if(entry.kind=="image")"全屏查看图片" else "查看全文") { openEntryViewer(entry) }
+            row(if(entry.kind=="image")"全屏查看图片" else "查看全文") {
+                if(entry.kind=="image") showImagePreview(entry) else openEntryViewer(entry)
+            }
             row(if(entry.kind=="image") "复制图片" else "复制") {
                 if(entry.kind=="image")ClipboardImages.copyWithFeedback(this,store,entry)
                 else runCatching { clipboard.writeText(entry.text) }
@@ -1160,7 +1172,74 @@ class ClipboardOverlayService : Service() {
         entryActionLayer = layer
     }
 
-    private fun showImagePreview(entry:ClipEntry)=openEntryViewer(entry)
+    private fun showImagePreview(entry:ClipEntry) {
+        if(entry.kind!="image") { openEntryViewer(entry);return }
+        dismissEntryActionLayer(animated=false)
+        closeImageViewer(animated=false)
+        val allItems=historySnapshot.ifEmpty { store.entries() }
+        val sourceItems=when {
+            activeSource.isEmpty() -> allItems
+            activeSource==ClipboardSources.IMAGE_SCOPE -> allItems.filter {
+                it.kind=="image" && (overlayPreferences.mergeRemoteImages() || it.sourceDeviceId=="local")
+            }
+            else -> allItems.filter { it.sourceDeviceId==activeSource }
+        }
+        val scoped=(if(activeCategory==ALL_CATEGORY)sourceItems else sourceItems.filter { it.category==activeCategory })
+            .filter { it.kind=="image" }
+        val candidates=(if(scoped.any { it.id==entry.id })scoped else allItems.filter { it.kind=="image" })
+            .ifEmpty { listOf(entry) }
+        lateinit var viewer:ClipImageViewerView
+        viewer=ClipImageViewerView(this,store,candidates,entry.id) { closeImageViewer() }
+        val params=WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            android.graphics.PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity=Gravity.START or Gravity.TOP
+            windowAnimations=0
+            alpha=1f
+        }
+        viewer.alpha=0f
+        if(!overlayWindows.add(viewer,params)) {
+            viewer.close()
+            Toast.makeText(this,"无法打开图片查看",Toast.LENGTH_LONG).show()
+            return
+        }
+        imageViewerView=viewer
+        val duration=if(ValueAnimator.areAnimatorsEnabled()) {
+            (overlayPreferences.transitionDurationMs()*0.62f).toLong().coerceIn(90L,360L)
+        } else 0L
+        if(duration>0) {
+            viewer.scaleX=.992f;viewer.scaleY=.992f
+            viewer.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                .setDuration(duration).setInterpolator(overlayPreferences.motionInterpolator()).start()
+        } else viewer.alpha=1f
+    }
+
+    private fun closeImageViewer(animated:Boolean=true) {
+        val viewer=imageViewerView ?: return
+        imageViewerView=null
+        viewer.animate().cancel()
+        val duration=if(animated && ValueAnimator.areAnimatorsEnabled()) {
+            (overlayPreferences.transitionDurationMs()*0.42f).toLong().coerceIn(70L,240L)
+        } else 0L
+        if(duration<=0L) {
+            viewer.close()
+            overlayWindows.remove(viewer)
+            return
+        }
+        viewer.animate().alpha(0f).scaleX(.992f).scaleY(.992f)
+            .setDuration(duration).setInterpolator(overlayPreferences.motionInterpolator())
+            .withEndAction {
+                viewer.close()
+                if(::overlayWindows.isInitialized)overlayWindows.remove(viewer)
+            }.start()
+    }
+
     private fun openEntryViewer(entry:ClipEntry) {
         val token=java.util.UUID.randomUUID().toString()
         pendingViewerToken=token

@@ -15,6 +15,7 @@ import kotlin.math.min
 
 /** Shared by clipboard, overlay and file previews. Zoom affects pixels, never surrounding controls. */
 class ZoomImageView(context: Context) : View(context) {
+    var onHorizontalPage: ((Int) -> Boolean)? = null
     private var bitmap: Bitmap? = null
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val matrix = Matrix()
@@ -26,6 +27,8 @@ class ZoomImageView(context: Context) : View(context) {
     private var lastX = 0f
     private var lastY = 0f
     private var pointer = -1
+    private var downX = 0f
+    private var downY = 0f
     private val scale = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
             zoomAt(zoom * detector.scaleFactor, detector.focusX, detector.focusY)
@@ -75,7 +78,13 @@ class ZoomImageView(context: Context) : View(context) {
         parent?.requestDisallowInterceptTouchEvent(true)
         scale.onTouchEvent(event); gestures.onTouchEvent(event)
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> { pointer = event.getPointerId(0); lastX = event.x; lastY = event.y }
+            MotionEvent.ACTION_DOWN -> {
+                pointer = event.getPointerId(0)
+                lastX = event.x
+                lastY = event.y
+                downX = event.x
+                downY = event.y
+            }
             MotionEvent.ACTION_MOVE -> {
                 val index = event.findPointerIndex(pointer)
                 if (index >= 0) {
@@ -88,7 +97,20 @@ class ZoomImageView(context: Context) : View(context) {
                 val next = if (event.actionIndex == 0) 1 else 0
                 pointer = event.getPointerId(next); lastX = event.getX(next); lastY = event.getY(next)
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { pointer = -1; parent?.requestDisallowInterceptTouchEvent(false) }
+            MotionEvent.ACTION_UP -> {
+                val image = bitmap
+                val dx = event.x - downX
+                val dy = event.y - downY
+                val threshold = max(56f * resources.displayMetrics.density, width * 0.12f)
+                val horizontalFits = image != null && image.width * zoom <= width + 4f * resources.displayMetrics.density
+                if (!scale.isInProgress && horizontalFits && kotlin.math.abs(dx) >= threshold &&
+                    kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.35f) {
+                    onHorizontalPage?.invoke(if (dx < 0f) 1 else -1)
+                }
+                pointer = -1
+                parent?.requestDisallowInterceptTouchEvent(false)
+            }
+            MotionEvent.ACTION_CANCEL -> { pointer = -1; parent?.requestDisallowInterceptTouchEvent(false) }
         }
         return true
     }

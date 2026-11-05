@@ -36,7 +36,33 @@ class OverlayPreferences(context: Context) {
     fun windowAlphaPercent()=prefs.getInt("window_alpha",100).coerceIn(20,100)
     fun saveWindowAlphaPercent(value:Int) { prefs.edit().putInt("window_alpha",value.coerceIn(20,100)).apply() }
     fun curveControl(index:Int):Int { require(index in 0..3);return prefs.getInt("motion_curve_"+index,listOf(20,80,20,100)[index]).coerceIn(0,100) }
-    fun saveCurveControl(index:Int,value:Int) { require(index in 0..3);prefs.edit().putInt("motion_curve_"+index,value.coerceIn(0,100)).apply() }
+    fun motionPreset():String {
+        prefs.getString(KEY_MOTION_PRESET,null)?.takeIf { it in MOTION_PRESETS }?.let { return it }
+        val current=(0..3).map(::curveControl)
+        return when(current) {
+            listOf(20,80,20,100) -> "soft"
+            listOf(16,100,30,100) -> "snappy"
+            listOf(0,0,100,100) -> "linear"
+            else -> "custom"
+        }
+    }
+    fun saveMotionPreset(value:String) {
+        require(value in MOTION_PRESETS)
+        val editor=prefs.edit().putString(KEY_MOTION_PRESET,value)
+        val points=when(value) {
+            "soft" -> listOf(20,80,20,100)
+            "snappy" -> listOf(16,100,30,100)
+            "linear" -> listOf(0,0,100,100)
+            else -> null
+        }
+        points?.forEachIndexed { index,point -> editor.putInt("motion_curve_"+index,point) }
+        editor.apply()
+    }
+    fun saveCurveControl(index:Int,value:Int) {
+        require(index in 0..3)
+        prefs.edit().putString(KEY_MOTION_PRESET,"custom")
+            .putInt("motion_curve_"+index,value.coerceIn(0,100)).apply()
+    }
     fun motionInterpolator():android.view.animation.Interpolator=android.view.animation.PathInterpolator(
         curveControl(0)/100f,curveControl(1)/100f,curveControl(2)/100f,curveControl(3)/100f)
     fun panelAlphaPercent(): Int = prefs.getInt(KEY_PANEL_ALPHA_PERCENT, DEFAULT_PANEL_ALPHA_PERCENT).coerceIn(45, 100)
@@ -148,6 +174,7 @@ class OverlayPreferences(context: Context) {
             .remove("range_min_panel").remove("range_max_panel").remove("range_min_transition").remove("range_max_transition")
             .remove("range_min_switch").remove("range_max_switch")
             .remove("motion_curve_0").remove("motion_curve_1").remove("motion_curve_2").remove("motion_curve_3")
+            .remove(KEY_MOTION_PRESET)
             .remove(KEY_BUBBLE_SIZE_DP)
             .remove(KEY_BUBBLE_ALPHA_PERCENT)
             .remove(KEY_EDGE_HIDE_PERCENT)
@@ -222,5 +249,7 @@ class OverlayPreferences(context: Context) {
         private const val KEY_PANEL_X = "panel_x"
         private const val KEY_PANEL_Y = "panel_y"
         private const val KEY_THEME_MODE = "theme_mode"
+        private const val KEY_MOTION_PRESET = "motion_preset"
+        private val MOTION_PRESETS = setOf("soft","snappy","linear","custom")
     }
 }

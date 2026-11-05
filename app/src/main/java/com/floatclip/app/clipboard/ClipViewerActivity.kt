@@ -35,6 +35,15 @@ class ClipViewerActivity:Activity() {
         imageRequest?.close();copyRequest?.close()
         val entry=store.entries().firstOrNull { it.id==intent.getLongExtra(EXTRA_ID,-1) }
         if(entry==null){Toast.makeText(this,"这条记录已移除",Toast.LENGTH_SHORT).show();finish();return}
+        if(entry.kind=="image") {
+            val black=android.graphics.Color.rgb(10,11,14)
+            window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(black))
+            window.statusBarColor=black
+            window.navigationBarColor=black
+            window.decorView.systemUiVisibility=View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            setContentView(ClipImageViewerView(this,store,store.entries(),entry.id) { finish() })
+            return
+        }
         val p=FileUi.palette(this)
         window.statusBarColor=p.page;window.navigationBarColor=p.page
         val lightBars=if(android.graphics.Color.luminance(p.page)>.5f)View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR else 0

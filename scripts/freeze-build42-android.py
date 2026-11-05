@@ -11,7 +11,7 @@ assert tests>=118 and failures==errors==0,(tests,failures,errors)
 lint=Path('app/build/reports/lint-results-debug.txt').read_text()
 assert '0 errors' in lint,lint[-300:]
 source=Path('app/build/outputs/apk/debug/app-debug.apk')
-target=Path('analysis/deliveries/FloatClip-Android-0.7.9-build42-final.apk')
+target=Path('analysis/deliveries/FloatClip-Android-0.7.9-build42.apk')
 assert not target.exists(),'Keep immutable candidates'
 target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,target)
 report={'version':'0.7.9','build':42,'tests':tests,'failures':failures,'errors':errors,

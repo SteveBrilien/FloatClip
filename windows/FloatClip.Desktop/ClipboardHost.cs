@@ -9,6 +9,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using System.Windows.Media.Imaging;
+using Microsoft.Win32;
 using FloatClip.Share;
 
 namespace FloatClip.Desktop;
@@ -45,6 +46,9 @@ public sealed class ClipboardHost:IDisposable
     public bool Capture{get;set;}=true;
     public event Action? Changed;
     public bool Pinned=>preferences.Pinned;
+    public bool DesktopResident=>preferences.DesktopResident;
+    public string WindowMode=>Pinned?"pinned":DesktopResident?"desktop":"popup";
+    public DesktopStoragePreferences Storage{get;}
     public string HotkeyError{get;private set;}="";
     public string HotkeyLabel=>FormatHotkey(preferences.HotkeyModifiers,preferences.HotkeyKey);
     public string Status=>Sync?.Status??SyncError??"共享尚未准备好";
@@ -70,10 +74,12 @@ public sealed class ClipboardHost:IDisposable
         Directory.CreateDirectory(root);
         preferencesPath=Path.Combine(root,"desktop-shell.json");
         preferences=DesktopShellPreferences.Load(preferencesPath);
+        string libraryRoot=dataRoot==null?Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"FloatClip","Library"):Path.Combine(dataRoot,"Library");
+        Storage=DesktopStoragePreferences.Load(root,libraryRoot,!systemIntegration);
         if(systemIntegration&&updates!=null)throw new ArgumentException("正式宿主使用已配置的更新源");
         Updates=updates??new DesktopUpdates(Path.Combine(root,"Updates"));
         try{Capture=JsonNode.Parse(File.ReadAllText(Path.Combine(root,"clipboard-ui.json")))?["capture"]?.GetValue<bool>()??true;}catch{}
-        Vault=new ClipboardVault(dataRoot==null?null:Path.Combine(dataRoot,"Library"));
+        Vault=new ClipboardVault(libraryRoot,imageDirectoryOverride:Storage.ImageCachePath);
         try{Vault.PruneOrphanedImages();}catch{} // Never destroy the vault if a prior run left damaged metadata.
         try
         {
@@ -90,17 +96,34 @@ public sealed class ClipboardHost:IDisposable
         if(!registered)HotkeyError="快捷键已被占用，可在设置中更改";
         using var stream=Application.GetResourceStream(new Uri("pack://application:,,,/Assets/FloatClip.ico"))!.Stream;
         tray=new System.Windows.Forms.NotifyIcon{Text="FloatClip",Icon=new System.Drawing.Icon(stream,System.Windows.Forms.SystemInformation.SmallIconSize),Visible=true};
-        var menu=new System.Windows.Forms.ContextMenuStrip();
-        menu.Items.Add("打开悬浮剪贴板",null,(_,_)=>ShowPopup());
+        var menu=new System.Windows.Forms.ContextMenuStrip{ShowImageMargin=false,ShowCheckMargin=true};
+        var statusItem=new System.Windows.Forms.ToolStripMenuItem{Enabled=false};
+        var clipboardItem=menu.Items.Add("打开剪贴板",null,(_,_)=>ShowPopup());
+        var filesItem=menu.Items.Add("共享文件",null,(_,_)=>ShowFiles());
+        var devicesItem=menu.Items.Add("我的设备",null,(_,_)=>ShowDevices());
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+        var captureItem=new System.Windows.Forms.ToolStripMenuItem("收录文字和图片",null,(_,_)=>{Capture=!Capture;SaveCapture();NotifyChanged();}){CheckOnClick=false};
+        var residentItem=new System.Windows.Forms.ToolStripMenuItem("桌面驻留",null,(_,_)=>SetWindowMode(DesktopResident?"popup":"desktop")){CheckOnClick=false};
+        var topmostItem=new System.Windows.Forms.ToolStripMenuItem("始终置顶",null,(_,_)=>SetWindowMode(Pinned?"popup":"pinned")){CheckOnClick=false};
+        menu.Items.Add(captureItem);menu.Items.Add(residentItem);menu.Items.Add(topmostItem);
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         menu.Items.Add("设置",null,(_,_)=>ShowSettings());
-        menu.Items.Add("暂停 / 恢复收录",null,(_,_)=>{Capture=!Capture;SaveCapture();NotifyChanged();});
         menu.Items.Add("退出 FloatClip",null,(_,_)=>Application.Current.Shutdown());
+        menu.Items.Insert(0,statusItem);menu.Items.Insert(1,new System.Windows.Forms.ToolStripSeparator());
+        menu.Opening+=(_,_)=>{
+            bool dark=(Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize","AppsUseLightTheme",1) as int?)==0;
+            menu.Renderer=new System.Windows.Forms.ToolStripProfessionalRenderer(new TrayColorTable(dark));
+            menu.BackColor=dark?System.Drawing.Color.FromArgb(36,40,59):System.Drawing.Color.White;
+            menu.ForeColor=dark?System.Drawing.Color.FromArgb(228,233,255):System.Drawing.Color.FromArgb(32,37,46);
+            statusItem.Text=(Capture?"正在收录":"收录已暂停")+" · "+(Sync?.ConnectedCount??0)+" 台设备在线";
+            captureItem.Checked=Capture;residentItem.Checked=DesktopResident;topmostItem.Checked=Pinned;
+        };
         tray.ContextMenuStrip=menu;tray.DoubleClick+=(_,_)=>ShowPopup();
     }
     public void Start(bool background)
     {
         if(systemIntegration)ReadClipboard();Sync?.Start();
-        if(!background||Pinned)ShowPopup(activate:!background);
+        if(!background||Pinned||DesktopResident)ShowPopup(activate:!background);
         if(systemIntegration)_=Updates.CheckAsync();
     }
     IntPtr Hook(IntPtr window,int message,IntPtr w,IntPtr l,ref bool handled)
@@ -108,7 +131,7 @@ public sealed class ClipboardHost:IDisposable
         if(message==ClipboardMessage)ReadClipboard();
         else if(message==HotkeyMessage&&w.ToInt32()==hotkeyId)
         {
-            if(popup?.IsVisible==true&&popup.IsActive&&!Pinned)popup.Hide();else ShowPopup();
+            if(popup?.IsVisible==true&&popup.IsActive&&WindowMode=="popup")popup.HideWithMotion();else ShowPopup();
             handled=true;
         }
         return IntPtr.Zero;
@@ -199,7 +222,7 @@ public sealed class ClipboardHost:IDisposable
         if(disposed)return;
         popup??=new LocalClipboardWindow(this,true);
         popup.Topmost=Pinned;popup.ShowActivated=activate;
-        popup.Show();PlacePopup();
+        bool fresh=!popup.IsVisible;popup.Show();PlacePopup();if(fresh)popup.AnimateWindowOpen();
         if(activate){popup.Activate();popup.FocusSearch();}
     }
     internal void RecreatePopup(LocalClipboardWindow requested)
@@ -217,6 +240,7 @@ public sealed class ClipboardHost:IDisposable
     // Legacy entry points activate the same clipboard surface.
     public void ShowLibrary()=>ShowPopup();
     public void ShowDevices(){ShowPopup();popup?.OpenDevices();}
+    public void ShowFiles(){ShowPopup();popup?.OpenFiles();}
     public void ShowSettings()
     {
         ShowPopup();popup?.OpenSettings();
@@ -227,27 +251,45 @@ public sealed class ClipboardHost:IDisposable
         var handle=new WindowInteropHelper(popup).Handle;
         if(!GetWindowRect(handle,out var rect))return;
         var cursor=System.Windows.Forms.Cursor.Position;
-        var anchor=Pinned&&preferences.Left is int x&&preferences.Top is int y?new System.Drawing.Point(x,y):cursor;
+        bool persistent=Pinned||DesktopResident;
+        var anchor=persistent&&preferences.Left is int x&&preferences.Top is int y?new System.Drawing.Point(x,y):cursor;
         var area=System.Windows.Forms.Screen.FromPoint(anchor).WorkingArea;
         int width=rect.Right-rect.Left,height=rect.Bottom-rect.Top;
-        int left=Pinned&&preferences.Left!=null?preferences.Left.Value:cursor.X+12;
-        int top=Pinned&&preferences.Top!=null?preferences.Top.Value:cursor.Y+12;
+        int left=persistent&&preferences.Left!=null?preferences.Left.Value:cursor.X+12;
+        int top=persistent&&preferences.Top!=null?preferences.Top.Value:cursor.Y+12;
         left=Math.Clamp(left,area.Left,Math.Max(area.Left,area.Right-width));
         top=Math.Clamp(top,area.Top,Math.Max(area.Top,area.Bottom-height));
         SetWindowPos(handle,IntPtr.Zero,left,top,0,0,0x0015);
     }
     public void RememberPlacement()
     {
-        if(popup==null||!Pinned)return;
+        if(popup==null||(!Pinned&&!DesktopResident))return;
         if(GetWindowRect(new WindowInteropHelper(popup).Handle,out var r))
         {preferences.Left=r.Left;preferences.Top=r.Top;preferences.Save(preferencesPath);}
     }
-    public void SetPinned(bool pinned)
+    public void SetPinned(bool pinned)=>SetWindowMode(pinned?"pinned":"popup");
+    public void SetWindowMode(string mode)
     {
-        bool previous=preferences.Pinned;preferences.Pinned=pinned;
-        try{preferences.Save(preferencesPath);}catch{preferences.Pinned=previous;throw;}
-        if(popup!=null)popup.Topmost=pinned;
+        if(mode is not ("popup" or "desktop" or "pinned"))throw new IOException("窗口模式无效");
+        bool oldPinned=preferences.Pinned,oldResident=preferences.DesktopResident;
+        preferences.Pinned=mode=="pinned";preferences.DesktopResident=mode=="desktop";
+        try{preferences.Save(preferencesPath);}catch{preferences.Pinned=oldPinned;preferences.DesktopResident=oldResident;throw;}
+        if(popup!=null){popup.Topmost=preferences.Pinned;if(mode!="popup"&&!popup.IsVisible)ShowPopup();}
         RememberPlacement();NotifyChanged();
+    }
+    public void SetImageCachePath(string value)
+    {
+        string previous=Storage.ImageCachePath,target=DesktopStoragePreferences.NormalizeDirectory(value,previous);
+        if(string.Equals(previous,target,StringComparison.OrdinalIgnoreCase))return;
+        Vault.SetImageDirectory(target);Storage.ImageCachePath=target;
+        try{Storage.Save(root);}catch{Storage.ImageCachePath=previous;try{Vault.SetImageDirectory(previous);}catch{}throw;}
+        NotifyChanged();
+    }
+    public void SetDefaultSavePath(string value)
+    {
+        string previous=Storage.DefaultSavePath;Storage.DefaultSavePath=DesktopStoragePreferences.NormalizeDirectory(value,previous);
+        try{Storage.Save(root);}catch{Storage.DefaultSavePath=previous;throw;}
+        NotifyChanged();
     }
     public void SetHotkey(uint modifiers,uint key)
     {

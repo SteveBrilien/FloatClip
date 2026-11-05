@@ -28,7 +28,10 @@
   </Style>
   <Style x:Key="FloatClip.Button.CaptionClose" TargetType="{x:Type ui:Button}" BasedOn="{StaticResource FloatClip.Button.Caption}">
     <Setter Property="Foreground" Value="{DynamicResource FloatClip.Danger}"/>
-    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type ui:Button}"><Border Background="{TemplateBinding Background}" CornerRadius="{DynamicResource FloatClip.Radius.Control}" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border></ControlTemplate></Setter.Value></Setter>
+    <Setter Property="Background" Value="{DynamicResource FloatClip.DangerSurface}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource FloatClip.Danger}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type ui:Button}"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource FloatClip.Radius.Control}" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border></ControlTemplate></Setter.Value></Setter>
     <Style.Triggers>
       <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource FloatClip.Danger}"/><Setter Property="Foreground" Value="{DynamicResource FloatClip.OnAccent}"/></Trigger>
       <Trigger Property="IsPressed" Value="True"><Setter Property="Background" Value="{DynamicResource FloatClip.DangerPressed}"/><Setter Property="Foreground" Value="{DynamicResource FloatClip.OnAccent}"/></Trigger>

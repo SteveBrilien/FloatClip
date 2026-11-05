@@ -10,29 +10,72 @@ namespace FloatClip.Desktop;
 
 public sealed partial class LocalClipboardWindow
 {
-    readonly Dictionary<string,System.Windows.Media.Imaging.BitmapSource> thumbnails=new();
+    sealed class ThumbnailEntry(System.Windows.Media.Imaging.BitmapSource image,long bytes,LinkedListNode<string> node)
+    {
+        public readonly System.Windows.Media.Imaging.BitmapSource Image=image;
+        public readonly long Bytes=bytes;
+        public readonly LinkedListNode<string> Node=node;
+    }
+    readonly Dictionary<string,ThumbnailEntry> thumbnails=new();
+    readonly LinkedList<string> thumbnailLru=new();
     readonly System.Threading.SemaphoreSlim thumbnailWorkers=new(2);
     readonly object thumbnailLock=new();
+    long thumbnailBytes;
+    const long ThumbnailMemoryBudget=28L*1024*1024;
+
+    bool TryThumbnail(string key,out System.Windows.Media.Imaging.BitmapSource? bitmap)
+    {
+        lock(thumbnailLock)
+        {
+            if(!thumbnails.TryGetValue(key,out var entry)){bitmap=null;return false;}
+            thumbnailLru.Remove(entry.Node);thumbnailLru.AddLast(entry.Node);bitmap=entry.Image;return true;
+        }
+    }
+    System.Windows.Media.Imaging.BitmapSource StoreThumbnail(string key,System.Windows.Media.Imaging.BitmapSource image)
+    {
+        long bytes=Math.Max(4096L,(long)image.PixelWidth*image.PixelHeight*4);
+        lock(thumbnailLock)
+        {
+            if(thumbnails.TryGetValue(key,out var old)){thumbnailBytes-=old.Bytes;thumbnailLru.Remove(old.Node);thumbnails.Remove(key);}
+            var node=thumbnailLru.AddLast(key);thumbnails[key]=new ThumbnailEntry(image,bytes,node);thumbnailBytes+=bytes;
+            while((thumbnailBytes>ThumbnailMemoryBudget||thumbnails.Count>48)&&thumbnailLru.First is { } first)
+            {
+                string victim=first.Value;thumbnailLru.RemoveFirst();
+                if(thumbnails.Remove(victim,out var removed))thumbnailBytes-=removed.Bytes;
+            }
+            return image;
+        }
+    }
     async System.Threading.Tasks.Task<System.Windows.Media.Imaging.BitmapSource?> ThumbnailAsync(JsonObject clip,System.Threading.CancellationToken token)
     {
-        string key=clip["imageRef"]!.GetValue<string>()+":"+clip["imageSha256"]!.GetValue<string>();
-        lock(thumbnailLock)if(thumbnails.TryGetValue(key,out var cached))return cached;
-        try {
+        string reference=clip["imageRef"]!.GetValue<string>(),sha=clip["imageSha256"]!.GetValue<string>();
+        string key=reference+":"+sha;
+        if(TryThumbnail(key,out var cached))return cached;
+        try
+        {
             await thumbnailWorkers.WaitAsync(token).ConfigureAwait(false);
-            try {
+            try
+            {
                 return await System.Threading.Tasks.Task.Run(()=>{
-                    token.ThrowIfCancellationRequested();
-                    lock(thumbnailLock)if(thumbnails.TryGetValue(key,out var existing))return existing;
+                    token.ThrowIfCancellationRequested();if(TryThumbnail(key,out var existing))return existing;
+                    byte[]? disk=vault.ReadThumbnail(sha);
+                    if(disk!=null)try{return StoreThumbnail(key,DecodeImage(disk));}catch{}
                     long width=clip["imageWidth"]!.GetValue<long>(),height=clip["imageHeight"]!.GetValue<long>();
                     using var stream=new System.IO.MemoryStream(vault.ReadImage(clip));
                     var image=new System.Windows.Media.Imaging.BitmapImage();image.BeginInit();image.CacheOption=System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                    if(height>width)image.DecodePixelHeight=(int)Math.Min(400,height);else image.DecodePixelWidth=(int)Math.Min(400,width);
+                    if(height>width)image.DecodePixelHeight=(int)Math.Min(320,height);else image.DecodePixelWidth=(int)Math.Min(320,width);
                     image.StreamSource=stream;image.EndInit();image.Freeze();token.ThrowIfCancellationRequested();
-                    lock(thumbnailLock){if(thumbnails.Count>=24)thumbnails.Remove(thumbnails.Keys.First());thumbnails[key]=image;}
-                    return (System.Windows.Media.Imaging.BitmapSource)image;
+                    try
+                    {
+                        var encoder=new System.Windows.Media.Imaging.PngBitmapEncoder();encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(image));
+                        using var output=new System.IO.MemoryStream();encoder.Save(output);vault.WriteThumbnail(sha,output.ToArray());
+                    }catch{}
+                    return StoreThumbnail(key,image);
                 },token).ConfigureAwait(false);
-            } finally { thumbnailWorkers.Release(); }
-        } catch(System.OperationCanceledException){return null;} catch(System.IO.IOException){return null;} catch(System.Exception){return null;}
+            }
+            finally{thumbnailWorkers.Release();}
+        }
+        catch(System.OperationCanceledException){return null;}catch(System.IO.IOException){return null;}catch(System.Exception){return null;}
     }
     async void LoadThumbnail(Image target,JsonObject clip,System.Threading.CancellationToken token)
     {

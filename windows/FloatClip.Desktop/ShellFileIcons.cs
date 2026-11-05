@@ -23,7 +23,7 @@ public static class ShellFileIcons
     {
         string extension=Path.GetExtension(name);if(extension.Length>32)extension="";
         bool actual=Path.IsPathFullyQualified(name)&&File.Exists(name);
-        string key=actual?name+"|"+File.GetLastWriteTimeUtc(name).Ticks:extension;
+        string key=actual&&extension is ".exe" or ".lnk"?name+"|"+File.GetLastWriteTimeUtc(name).Ticks:extension.ToLowerInvariant();
         return cache.GetOrAdd(key,_=>{
             string requested=actual?name:"file"+extension;uint attributes=actual?0:0x10u;
             IntPtr icon=IntPtr.Zero,list=IntPtr.Zero;

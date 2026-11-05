@@ -21,10 +21,13 @@ using FloatClip.Desktop.Services;
 
 namespace FloatClip.Desktop;
 
-public sealed class FileShelfRow
+public sealed class FileShelfRow:INotifyPropertyChanged
 {
+    ImageSource? previewIcon;
+    public event PropertyChangedEventHandler? PropertyChanged;
     public string Name{get;init;}="";
-    public ImageSource ShellIcon=>ShellFileIcons.For(HasLocalFile&&Path.Length>0?Path:Name);
+    public ImageSource ShellIcon=>previewIcon??ShellFileIcons.For(HasLocalFile&&Path.Length>0?Path:Name);
+    public void SetPreviewIcon(ImageSource? value){if(ReferenceEquals(previewIcon,value))return;previewIcon=value;PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(nameof(ShellIcon)));}
     public string Extension{get;init;}="";
     public string Modified{get;init;}="—";
     public string Type{get;init;}="文件";
@@ -55,6 +58,9 @@ public sealed class FileShelfView:UserControl,IDisposable
     readonly NativeClipboardSync? sync;
     readonly string preferencesRoot;
     readonly FileShelfStore store;
+    readonly DesktopStoragePreferences storage;
+    readonly FilePreviewThumbnailService previewThumbnails;
+    CancellationTokenSource thumbnailLifetime=new();
     readonly ObservableCollection<FileShelfRow> localRows=new(),transferRows=new();
     readonly ListView localList=new(),transferList=new();
     readonly ComboBox peers=new();
@@ -69,9 +75,9 @@ public sealed class FileShelfView:UserControl,IDisposable
     bool closed;
     readonly DispatcherTimer statusTimer=new(){Interval=TimeSpan.FromSeconds(5)};
 
-    public FileShelfView(NativeClipboardSync? sync,string preferencesRoot)
+    public FileShelfView(NativeClipboardSync? sync,string preferencesRoot,DesktopStoragePreferences? storage=null)
     {
-        this.preferencesRoot=preferencesRoot;this.sync=sync;store=sync?.Files.Store??new FileShelfStore(System.IO.Path.Combine(preferencesRoot,"file-shelf.json"));
+        this.preferencesRoot=preferencesRoot;this.sync=sync;this.storage=storage??DesktopStoragePreferences.Load(preferencesRoot,System.IO.Path.Combine(preferencesRoot,"Library"),true);store=sync?.Files.Store??new FileShelfStore(System.IO.Path.Combine(preferencesRoot,"file-shelf.json"));previewThumbnails=new FilePreviewThumbnailService(preferencesRoot);
         Background=Brushes.Transparent;SetResourceReference(ForegroundProperty,"FloatClip.Text");
         SetResourceReference(FontFamilyProperty,"FloatClip.FontFamily");SetResourceReference(FontSizeProperty,"FloatClip.Font.Body");
         var root=new Grid();
@@ -110,6 +116,7 @@ public sealed class FileShelfView:UserControl,IDisposable
         selectedInfo.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Muted");selectedInfo.TextWrapping=TextWrapping.NoWrap;selectedInfo.TextTrimming=TextTrimming.CharacterEllipsis;selectedInfo.Height=28;selectedInfo.FontSize=12;selectedInfo.VerticalAlignment=VerticalAlignment.Center;selectedInfo.Margin=new Thickness(2,0,2,0);DockPanel.SetDock(selectedInfo,Dock.Bottom);localPanel.Children.Add(selectedInfo);
         ConfigureList(localList,localRows);System.Windows.Automation.AutomationProperties.SetAutomationId(localList,"FileShelfList");localList.SelectionChanged+=(_,_)=>{UpdateSelectedInfo();RefreshActions();};
         localList.MouseDoubleClick+=(_,_)=>OpenSelectedLocal();
+        localList.AddHandler(ScrollViewer.ScrollChangedEvent,new ScrollChangedEventHandler((_,_)=>QueueVisibleThumbnails()));
         localList.PreviewMouseRightButtonDown+=(_,e)=>{if(e.OriginalSource is DependencyObject target){var item=ItemsControl.ContainerFromElement(localList,target) as ListViewItem;if(item!=null){item.IsSelected=true;item.Focus();}}};
         var localMenu=new ContextMenu();localMenu.SetResourceReference(Control.BackgroundProperty,"FloatClip.Surface");localMenu.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");
         void MenuItem(string label,Action action){var item=new System.Windows.Controls.MenuItem{Header=label};item.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");item.Click+=(_,_)=>Run(action);localMenu.Items.Add(item);}
@@ -139,7 +146,7 @@ public sealed class FileShelfView:UserControl,IDisposable
         if(sync!=null){sync.Transfers.Changed+=TransferChanged;sync.Files.Changed+=CatalogChanged;sync.RequestFileConnection();}
     }
 
-    public void Dispose(){if(closed)return;closed=true;statusTimer.Stop();batch?.Cancel();if(sync!=null){sync.Transfers.Changed-=TransferChanged;sync.Files.Changed-=CatalogChanged;}}
+    public void Dispose(){if(closed)return;closed=true;statusTimer.Stop();batch?.Cancel();thumbnailLifetime.Cancel();thumbnailLifetime.Dispose();previewThumbnails.Dispose();if(sync!=null){sync.Transfers.Changed-=TransferChanged;sync.Files.Changed-=CatalogChanged;}}
     bool catalogQueued;
     void CatalogChanged(){if(closed||Dispatcher.HasShutdownStarted||catalogQueued)return;catalogQueued=true;Dispatcher.BeginInvoke(new Action(()=>{catalogQueued=false;if(!closed&&batch==null)RefreshLocal();}),DispatcherPriority.Background);}
     bool transferQueued;
@@ -238,6 +245,30 @@ public sealed class FileShelfView:UserControl,IDisposable
         if(selectPath!=null)localList.SelectedItem=localRows.FirstOrDefault(r=>string.Equals(r.Path,selectPath,StringComparison.OrdinalIgnoreCase));
         UpdateSelectedInfo();RefreshActions();
         if(sync?.Files.Warning is string warning)status.Text=warning;
+        Dispatcher.BeginInvoke(new Action(QueueVisibleThumbnails),DispatcherPriority.ContextIdle);
+    }
+    void QueueVisibleThumbnails()
+    {
+        if(closed||!IsVisible)return;
+        thumbnailLifetime.Cancel();thumbnailLifetime.Dispose();thumbnailLifetime=new();
+        var token=thumbnailLifetime.Token;var candidates=new List<FileShelfRow>();
+        foreach(var row in localRows)
+        {
+            if(!row.IsAvailable||row.Path.Length==0||!FilePreviewThumbnailService.Supports(row.Path))continue;
+            if(localList.ItemContainerGenerator.ContainerFromItem(row) is ListViewItem container&&container.IsVisible)candidates.Add(row);
+        }
+        if(candidates.Count>0)
+        {
+            int last=Math.Min(localRows.Count-1,localRows.IndexOf(candidates[^1])+4);
+            for(int i=localRows.IndexOf(candidates[0]);i<=last;i++)if(localRows[i].IsAvailable&&FilePreviewThumbnailService.Supports(localRows[i].Path)&&!candidates.Contains(localRows[i]))candidates.Add(localRows[i]);
+        }
+        foreach(var row in candidates.Take(24))_=LoadPreviewThumbnail(row,token);
+    }
+    async Task LoadPreviewThumbnail(FileShelfRow row,CancellationToken token)
+    {
+        var image=await previewThumbnails.GetAsync(row.Path,token).ConfigureAwait(false);
+        if(image==null||token.IsCancellationRequested||Dispatcher.HasShutdownStarted)return;
+        await Dispatcher.InvokeAsync(()=>{if(!token.IsCancellationRequested)row.SetPreviewIcon(image);},DispatcherPriority.Background);
     }
     static long UnixTicks(long value){try{return DateTimeOffset.FromUnixTimeMilliseconds(value).UtcTicks;}catch{return 0;}}
     bool InRange(long ticks)=>dateRange.SelectedIndex<=0||ticks>=DateTime.UtcNow.AddDays(dateRange.SelectedIndex switch{1=>-1,2=>-7,_=>-30}).Ticks;
@@ -329,7 +360,7 @@ public sealed class FileShelfView:UserControl,IDisposable
     void SaveSelectedAs()
     {
         if(transferList.SelectedItem is not FileShelfRow row||row.Phase!=TransferPhase.Completed||row.Outgoing||!File.Exists(row.Path))return;
-        var dialog=new SaveFileDialog{FileName=row.Name,Filter="所有文件 (*.*)|*.*",OverwritePrompt=true,CheckPathExists=true};
+        var dialog=new SaveFileDialog{FileName=row.Name,Filter="所有文件 (*.*)|*.*",OverwritePrompt=true,CheckPathExists=true,InitialDirectory=storage.DefaultSavePath};
         if(dialog.ShowDialog(Window.GetWindow(this))!=true)return;
         try{File.Copy(row.Path,dialog.FileName,true);status.Text="文件已另存为："+dialog.FileName;}
         catch(IOException e){status.Text="保存失败："+e.Message;}
@@ -345,7 +376,7 @@ public sealed class FileShelfView:UserControl,IDisposable
         if(batch!=null)return;
         if(localList.SelectedItems.Count!=1){await DownloadSelected();return;}
         if(localList.SelectedItem is not FileShelfRow row)return;
-        var dialog=new SaveFileDialog{FileName=row.Name,Title="另存为",OverwritePrompt=true};if(dialog.ShowDialog(Window.GetWindow(this))!=true)return;
+        var dialog=new SaveFileDialog{FileName=row.Name,Title="另存为",OverwritePrompt=true,InitialDirectory=storage.DefaultSavePath};if(dialog.ShowDialog(Window.GetWindow(this))!=true)return;
         var token=new CancellationTokenSource();batch=token;
         try{string source=row.Path;if(!row.IsAvailable){if(row.Remote==null||sync==null)throw new IOException("文件当前不可用");status.Text="正在下载后另存为";source=await sync.Files.Download(row.Remote,token.Token);}token.Token.ThrowIfCancellationRequested();if(!string.Equals(System.IO.Path.GetFullPath(source),System.IO.Path.GetFullPath(dialog.FileName),StringComparison.OrdinalIgnoreCase))File.Copy(source,dialog.FileName,true);status.Text="已另存为";}
         catch(OperationCanceledException){status.Text="已取消另存为";}catch(Exception e){status.Text=e is IOException?"保存失败："+e.Message:"另存为未完成，请检查连接";}

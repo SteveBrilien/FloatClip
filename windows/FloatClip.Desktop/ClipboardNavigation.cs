@@ -56,7 +56,7 @@ public sealed partial class LocalClipboardWindow
                 devicesView=sync==null?null:new ClipboardSharingView(sync);
                 page=new DevicesPage{Content=devicesView??(object)new System.Windows.Controls.TextBlock{Text=syncError??"共享暂不可用，请检查本机存储。",TextWrapping=TextWrapping.Wrap,Margin=new(20)}};
             }else if(type==typeof(FilesPage)){
-                filesView=new FileShelfView(sync,prefsRoot);
+                filesView=new FileShelfView(sync,prefsRoot,host.Storage);
                 page=new FilesPage{Content=filesView};
             }else page=new UpdatesPage{Content=new ScrollViewer{Content=BuildUpdateSection(),Margin=new(20,8,20,16),VerticalScrollBarVisibility=ScrollBarVisibility.Auto}};
             page.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");((UserControl)page).Background=Brushes.Transparent;pages[type]=page;return page;
@@ -77,6 +77,7 @@ public sealed partial class LocalClipboardWindow
     }
     void UpdateNavigation(){navigation.PaneDisplayMode=NavigationViewPaneDisplayMode.Left;navigation.IsPaneOpen=expandedNavigation;}
     void Navigate(Type type){currentPage=type;if(type==typeof(SettingsPage))categorySettingsModel?.Reload();if(shellReady)navigation.Navigate(type);}
+    public void OpenFiles()=>Navigate(typeof(FilesPage));
     FrameworkElement SettingRow(string title,string detail,FrameworkElement control)
     {
         var grid=new Grid();grid.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});grid.ColumnDefinitions.Add(new(){Width=GridLength.Auto});

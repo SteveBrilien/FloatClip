@@ -9,6 +9,7 @@ public sealed class DesktopShellPreferences
     public uint HotkeyModifiers{get;set;}=3;
     public uint HotkeyKey{get;set;}=0x56;
     public bool Pinned{get;set;}
+    public bool DesktopResident{get;set;}
     public int? Left{get;set;}
     public int? Top{get;set;}
     public static bool ValidHotkey(uint modifiers,uint key)=>

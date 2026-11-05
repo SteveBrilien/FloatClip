@@ -13,7 +13,10 @@ namespace FloatClip.Desktop;
 /** Local clipboard storage. Injected protection is used only by cross-platform model checks. */
 public sealed class ClipboardVault
 {
-    readonly string directory,path,mutexName,imageDirectory;
+    readonly string directory,path,mutexName;
+    string imageDirectory;
+    JsonObject? memorySnapshot;
+    long snapshotLength=-1,snapshotWriteTicks=-1;
     readonly Func<byte[],byte[]> protect,unprotect;
     public const int MaximumBytes=16*1024*1024;
     public const int MaximumImageBytes=8*1024*1024;
@@ -21,10 +24,10 @@ public sealed class ClipboardVault
     public const long MaximumBackupBytes=128L*1024*1024;
     static readonly uint[] PngCrcTable=CreatePngCrcTable();
     static uint[] CreatePngCrcTable(){var table=new uint[256];for(uint n=0;n<256;n++){uint crc=n;for(int bit=0;bit<8;bit++)crc=(crc>>1)^((crc&1)!=0?0xedb88320u:0);table[n]=crc;}return table;}
-    public ClipboardVault(string? directory=null,Func<byte[],byte[]>? protect=null,Func<byte[],byte[]>? unprotect=null)
+    public ClipboardVault(string? directory=null,Func<byte[],byte[]>? protect=null,Func<byte[],byte[]>? unprotect=null,string? imageDirectoryOverride=null)
     {
         this.directory=directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"FloatClip","Library");
-        Directory.CreateDirectory(this.directory); imageDirectory=Path.Combine(this.directory,"Images");Directory.CreateDirectory(imageDirectory);path=Path.Combine(this.directory,"clipboard.v1.bin");
+        Directory.CreateDirectory(this.directory); imageDirectory=DesktopStoragePreferences.NormalizeDirectory(imageDirectoryOverride,Path.Combine(this.directory,"Images"));path=Path.Combine(this.directory,"clipboard.v1.bin");
         mutexName=(OperatingSystem.IsWindows()?"Local\\":"")+"FloatClipVault-"+Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(this.directory))))[..24];
         this.protect=protect??new Func<byte[],byte[]>(b=>ProtectedData.Protect(b,null,DataProtectionScope.CurrentUser));
         this.unprotect=unprotect??new Func<byte[],byte[]>(b=>ProtectedData.Unprotect(b,null,DataProtectionScope.CurrentUser));
@@ -42,21 +45,37 @@ public sealed class ClipboardVault
         else{id=Guid.NewGuid().ToString();File.WriteAllText(file,id);}
         return new JsonObject{["id"]=id,["name"]=Environment.MachineName,["platform"]="windows"};
     });
-    public JsonObject Load()=>Locked(()=>{
-        if(!File.Exists(path))return new JsonObject{["revision"]="0",["entries"]=new JsonArray()};
-        if(new FileInfo(path).Length>MaximumBytes+65536)throw new IOException("本机剪贴板库过大，请保留数据");byte[] cipher=File.ReadAllBytes(path);
+    JsonObject LoadCore()
+    {
+        if(!File.Exists(path))
+        {
+            var empty=new JsonObject{["revision"]="0",["entries"]=new JsonArray()};
+            memorySnapshot=(JsonObject)empty.DeepClone();snapshotLength=0;snapshotWriteTicks=0;return empty;
+        }
+        var info=new FileInfo(path);
+        if(info.Length>MaximumBytes+65536)throw new IOException("本机剪贴板库过大，请保留数据");
+        long writeTicks=info.LastWriteTimeUtc.Ticks;
+        if(memorySnapshot!=null&&snapshotLength==info.Length&&snapshotWriteTicks==writeTicks)
+            return (JsonObject)memorySnapshot.DeepClone();
+        byte[] cipher=File.ReadAllBytes(path);
         byte[] plain;
         try{plain=unprotect(cipher);}catch{throw new IOException("本机剪贴板无法解密，请保留数据并从备份恢复");}
-        if(plain.Length>MaximumBytes)throw new IOException("本机剪贴板库过大，请保留数据");var entries=JsonNode.Parse(plain) as JsonArray??throw new IOException("本机剪贴板格式无效");Validate(entries);
-        return new JsonObject{["revision"]=Convert.ToHexString(SHA256.HashData(cipher)),["entries"]=entries};
-    });
+        if(plain.Length>MaximumBytes)throw new IOException("本机剪贴板库过大，请保留数据");
+        var entries=JsonNode.Parse(plain) as JsonArray??throw new IOException("本机剪贴板格式无效");Validate(entries);
+        var loaded=new JsonObject{["revision"]=Convert.ToHexString(SHA256.HashData(cipher)),["entries"]=entries};
+        memorySnapshot=(JsonObject)loaded.DeepClone();snapshotLength=info.Length;snapshotWriteTicks=writeTicks;
+        return loaded;
+    }
+    public JsonObject Load()=>Locked(LoadCore);
     public JsonObject Commit(string revision,JsonArray entries)=>Locked(()=>{
-        var current=Load();if(current["revision"]!.GetValue<string>()!=revision)throw new IOException("VAULT_CONFLICT");
+        var current=LoadCore();if(current["revision"]!.GetValue<string>()!=revision)throw new IOException("VAULT_CONFLICT");
         Validate(entries);byte[] plain=Encoding.UTF8.GetBytes(entries.ToJsonString());if(plain.Length>MaximumBytes)throw new IOException("剪贴板库超过 16 MiB");
         byte[] cipher=protect(plain);string temporary=path+"."+Guid.NewGuid().ToString("N")+".tmp";
         try{using(var stream=new FileStream(temporary,FileMode.CreateNew,FileAccess.Write,FileShare.None)){stream.Write(cipher);stream.Flush(true);}File.Move(temporary,path,true);}
         finally{if(File.Exists(temporary))File.Delete(temporary);}
-        return new JsonObject{["revision"]=Convert.ToHexString(SHA256.HashData(cipher)),["entries"]=entries.DeepClone()};
+        var result=new JsonObject{["revision"]=Convert.ToHexString(SHA256.HashData(cipher)),["entries"]=entries.DeepClone()};
+        var info=new FileInfo(path);memorySnapshot=(JsonObject)result.DeepClone();snapshotLength=info.Length;snapshotWriteTicks=info.LastWriteTimeUtc.Ticks;
+        return result;
     });
     public JsonObject AddText(string text,JsonObject? source=null)
     {
@@ -103,7 +122,66 @@ public sealed class ClipboardVault
         if(value.Length!=32||!System.Text.RegularExpressions.Regex.IsMatch(value,"^[0-9a-fA-F]{32}$"))throw new IOException("图片引用无效");
         return value.ToLowerInvariant();
     }
+    public string ImageDirectory=>imageDirectory;
+    string ThumbnailDirectory=>Path.Combine(imageDirectory,"Thumbnails");
     string ImagePath(string imageRef)=>Path.Combine(imageDirectory,NormalizeImageRef(imageRef)+".bin");
+
+    public void SetImageDirectory(string target)=>Locked(()=>{
+        target=DesktopStoragePreferences.NormalizeDirectory(target,imageDirectory);
+        string prior=Path.GetFullPath(imageDirectory);
+        if(string.Equals(prior,target,StringComparison.OrdinalIgnoreCase))return true;
+        Directory.CreateDirectory(target);
+        foreach(var entry in LoadCore()["entries"]!.AsArray().OfType<JsonObject>().Where(c=>Kind(c)=="image"))
+        {
+            string reference=NormalizeImageRef(entry["imageRef"]!.GetValue<string>());
+            string source=Path.Combine(prior,reference+".bin"),destination=Path.Combine(target,reference+".bin");
+            if(!File.Exists(source))throw new IOException("旧缓存目录中的图片不完整，未切换路径");
+            string temporary=destination+"."+Guid.NewGuid().ToString("N")+".tmp";
+            try{File.Copy(source,temporary,true);File.Move(temporary,destination,true);}
+            finally{if(File.Exists(temporary))File.Delete(temporary);}
+        }
+        string oldThumbs=Path.Combine(prior,"Thumbnails"),newThumbs=Path.Combine(target,"Thumbnails");
+        if(Directory.Exists(oldThumbs))
+        {
+            Directory.CreateDirectory(newThumbs);
+            foreach(string source in Directory.EnumerateFiles(oldThumbs,"*.bin"))
+                try{File.Copy(source,Path.Combine(newThumbs,Path.GetFileName(source)),true);}catch(IOException){}
+        }
+        imageDirectory=target;
+        try{foreach(var entry in LoadCore()["entries"]!.AsArray().OfType<JsonObject>().Where(c=>Kind(c)=="image"))_=ReadImage(entry);}
+        catch{imageDirectory=prior;throw;}
+        return true;
+    });
+
+    public byte[]? ReadThumbnail(string key)
+    {
+        if(!System.Text.RegularExpressions.Regex.IsMatch(key,"^[0-9a-f]{64}$"))return null;
+        return Locked(()=>{
+            string file=Path.Combine(ThumbnailDirectory,key+".bin");
+            try
+            {
+                if(!File.Exists(file)||new FileInfo(file).Length>2*1024*1024){if(File.Exists(file))File.Delete(file);return null;}
+                byte[] plain=unprotect(File.ReadAllBytes(file));if(plain.Length is <45 or >1500000)throw new IOException();
+                File.SetLastWriteTimeUtc(file,DateTime.UtcNow);return plain;
+            }
+            catch{try{File.Delete(file);}catch{}return null;}
+        });
+    }
+
+    public void WriteThumbnail(string key,byte[] png)
+    {
+        if(!System.Text.RegularExpressions.Regex.IsMatch(key,"^[0-9a-f]{64}$")||png.Length is <45 or >1500000)return;
+        Locked(()=>{
+            Directory.CreateDirectory(ThumbnailDirectory);
+            string file=Path.Combine(ThumbnailDirectory,key+".bin"),temporary=file+"."+Guid.NewGuid().ToString("N")+".tmp";
+            try{File.WriteAllBytes(temporary,protect(png));File.Move(temporary,file,true);}
+            finally{if(File.Exists(temporary))File.Delete(temporary);}
+            long bytes=0;int count=0;
+            foreach(var item in Directory.EnumerateFiles(ThumbnailDirectory,"*.bin").Select(f=>new FileInfo(f)).OrderByDescending(f=>f.LastWriteTimeUtc))
+            {bytes+=item.Length;count++;if(count>128||bytes>48L*1024*1024)try{item.Delete();}catch{}}
+            return true;
+        });
+    }
     void WriteImageBlob(string imageRef,byte[] bytes)
     {
         string destination=ImagePath(imageRef),temporary=destination+"."+Guid.NewGuid().ToString("N")+".tmp";

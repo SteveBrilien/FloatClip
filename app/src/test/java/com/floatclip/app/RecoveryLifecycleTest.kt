@@ -57,6 +57,8 @@ class RecoveryLifecycleTest {
                 if(it==0) { retainedPanel=field(service,"panelView");retainedList=field(service,"historyList") }
                 assertSame(retainedPanel,field(service,"panelView"));assertSame(retainedList,field(service,"historyList"))
                 assertEquals(true,field(service,"panelOpen"))
+                assertTrue(panel.flags and WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED!=0)
+                assertTrue(ballParams.flags and WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED!=0)
                 assertEquals(1f,panel.alpha,0f);assertEquals(0f,ballParams.alpha,0f)
                 closePanel(service)
                 assertEquals(false,field(service,"panelOpen"));assertEquals(false,field(service,"panelCollapsing"))

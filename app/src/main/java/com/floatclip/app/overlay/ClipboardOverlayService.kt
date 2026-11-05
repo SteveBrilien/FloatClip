@@ -372,6 +372,7 @@ class ClipboardOverlayService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             android.graphics.PixelFormat.TRANSLUCENT,
         ).apply {
+            flags=flags or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
             windowAnimations = 0
             gravity = Gravity.START or Gravity.TOP
             x = initialX
@@ -567,6 +568,7 @@ class ClipboardOverlayService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             android.graphics.PixelFormat.TRANSLUCENT,
         ).apply {
+            flags=flags or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
             windowAnimations = 0
             gravity = Gravity.START or Gravity.TOP
             x = panelX
@@ -1235,6 +1237,7 @@ class ClipboardOverlayService : Service() {
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             android.graphics.PixelFormat.TRANSLUCENT,
         ).apply {
+            flags=flags or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
             gravity=Gravity.START or Gravity.TOP
             windowAnimations=0
             alpha=1f

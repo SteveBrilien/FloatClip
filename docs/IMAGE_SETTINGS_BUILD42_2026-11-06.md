@@ -50,7 +50,7 @@ Android 12+ uses blur-behind only when the system reports support. Android 11 ex
 
 Migration preserves previous backup files and stops the old automatic export loop. Portable exports include images and protection flags. Import verifies the envelope, previews counts, then merges in a worker. Existing keys win; incoming IDs/image references are local. Capacity/attachment/corrupt-current-vault failures preserve current history. Pairing secrets are not exported.
 
-Animation uses vsync-driven ViewPropertyAnimator, with generation guards, faster close and invisible final surfaces. Ball touchability recovers immediately, independently of animation completion, preserving prior quick-open/close recovery.
+The service-owned bubble, panel and image overlay explicitly request hardware rendering before attachment (renderer support still depends on the device). Animation uses vsync-driven ViewPropertyAnimator, with generation guards, faster close and invisible final surfaces. Ball touchability recovers immediately, independently of animation completion, preserving prior quick-open/close recovery.
 
 ## Windows
 

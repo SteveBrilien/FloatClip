@@ -15,6 +15,7 @@ import org.json.JSONArray
 /** Manual, portable migration. PIN remains in memory only while a document picker is open. */
 class MigrationBackupUi(private val owner:Activity,private val store:ClipStore,private val changed:()->Unit) {
     private var pendingPin:String?=null
+    private data class Preview(val raw:String,val records:Int,val images:Int)
     fun export() {
         val first=pinField("设置 6 位迁移 PIN")
         val confirm=pinField("再次输入 PIN")
@@ -72,13 +73,15 @@ class MigrationBackupUi(private val owner:Activity,private val store:ClipStore,p
                                     text.append(buffer,0,count)
                                 };text.toString()
                             }
-                            PortableVaultCrypto.decrypt(envelope,value).also { JSONArray(it) }
+                            val raw=PortableVaultCrypto.decrypt(envelope,value)
+                            val rows=JSONArray(raw)
+                            Preview(raw,rows.length(),(0 until rows.length()).count { rows.getJSONObject(it).optString("kind")=="image" })
                         }
                         owner.runOnUiThread {
                             if(!owner.isFinishing && !owner.isDestroyed) {
                                 handle.primary?.isEnabled=true
                                 handle.primary?.text="验证"
-                                decoded.fold({ raw -> handle.dialog.dismiss();confirmImport(raw) },{
+                                decoded.fold({ preview -> handle.dialog.dismiss();confirmImport(preview) },{
                                     pin.error="PIN 不正确，或迁移包不可用"
                                 })
                             }
@@ -90,14 +93,12 @@ class MigrationBackupUi(private val owner:Activity,private val store:ClipStore,p
         }
         return true
     }
-    private fun confirmImport(raw:String) {
-        val rows=JSONArray(raw)
-        val images=(0 until rows.length()).count { rows.getJSONObject(it).optString("kind")=="image" }
-        FloatDialog.show(owner,"合并导入","共 "+rows.length()+" 条记录，包含 "+images+" 张图片。本机已有记录保留；相同编号保留本机版本。",negative="取消",positive="合并导入") { handle ->
+    private fun confirmImport(preview:Preview) {
+        FloatDialog.show(owner,"合并导入","共 "+preview.records+" 条记录，包含 "+preview.images+" 张图片。本机已有记录保留；相同编号保留本机版本。",negative="取消",positive="合并导入") { handle ->
             handle.primary?.isEnabled=false
             handle.primary?.text="正在导入…"
             Thread {
-                val ok=store.mergeImportJson(raw)
+                val ok=store.mergeImportJson(preview.raw)
                 owner.runOnUiThread {
                     if(!owner.isFinishing && !owner.isDestroyed) {
                         if(ok) {handle.dialog.dismiss();toast("迁移完成");changed()}

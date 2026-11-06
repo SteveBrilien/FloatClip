@@ -2,8 +2,8 @@
   "schema": 1,
   "channel": "share-preview",
   "version": "0.7.9",
-  "notes": "0.7.9：图片同步和蓝牙文件目录；Android 图片仅双栏、固定右下角导入、外观分节及心跳刷新不再重建图片卡片；Windows 全应用透明/磨砂、Emoji和分类编辑。Windows build28 原生198项检查、Android build29 69项单测通过。手机与电脑真实蓝牙/LAN往返和其他物理DPI仍待验收。",
-  "releaseTrain": "2026.10.24-native-079",
+  "notes": "图片列表使用缩略图，查看器按可见区域读取独立加密原图；优化长图缩放与切换。设置按确认方案精简，新增边缘调整面板尺寸、独立关于/权限/开源许可页，备份改为手动安全迁移。Windows 恢复 build40 配色和外观设置，关闭与图钉按钮恢复常规状态。\n\n验证：Android 118 项回归、lint 0 错误；Windows 242 项原生隔离检查通过，界面异常 0。两端已覆盖安装 build42，Android 保持原包名、升级签名和首次安装记录。\n\n60/120Hz 动态观感、各输入框图片粘贴和长期后台耗电仍待实际验收。清任务恢复遵循共享/悬浮窗总开关，主动关闭后不会自动开启。",
+  "releaseTrain": "2026.11.06-native-build42",
   "designRevision": "2026.10-clipboard-3",
   "web": {
     "version": "0.7.1",
@@ -14,20 +14,21 @@
   },
   "android": {
     "version": "0.7.9",
-    "build": 29,
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-224345e96e7d4b8d8931f06c87368b17/FloatClip-Android-0.7.9-build29.apk?exp=0&sig=1251d6720cc17bb4c819f475eb7d1bc5c71c28520d820b00c36fbb46865920bf",
-    "sha256": "5fe342a487a108a6a6f4d14617aa1f9155dec684f1dc799dd46cfb35aaecf59c",
-    "bytes": 3758815,
+    "build": 42,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-3c82e8d5f6d142308cef32677b61cbc8/FloatClip-Android-0.7.9-build42.apk?exp=0&sig=f60d8e844a77fdaa8ceb260d865b1ab145f2ac6d76d46d5a207e862c0ccc44e6",
+    "sha256": "7d7d32a635fc51bbc546dfdc31b1cb6949ac730f5378fe2190c08ec670d43e32",
+    "bytes": 4169885,
     "status": "available",
     "package": "com.floatclip.probe",
     "signerSha256": "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c"
   },
   "windows": {
     "version": "0.7.9",
-    "build": 29,
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-3b2a35e8fd3b469ea20580409e2e620a/FloatClip-Windows-0.7.9-build29.zip?exp=0&sig=2aae0c6e58d7b1dd432ff6b48725f6c25849a06bfd0095b1e4582abaf99bfe23",
-    "sha256": "36e7e7a7c08db22a3e5ec6278d7cea2cf3df17bfffb571a42df3a9512e5dcfe0",
-    "bytes": 78882301,
+    "build": 42,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-7e3225d29c094bf1a166410cf193bdec/FloatClip-Windows-0.7.9-build42-candidate.zip?exp=0&sig=775627699e6b55fb754abb27a9e316d2bf1e72b34cca81be3825005b87db4f18",
+    "sha256": "ccfbd38da68a9602400fe869f88c7ccbc8b2430dbf5c9d9406d4e90c4b6e42c2",
+    "bytes": 79057838,
     "status": "available"
-  }
+  },
+  "releaseTag": "v0.7.9-build42"
 }

@@ -756,7 +756,10 @@ open class MainActivity : Activity() {
             })
             addView(divider())
             addView(settingRow("启动时检查更新","",if(updatePrefs.checkOnLaunch())"已开启" else "已关闭") {
-                updatePrefs.saveCheckOnLaunch(!updatePrefs.checkOnLaunch());render()
+                val enabled=!updatePrefs.checkOnLaunch();updatePrefs.saveCheckOnLaunch(enabled)
+                if(enabled && android.os.Build.VERSION.SDK_INT>=33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)
+                    requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),638)
+                render()
             })
             addView(divider())
             addView(settingRow("检查更新",updatePrefs.lastCheck(updatePrefs.channel()),"›", R.drawable.ic_update) { checkClientUpdate() })
@@ -1110,6 +1113,37 @@ open class MainActivity : Activity() {
         setTextColor(if (selected) colors.accent else colors.primaryText)
         background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(colors.actionBackground),roundedBackground(if (selected) colors.actionBackground else colors.fieldBackground, 12f, true),roundedBackground(Color.WHITE,12f))
         setOnClickListener { action() }
+    }
+
+    private fun accentSelector(): View = LinearLayout(this).apply {
+        orientation=LinearLayout.VERTICAL
+        setPadding(0,dp(5),0,dp(7))
+        addView(textView("主题颜色",14.5f,false),LinearLayout.LayoutParams(-1,dp(30)))
+        addView(HorizontalScrollView(this@MainActivity).apply {
+            isHorizontalScrollBarEnabled=false
+            overScrollMode=View.OVER_SCROLL_NEVER
+            addView(LinearLayout(this@MainActivity).apply {
+                orientation=LinearLayout.HORIZONTAL
+                FloatClipAccent.choices.forEachIndexed { index,choice ->
+                    val selected=FloatClipAccent.normalize(overlayPreferences.accentTheme())==choice.id
+                    addView(TextView(this@MainActivity).apply {
+                        text=choice.label
+                        textSize=13f
+                        gravity=Gravity.CENTER
+                        val color=if(colors.dark) choice.dark else choice.light
+                        setTextColor(if(selected) color else colors.secondaryText)
+                        background=roundedBackground(
+                            if(selected) colors.actionBackground else colors.fieldBackground,12f,true
+                        )
+                        setOnClickListener {
+                            overlayPreferences.saveAccentTheme(choice.id)
+                            notifyOverlayAppearanceChanged()
+                            render()
+                        }
+                    },LinearLayout.LayoutParams(dp(62),dp(42)).apply { if(index>0)marginStart=dp(7) })
+                }
+            })
+        },LinearLayout.LayoutParams(-1,dp(42)))
     }
 
     private fun segmentedSetting(

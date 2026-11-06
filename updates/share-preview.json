@@ -2,8 +2,8 @@
   "schema": 1,
   "channel": "share-preview",
   "version": "0.7.9",
-  "notes": "图片列表使用缩略图，查看器按可见区域读取独立加密原图；优化长图缩放与切换。设置按确认方案精简，新增边缘调整面板尺寸、独立关于/权限/开源许可页，备份改为手动安全迁移。Windows 恢复 build40 配色和外观设置，关闭与图钉按钮恢复常规状态。\n\n验证：Android 118 项回归、lint 0 错误；Windows 242 项原生隔离检查通过，界面异常 0。两端已覆盖安装 build42，Android 保持原包名、升级签名和首次安装记录。\n\n60/120Hz 动态观感、各输入框图片粘贴和长期后台耗电仍待实际验收。清任务恢复遵循共享/悬浮窗总开关，主动关闭后不会自动开启。",
-  "releaseTrain": "2026.11.06-native-build42",
+  "notes": "Android build43：去除文字、图片词条边缘的白灰细线；设置恢复到加入可调动画曲线之前的分区和常规滑条，图片列数、主题颜色、透明度和面板尺寸可直接调整。保留图片按可见区域加载、缩略图缓存、后台恢复和安全迁移等修复。Windows 继续使用已验证的 build42。\n\n验证：Android 120 项回归全部通过，lint 0 错误；APK 保持原包名与覆盖升级签名。Windows build42 的 242 项原生检查已通过。长期后台耗电、各输入框图片粘贴及 60/120Hz 动态观感仍需实际验收。",
+  "releaseTrain": "2026.11.06-native-build43",
   "designRevision": "2026.10-clipboard-3",
   "web": {
     "version": "0.7.1",
@@ -14,10 +14,10 @@
   },
   "android": {
     "version": "0.7.9",
-    "build": 42,
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-3c82e8d5f6d142308cef32677b61cbc8/FloatClip-Android-0.7.9-build42.apk?exp=0&sig=f60d8e844a77fdaa8ceb260d865b1ab145f2ac6d76d46d5a207e862c0ccc44e6",
-    "sha256": "7d7d32a635fc51bbc546dfdc31b1cb6949ac730f5378fe2190c08ec670d43e32",
-    "bytes": 4169885,
+    "build": 43,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-fb216bb781b6405ca45d7a4d8223b90f/FloatClip-Android-0.7.9-build43.apk?exp=0&sig=d592d5549002afbe022595f958d2e36af70d0490255b8ec28b091d7bcb4b7c92",
+    "sha256": "323c686f8c84af0bf51c5b3fe27211cc425844a765e2fdc0cd9cd15d3c93030e",
+    "bytes": 4059245,
     "status": "available",
     "package": "com.floatclip.probe",
     "signerSha256": "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c"
@@ -30,5 +30,5 @@
     "bytes": 79057838,
     "status": "available"
   },
-  "releaseTag": "v0.7.9-build42"
+  "releaseTag": "v0.7.9-build43"
 }

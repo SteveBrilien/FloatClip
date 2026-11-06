@@ -67,7 +67,9 @@ class ClipboardScreenTest {
             val sensitivity=views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.SeekBar>().first { bar ->
                 views(bar.parent as View).filterIsInstance<android.widget.TextView>().any {it.text.toString().startsWith("滑动灵敏度")}
             }
-            sensitivity.progress=60 // restored 30..120 slider -> 90%
+            val listener=android.widget.SeekBar::class.java.getDeclaredField("mOnSeekBarChangeListener")
+                .apply {isAccessible=true}.get(sensitivity) as android.widget.SeekBar.OnSeekBarChangeListener
+            listener.onProgressChanged(sensitivity,60,true) // user drag: restored 30..120 slider -> 90%
             assertEquals(90,com.floatclip.app.prefs.OverlayPreferences(activity).bubbleMotionSensitivityPercent())
             val prefs=com.floatclip.app.prefs.OverlayPreferences(activity)
             prefs.saveTwoColumnClipboard(true);prefs.savePanelFollowsBubble(false)

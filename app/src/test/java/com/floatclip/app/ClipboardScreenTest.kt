@@ -35,18 +35,49 @@ class ClipboardScreenTest {
         }
         try {
             activity.findViewById<View>(R.id.clipboard_settings).performClick()
-            click("关于与更新")
+            click("关于")
             val labels=views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().map{it.text.toString()}
             assertTrue(labels.contains("FloatClip"));assertTrue(labels.any {it.contains(" · build ")})
             click("权限声明")
             assertTrue(views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().any {it.text.toString().contains("你主动选择的文字粘贴")})
             activity.findViewById<View>(R.id.clipboard_back).performClick()
-            click("关于与更新")
+            click("关于")
             click("开源组件")
             click("Kotlin 标准库")
             assertTrue(views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().any {it.text.toString().contains("Apache License")&&it.isTextSelectable})
         } finally {controller.pause().stop().destroy()}
     }
+
+    @Test fun classicSettingsExposeWorkingSlidersWithoutCurveOrRangeEditors() {
+        val controller=Robolectric.buildActivity(UnifiedActivity::class.java).setup()
+        val activity=controller.get()
+        fun views(view:View):List<View> = listOf(view)+if(view is ViewGroup)(0 until view.childCount).flatMap {views(view.getChildAt(it))} else emptyList()
+        fun labels()=views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().map {it.text.toString()}
+        try {
+            activity.findViewById<View>(R.id.clipboard_settings).performClick()
+            assertTrue(labels().contains("设备特征色"));assertTrue(labels().contains("半透明色块"))
+            val text=views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().first {it.text.toString()=="外观"}
+            var target=text as View
+            while(!target.isClickable && target.parent is View)target=target.parent as View
+            target.performClick()
+            val values=labels()
+            assertTrue(values.contains("主题颜色"));assertTrue(values.contains("图片排列"))
+            assertTrue(values.any {it.startsWith("面板宽度")})
+            assertTrue(values.none {it.contains("动画曲线")||it.contains("贝塞尔")||it.contains("参数范围")||it.contains("反馈强度")})
+            val sensitivity=views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.SeekBar>().first { bar ->
+                views(bar.parent as View).filterIsInstance<android.widget.TextView>().any {it.text.toString().startsWith("滑动灵敏度")}
+            }
+            sensitivity.progress=60 // restored 30..120 slider -> 90%
+            assertEquals(90,com.floatclip.app.prefs.OverlayPreferences(activity).bubbleMotionSensitivityPercent())
+            val prefs=com.floatclip.app.prefs.OverlayPreferences(activity)
+            prefs.saveTwoColumnClipboard(true);prefs.savePanelFollowsBubble(false)
+            prefs.saveSourceColors(false);prefs.saveTranslucentCards(true)
+            val restored=com.floatclip.app.prefs.OverlayPreferences(activity)
+            assertTrue(restored.twoColumnClipboard());assertFalse(restored.panelFollowsBubble())
+            assertFalse(restored.sourceColors());assertTrue(restored.translucentCards())
+        } finally {controller.pause().stop().destroy()}
+    }
+
     @Test fun bulkClearButtonPreservesProtectionWithoutUndo() {
         val controller=Robolectric.buildActivity(UnifiedActivity::class.java).setup()
         val activity=controller.get()

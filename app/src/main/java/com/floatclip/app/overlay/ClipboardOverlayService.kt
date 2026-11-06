@@ -585,7 +585,7 @@ class ClipboardOverlayService : Service() {
         if(android.os.Build.VERSION.SDK_INT>=31) {
             if(blur) {
                 params.flags=params.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
-                params.setBlurBehindRadius(dp(24))
+                params.setBlurBehindRadius(dp(4 + overlayPreferences.frostStrengthPercent()*48/100))
             } else {
                 params.flags=params.flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
                 params.setBlurBehindRadius(0)
@@ -662,7 +662,7 @@ class ClipboardOverlayService : Service() {
         sourceScroll.background=roundedBackground(palette.panelBackground,12f)
         content.addView(sourceScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(47)))
 
-        val history=ClipboardHistoryList(this).apply { automaticImageColumns=true }.also { historyList=it }
+        val history=ClipboardHistoryList(this).apply { automaticImageColumns=false }.also { historyList=it }
         undoContainer=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
         history.attachHeader(undoContainer!!)
         content.addView(history,LinearLayout.LayoutParams(-1,0,1f))
@@ -914,7 +914,7 @@ class ClipboardOverlayService : Service() {
             activeSource.isNotEmpty() -> (sourceName?:"此设备")+"还没有同步内容"
             else -> "这个分类还没有内容"
         }
-        target.submit(items,true,activeSource+"|"+activeCategory,hint,palette.secondaryText,::createClipRow)
+        target.submit(items,overlayPreferences.twoColumnClipboard(),activeSource+"|"+activeCategory,hint,palette.secondaryText,::createClipRow)
         updateOverlayImageImportAction()
         val expectedSource=activeSource;val expectedCategory=activeCategory;val expectedSnapshot=historySnapshot
         handler.postDelayed({

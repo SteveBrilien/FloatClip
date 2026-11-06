@@ -3,13 +3,13 @@
   "platforms": {
     "android": {
       "version": "0.7.9",
-      "build": 40,
-      "review": "docs/PHOTO_VIEWER_2026-11-03.md"
+      "build": 43,
+      "review": "docs/SETTINGS_ROLLBACK_BUILD43_2026-11-06.md"
     },
     "windows": {
       "version": "0.7.9",
-      "build": 40,
-      "review": "docs/PHOTO_VIEWER_2026-11-03.md"
+      "build": 42,
+      "review": "docs/IMAGE_SETTINGS_BUILD42_2026-11-06.md"
     }
   }
 }

@@ -34,10 +34,10 @@ class OverlayAppearanceTest {
         assertTrue(prefs.translucentCards())
         assertEquals(86,prefs.cardAlphaPercent())
         assertEquals(28,prefs.frostStrengthPercent())
-        assertTrue(prefs.borderEnabled())
+        org.junit.Assert.assertFalse(prefs.borderEnabled())
         assertEquals(98,prefs.cardPressScalePercent())
         assertEquals(96,prefs.bubblePressScalePercent())
-        assertEquals(300,prefs.transitionDurationMs())
+        assertEquals(240,prefs.transitionDurationMs())
         assertEquals("soft",prefs.motionPreset())
         assertEquals("blue",prefs.accentTheme())
     }
@@ -53,7 +53,7 @@ class OverlayAppearanceTest {
         prefs.resetAppearance()
         assertTrue(prefs.sourceColors())
         assertTrue(prefs.translucentCards())
-        assertEquals(300, prefs.transitionDurationMs())
+        assertEquals(240, prefs.transitionDurationMs())
         assertTrue(prefs.detailedNotification())
         org.junit.Assert.assertFalse(prefs.keepAliveEnabled())
         assertTrue(prefs.overlayEnabled())
@@ -107,15 +107,32 @@ class OverlayAppearanceTest {
         assertEquals(3000,prefs.transitionDurationMs())
         prefs.resetAppearance();assertEquals("transparent",prefs.backgroundMode());assertEquals(20,prefs.curveControl(0));assertEquals("soft",prefs.motionPreset())
     }
-    @Test fun cardOpacityNoLongerDependsOnSourceTintFlagAndSolidModeIsOpaque() {
+    @Test fun restoredCardOpacitySliderControlsBackgroundAndSolidModeIsOpaque() {
         val prefs=reset();val context=RuntimeEnvironment.getApplication()
         prefs.saveTranslucentCards(false);prefs.saveCardAlphaPercent(55)
         fun alpha():Int {
             val card=ClipboardCard(context,ClipEntry(1,"a"),false,android.graphics.Color.BLACK,android.graphics.Color.WHITE)
             return android.graphics.Color.alpha((card.background as android.graphics.drawable.GradientDrawable).color!!.defaultColor)
         }
-        assertTrue(alpha()>=239)
+        assertEquals(255*55/100,alpha())
         prefs.saveBackgroundMode("solid");assertEquals(255,alpha())
+    }
+
+    @Test fun textAndImageCardsHaveNoHairlineEvenWithLegacyBordersEnabled() {
+        val context=RuntimeEnvironment.getApplication()
+        val prefs=reset()
+        prefs.saveBorderEnabled(true);prefs.saveBorderAlphaPercent(60)
+        prefs.saveBackgroundMode("solid")
+        for(dark in listOf(false,true)) for(image in listOf(false,true)) {
+            val color=if(dark) android.graphics.Color.rgb(36,40,59) else android.graphics.Color.WHITE
+            val entry=if(image) ClipEntry(2,"image",kind="image",imageRef="a".repeat(32),imageWidth=80,imageHeight=60) else ClipEntry(1,"text")
+            val card=ClipboardCard(context,entry,dark,android.graphics.Color.BLACK,color)
+            val bitmap=android.graphics.Bitmap.createBitmap(100,100,android.graphics.Bitmap.Config.ARGB_8888)
+            card.background.setBounds(0,0,100,100)
+            card.background.draw(android.graphics.Canvas(bitmap))
+            assertEquals("straight card edges must have the same fill as the interior",bitmap.getPixel(50,1),bitmap.getPixel(50,50))
+            bitmap.recycle()
+        }
     }
 
 }

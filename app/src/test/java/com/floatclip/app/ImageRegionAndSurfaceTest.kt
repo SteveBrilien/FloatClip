@@ -84,8 +84,8 @@ class ImageRegionAndSurfaceTest {
         assertEquals("soft",prefs.motionPreset())
         assertEquals(50,prefs.interactionRange("card").first)
         assertEquals("transparent",prefs.backgroundMode())
-        assertEquals(75,prefs.surfaceTransparencyPercent())
-        assertTrue(prefs.borderEnabled())
+        assertEquals(45,prefs.panelAlphaPercent())
+        assertFalse(prefs.borderEnabled())
         for(strength in 0..2) {
             prefs.saveFeedbackStrength(strength)
             assertEquals(strength,OverlayPreferences(context).feedbackStrength())
@@ -94,17 +94,17 @@ class ImageRegionAndSurfaceTest {
         assertEquals(93,prefs.bubblePressScalePercent())
         assertEquals(98,prefs.panelPressScalePercent())
     }
-    @Test fun highTransparencyKeepsForegroundSurfacesAndFrostFallbackReadable() {
+    @Test fun restoredTransparencySlidersWorkAndFrostFallbackStaysReadable() {
         val raw=context.getSharedPreferences("floatclip_overlay",Context.MODE_PRIVATE)
         raw.edit().clear().commit()
         val prefs=OverlayPreferences(context)
-        prefs.saveSurfaceTransparencyPercent(75)
+        prefs.savePanelAlphaPercent(45);prefs.saveCardAlphaPercent(55)
         prefs.saveBackgroundMode("transparent")
-        assertEquals(25,prefs.surfacePanelAlphaPercent())
-        assertTrue(prefs.surfaceCardAlphaPercent()>=94)
+        assertEquals(45,prefs.surfacePanelAlphaPercent())
+        assertEquals(55,prefs.surfaceCardAlphaPercent())
         prefs.saveBackgroundMode("frost")
         assertTrue(prefs.surfacePanelAlphaPercent(false)>=85)
-        assertTrue(prefs.surfaceCardAlphaPercent()>=94)
+        assertEquals(55,prefs.surfaceCardAlphaPercent())
         prefs.saveBackgroundMode("solid")
         assertEquals(100,prefs.surfacePanelAlphaPercent())
         assertEquals(100,prefs.surfaceCardAlphaPercent())

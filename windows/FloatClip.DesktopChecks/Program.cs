@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Net;
@@ -308,6 +310,14 @@ static class Program
                 var largeList=Field<StackPanel>(largeWindow,"list");
                 Check(largeList.Children.Count<=12,"500-image history initially materializes one small page");
                 Call(largeWindow,"AppendHistoryPage");Check(largeList.Children.Count<=24,"scroll loading appends one bounded page");
+                largeWindow.Hide();Pump();
+                Check(largeList.Children.Count==0&&Field<List<JsonObject>>(largeWindow,"visibleHistory").Count==0
+                    &&Field<long>(largeWindow,"thumbnailBytes")<=3L*1024*1024,"hiding releases rows and trims decoded previews");
+                var reopen=Stopwatch.StartNew();
+                largeHost.ShowPopup();Pump();
+                reopen.Stop();
+                Check(largeList.Children.Count>0&&largeList.Children.Count<=12,"same revision reopens immediately with a small first page");
+                File.WriteAllText(Path.Combine(output,"warm-reopen.json"),JsonSerializer.Serialize(new{milliseconds=reopen.Elapsed.TotalMilliseconds,records=500,renderedRows=largeList.Children.Count}));
             }
             File.WriteAllText(Path.Combine(output,"report.json"),JsonSerializer.Serialize(new{result="PASS",checks,isolated=true,userClipboardUntouched=true,uiFailures=host.UiFailureCount,utc=DateTime.UtcNow},new JsonSerializerOptions{WriteIndented=true}));
             if(args.Contains("--interactive"))

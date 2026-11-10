@@ -26,6 +26,48 @@ static class Program
         Check(retained["id"]!.GetValue<string>()==id&&retained["category"]!.GetValue<string>()=="未分类"&&ClipboardVault.IsPinned(retained)&&ClipboardVault.IsLocked(retained),"delete moves protected content without deleting records");
         Check(!new CategoryService(vault,Path.Combine(root,"CategoryPreferences")).List().Any(c=>c.Name is "研究" or "工作"),"deleted group remains absent after reload");
     }
+    static void RecoveryChecks(string root,Func<byte[],byte[]> protect,Func<byte[],byte[]> unprotect,byte[] png)
+    {
+        string live=Path.Combine(root,"RecoveryLive"),mirror=Path.Combine(root,"RecoveryMirror");
+        var vault=new ClipboardVault(live,protect,unprotect,recoveryDirectory:mirror);
+        string own=vault.Device()["id"]!.GetValue<string>();
+        vault.AddText("protected text");
+        var snapshot=vault.AddImage(png,1,1);
+        var entries=snapshot["entries"]!.AsArray();
+        foreach(var row in entries.OfType<JsonObject>()){row["pinned"]=true;row["locked"]=true;}
+        vault.Commit(snapshot["revision"]!.GetValue<string>(),entries);
+        vault.AddText("ordinary after protection");
+        vault.FlushRecoveryCheckpoint();
+        Check(vault.RecoveryWarning==null&&File.Exists(Path.Combine(mirror,"clipboard.v1.bin")),"independent checkpoint saved");
+        Directory.Delete(live,true);
+        var restarted=new ClipboardVault(live,protect,unprotect,recoveryDirectory:mirror);
+        Check(restarted.Device()["id"]!.GetValue<string>()==own,"directory loss restores original device identity");
+        var recovered=restarted.Load()["entries"]!.AsArray().OfType<JsonObject>().ToArray();
+        Check(recovered.Length==3&&recovered.Count(ClipboardVault.IsLocked)==2&&recovered.Count(ClipboardVault.IsPinned)==2
+              &&recovered.All(row=>row["source"]!["id"]!.GetValue<string>()==own),"directory loss restores history and protection under local source");
+        var image=recovered.Single(row=>ClipboardVault.Kind(row)=="image");
+        string blob=Path.Combine(live,"Images",image["imageRef"]!.GetValue<string>()+".bin");
+        File.Delete(blob);
+        Check(restarted.ReadImage(image).AsSpan().SequenceEqual(png)&&File.Exists(blob),"missing referenced original repairs from its verified copy");
+        Check(restarted.ClearUnprotected()==1,"manual clear removes ordinary history");
+        restarted.FlushRecoveryCheckpoint();
+        File.Delete(Path.Combine(live,"clipboard.v1.bin"));
+        Check(restarted.Load()["entries"]!.AsArray().Count==2,"latest checkpoint preserves explicit clear after index loss");
+        File.Delete(Path.Combine(live,"clipboard.v1.bin"));
+        File.WriteAllBytes(Path.Combine(mirror,"clipboard.v1.bin"),new byte[]{1,2,3});
+        Throws(()=>restarted.Load(),"corrupt checkpoint accepted");
+        Check(File.Exists(blob)&&!File.Exists(Path.Combine(live,"clipboard.v1.bin")),"corrupt checkpoint preserves remaining originals");
+        string untracked=Path.Combine(root,"MissingIndex");
+        var missing=new ClipboardVault(untracked,protect,unprotect);
+        string savedImage=Guid.NewGuid().ToString("N");
+        string untrackedBlob=Path.Combine(untracked,"Images",savedImage+".bin");
+        Directory.CreateDirectory(Path.GetDirectoryName(untrackedBlob)!);
+        File.WriteAllBytes(untrackedBlob,protect(png));
+        missing.RemoveUnreferencedImages(new[]{savedImage});
+        Check(File.Exists(untrackedBlob),"missing index cannot authorize original deletion");
+        var first=missing.AddText("first new row after index loss");
+        Check(missing.LoadIfChanged(first["revision"]!.GetValue<string>())==null&&File.Exists(untrackedBlob),"new index preserves unknown originals and an unchanged revision avoids a clone");
+    }
     static void ImageChecks(string root,Func<byte[],byte[]> protect,Func<byte[],byte[]> unprotect,byte[] png)
     {
         CategoryChecks(root);
@@ -86,10 +128,10 @@ static class Program
         var protectSnapshot=images.Load();var protectedRows=protectSnapshot["entries"]!.AsArray().OfType<JsonObject>();var locked=protectedRows.Single(c=>c["source"]!["id"]!.GetValue<string>()=="locked-image");locked["locked"]=true;
         images.Commit(protectSnapshot["revision"]!.GetValue<string>(),protectSnapshot["entries"]!.AsArray());
         Check(images.ClearUnprotected()==2,"clear removes ordinary image and text");
-        var reboot=new ClipboardVault(imagesRoot,protect,unprotect);reboot.PruneOrphanedImages();var retained=reboot.Load()["entries"]!.AsArray().OfType<JsonObject>().ToList();
-        Check(retained.Count==2&&retained.All(c=>reboot.ReadImage(c).AsSpan().SequenceEqual(png)),"protected images survive clear and restart pruning");
+        var reboot=new ClipboardVault(imagesRoot,protect,unprotect);var retained=reboot.Load()["entries"]!.AsArray().OfType<JsonObject>().ToList();
+        Check(retained.Count==2&&retained.All(c=>reboot.ReadImage(c).AsSpan().SequenceEqual(png)),"protected images survive clear and restart");
         Check(retained.Any(ClipboardVault.IsPinned)&&retained.All(ClipboardVault.IsLocked),"image protection flags survive restart");
-        Check(Directory.GetFiles(Path.Combine(imagesRoot,"Images"),"*.bin").Length==2,"orphaned image files pruned after restart");
+        Check(Directory.GetFiles(Path.Combine(imagesRoot,"Images"),"*.bin").Length==2,"only explicitly removed and replaced image files are cleaned up");
         Check(reboot.ClearUnprotected()==0,"repeated clear preserves all protected images");
         var oversizedMetadata=reboot.Load();var huge=oversizedMetadata["entries"]![0]!.AsObject();for(int i=0;i<10;i++){var clone=(JsonObject)huge.DeepClone();clone["id"]=Guid.NewGuid().ToString();clone["imageRef"]=Guid.NewGuid().ToString("N");clone["imageBytes"]=(long)ClipboardVault.MaximumImageBytes;oversizedMetadata["entries"]!.AsArray().Add(clone);}
         Throws(()=>reboot.Commit(oversizedMetadata["revision"]!.GetValue<string>(),oversizedMetadata["entries"]!.AsArray()),"aggregate image storage bound ignored");
@@ -98,7 +140,7 @@ static class Program
         {
             string dpapiRoot=Path.Combine(root,"WindowsDpapi");var windowsVault=new ClipboardVault(dpapiRoot);windowsVault.AddText("FC-SYNTHETIC-DPAPI-😀");windowsVault.AddImage(png,1,1);
             var saved=windowsVault.Load();foreach(var entry in saved["entries"]!.AsArray().OfType<JsonObject>())entry["locked"]=true;windowsVault.Commit(saved["revision"]!.GetValue<string>(),saved["entries"]!.AsArray());
-            var restartedWindowsVault=new ClipboardVault(dpapiRoot);restartedWindowsVault.PruneOrphanedImages();
+            var restartedWindowsVault=new ClipboardVault(dpapiRoot);
             Check(restartedWindowsVault.Load()["entries"]!.AsArray().Count==2&&restartedWindowsVault.ClearUnprotected()==0,"real Windows DPAPI protected records survive reload and clear");
             var windowsImage=Row(restartedWindowsVault);Check(restartedWindowsVault.ReadImage(windowsImage).AsSpan().SequenceEqual(png),"real Windows DPAPI image survives reload");
             byte[] disk=File.ReadAllBytes(Path.Combine(dpapiRoot,"clipboard.v1.bin"));Check(!Encoding.UTF8.GetString(disk).Contains("FC-SYNTHETIC-DPAPI"),"real Windows vault contains plaintext");
@@ -121,6 +163,7 @@ static class Program
             var other=(JsonObject)source.DeepClone();other["id"]="android-b";var separate=vault.AddText("secret-original",other);Check(separate["entries"]!.AsArray().Count==2,"same text from distinct devices retained");
             byte[] png=Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==");
             ImageChecks(root,Protect,Unprotect,png);
+            RecoveryChecks(root,Protect,Unprotect,png);
             var imageSource=new JsonObject{["id"]="windows-image",["name"]="电脑",["platform"]="windows"};var imageVault=vault.AddImage(png,1,1,imageSource);
             var imageRow=imageVault["entries"]!.AsArray().OfType<JsonObject>().Single(c=>ClipboardVault.Kind(c)=="image");
             Check(vault.ReadImage(imageRow).AsSpan().SequenceEqual(png),"image blob round trip");

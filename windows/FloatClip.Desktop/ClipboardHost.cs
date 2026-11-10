@@ -51,7 +51,14 @@ public sealed class ClipboardHost:IDisposable
     public DesktopStoragePreferences Storage{get;}
     public string HotkeyError{get;private set;}="";
     public string HotkeyLabel=>FormatHotkey(preferences.HotkeyModifiers,preferences.HotkeyKey);
-    public string Status=>Sync?.Status??SyncError??"共享尚未准备好";
+    public string Status
+    {
+        get
+        {
+            string status=Sync?.Status??SyncError??"共享尚未准备好";
+            return Vault.RecoveryWarning is { } warning?status+" · "+warning:status;
+        }
+    }
     const int ClipboardMessage=0x031D,HotkeyMessage=0x0312;
     [DllImport("user32.dll")]static extern bool AddClipboardFormatListener(IntPtr hwnd);
     [DllImport("user32.dll")]static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
@@ -79,8 +86,11 @@ public sealed class ClipboardHost:IDisposable
         if(systemIntegration&&updates!=null)throw new ArgumentException("正式宿主使用已配置的更新源");
         Updates=updates??new DesktopUpdates(Path.Combine(root,"Updates"));
         try{Capture=JsonNode.Parse(File.ReadAllText(Path.Combine(root,"clipboard-ui.json")))?["capture"]?.GetValue<bool>()??true;}catch{}
-        Vault=new ClipboardVault(libraryRoot,imageDirectoryOverride:Storage.ImageCachePath);
-        try{Vault.PruneOrphanedImages();}catch{} // Never destroy the vault if a prior run left damaged metadata.
+        string recoveryRoot=systemIntegration
+            ?Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"FloatClipRecovery")
+            :Path.Combine(dataRoot!,"Recovery");
+        Vault=new ClipboardVault(libraryRoot,imageDirectoryOverride:Storage.ImageCachePath,recoveryDirectory:recoveryRoot);
+        Vault.RequestRecoveryCheckpoint();
         try
         {
             if(systemIntegration){Sync=new NativeClipboardSync(Vault,IncomingClipboard);
@@ -316,6 +326,7 @@ public sealed class ClipboardHost:IDisposable
         disposed=true;Current=null;
         popup?.Close();
         Sync?.Dispose();if(tray!=null){tray.Visible=false;tray.Dispose();}
+        Vault.FlushRecoveryCheckpoint();
         Updates.Dispose();
         if(systemIntegration)RemoveClipboardFormatListener(messages.Handle);
         if(registered)UnregisterHotKey(messages.Handle,hotkeyId);

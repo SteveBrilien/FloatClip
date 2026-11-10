@@ -63,7 +63,7 @@ public sealed partial class LocalClipboardWindow:Window
         viewModel=new ClipboardPanelViewModel(new ClipboardLibraryService(host.Vault));
         viewModel.OperationFailed+=error=>{host.ReportUiFailure(error);if(host.IsIsolated)System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();};
         searchView=new ClipboardSearchView{DataContext=viewModel};search=searchView.InputControl;searchHint=searchView.Hint;
-        viewModel.HistoryChanged+=()=>{deleted=null;Refresh();};
+        viewModel.HistoryChanged+=()=>{DiscardUndo();Refresh();};
         copyFeedbackTimer.Interval=((Duration)Application.Current.FindResource("FloatClip.Motion.CopyFeedback")).TimeSpan;
         copyFeedbackTimer.Tick+=(_,_)=>{copyFeedbackTimer.Stop();viewModel.ClearCopy();foreach(var badge in copyBadges.Values)badge.Visibility=Visibility.Collapsed;if(pendingCopyRefresh){pendingCopyRefresh=false;Guard(()=>Refresh());}DismissAfterCopy();};
         Title=floating?"FloatClip · 悬浮剪贴板":"FloatClip · 管理剪贴板";
@@ -105,8 +105,23 @@ public sealed partial class LocalClipboardWindow:Window
         host.Changed+=HostChanged;
         host.Updates.Changed+=UpdateChanged;
         Closing+=(_,e)=>{if(!host.IsExiting&&!closingForReplacement){e.Cancel=true;host.RememberPlacement();HideWithMotion();}};
-        Closed+=(_,_)=>{host.Changed-=HostChanged;host.Updates.Changed-=UpdateChanged;SystemEvents.UserPreferenceChanged-=SystemThemeChanged;searchTimer.Stop();refreshTimer.Stop();copyFeedbackTimer.Stop();historyCancellation.Cancel();historyCancellation.Dispose();};
-        IsVisibleChanged+=(_,_)=>{if(!IsVisible){historyCancellation.Cancel();copyFeedbackTimer.Stop();refreshTimer.Stop();viewModel.ClearCopy();pendingCopyRefresh=false;list.Children.Clear();copyBadges.Clear();}};
+        Closed+=(_,_)=>{host.Changed-=HostChanged;host.Updates.Changed-=UpdateChanged;SystemEvents.UserPreferenceChanged-=SystemThemeChanged;searchTimer.Stop();refreshTimer.Stop();copyFeedbackTimer.Stop();historyCancellation.Cancel();historyCancellation.Dispose();TrimThumbnailCache(0,0);DiscardUndo();};
+        IsVisibleChanged+=(_,_)=>{
+            if(IsVisible){Guard(RefreshIfVaultChanged);return;}
+            historyCancellation.Cancel();
+            searchTimer.Stop();
+            copyFeedbackTimer.Stop();
+            refreshTimer.Stop();
+            viewModel.ClearCopy();
+            pendingCopyRefresh=false;
+            historyPositions[historyFilterKey]=historyScroll.VerticalOffset;
+            historySnapshot=null;
+            visibleHistory.Clear();
+            closeSwipe=null;
+            list.Children.Clear();
+            copyBadges.Clear();
+            TrimThumbnailCache(3L*1024*1024,12);
+        };
         if(floating) {
             KeyDown+=(_,e)=>{if(e.Key==Key.Escape&&!e.Handled){
                 if(currentPage!=typeof(ClipboardPage))Navigate(typeof(ClipboardPage));
@@ -117,16 +132,16 @@ public sealed partial class LocalClipboardWindow:Window
             }};
         }
         PreviewMouseDown+=(_,e)=>{if(e.OriginalSource is not DependencyObject target)return;if(closeSwipe!=null&&!InsideClip(target))closeSwipe();if(search.IsKeyboardFocusWithin&&!InsideSearch(target)){Keyboard.ClearFocus();FocusManager.SetFocusedElement(this,null);}};
-        ApplyPalette();BuildHeader();BuildShell();Guard(()=>Refresh());
+        ApplyPalette();BuildHeader();BuildShell();
     }
     static bool InsideClip(DependencyObject target){for(var p=target;p!=null;p=p is Visual?VisualTreeHelper.GetParent(p):LogicalTreeHelper.GetParent(p))if(p is FrameworkElement f&&f.Tag as string=="clip")return true;return false;}
     bool InsideSearch(DependencyObject target){for(var p=target;p!=null;p=p is Visual?VisualTreeHelper.GetParent(p):LogicalTreeHelper.GetParent(p))if(ReferenceEquals(p,search))return true;return false;}
     void HostChanged(){if(IsVisible){if(copyFeedbackTimer.IsEnabled)pendingCopyRefresh=true;else{refreshTimer.Stop();refreshTimer.Start();}}RenderUpdates();}
     void RefreshIfVaultChanged()
     {
-        var snapshot=vault.Load();string revision=snapshot["revision"]!.GetValue<string>();
-        if(historySnapshot!=null&&revision==historyRevision){syncStatus.Text=host.Status+(host.HotkeyError.Length>0?" · "+host.HotkeyError:"");return;}
-        historyRevision=revision;historySnapshot=snapshot["entries"]!.AsArray();Refresh();
+        var snapshot=vault.LoadIfChanged(historySnapshot==null?null:historyRevision);
+        if(snapshot==null){syncStatus.Text=host.Status+(host.HotkeyError.Length>0?" · "+host.HotkeyError:"");return;}
+        RefreshHistory(true,snapshot);
     }
     public void FocusSearch(){Navigate(typeof(ClipboardPage));search.Focus();}
     public void OpenDevices()=>Sharing();
@@ -197,9 +212,16 @@ public sealed partial class LocalClipboardWindow:Window
     }
     void Refresh(bool reloadDevices=true)
     {
+        if(!IsVisible)return;
+        RefreshHistory(reloadDevices,reloadDevices||historySnapshot==null?vault.Load():null);
+    }
+
+    void RefreshHistory(bool reloadDevices,JsonObject? snapshot)
+    {
         syncStatus.Text=host.Status+(host.HotkeyError.Length>0?" · "+host.HotkeyError:"");
         JsonArray entries;
-        if(reloadDevices||historySnapshot==null){var snapshot=vault.Load();historyRevision=snapshot["revision"]!.GetValue<string>();entries=historySnapshot=snapshot["entries"]!.AsArray();}else entries=historySnapshot;
+        if(snapshot!=null){historyRevision=snapshot["revision"]!.GetValue<string>();historySnapshot=snapshot["entries"]!.AsArray();}
+        entries=historySnapshot!;
         string own=vault.Device()["id"]!.GetValue<string>();if(reloadDevices||categoryColors.Count==0){var definitions=categories.List(entries);categoryColors=definitions.ToDictionary(c=>c.Name,c=>c.Color);categoryIcons=definitions.ToDictionary(c=>c.Name,c=>c.Icon);}copyBadges.Clear();rendering=true;
         try{
             closeSwipe=null;
@@ -214,7 +236,7 @@ public sealed partial class LocalClipboardWindow:Window
             }
             foreach(var filterButton in sources.Children.OfType<Button>())DesignStates.SetIsSelected(filterButton,filterButton.Tag as string==source+"|"+kindFilter);
             historyCancellation.Cancel();historyCancellation.Dispose();historyCancellation=new();
-            historyPositions[historyFilterKey]=historyScroll.VerticalOffset;
+            if(list.Children.Count>0)historyPositions[historyFilterKey]=historyScroll.VerticalOffset;
             if(historyPositions.Count>32)historyPositions.Remove(historyPositions.Keys.First());
             string filterKey=source+"|"+kindFilter+"|"+viewModel.SearchText;
             double restore=historyPositions.GetValueOrDefault(filterKey);
@@ -224,10 +246,6 @@ public sealed partial class LocalClipboardWindow:Window
             AppendHistoryPage();
             // Restore prior scroll lazily; at most one page is appended per dispatcher turn.
             RestoreHistoryPosition(restore,historyCancellation.Token);
-            if(visible.Count>0) {
-                var predictionToken=historyCancellation.Token;
-                Dispatcher.BeginInvoke(new Action(()=>{if(!predictionToken.IsCancellationRequested)PrefetchAdjacentSource(entries,own);}),DispatcherPriority.ContextIdle);
-            }
             if(visible.Count==0)list.Children.Add(new TextBlock{Text=query.Length==0?"这里还没有记录":"没有匹配的记录",Foreground=muted,Margin=new(0,30,0,0),HorizontalAlignment=HorizontalAlignment.Center});
             UndoBar();
         }finally{rendering=false;}
@@ -237,12 +255,12 @@ public sealed partial class LocalClipboardWindow:Window
         if(visibleHistory.Count==0 || list.Children.Count>=visibleHistory.Count)return;
         int end=Math.Min(visibleHistory.Count,list.Children.Count+12);
         while(list.Children.Count<end)list.Children.Add(Card(visibleHistory[list.Children.Count],historyOwn));
-        var token=historyCancellation.Token;Dispatcher.BeginInvoke(new Action(()=>{if(!token.IsCancellationRequested)PrefetchNextHistoryImages(token);}),DispatcherPriority.ContextIdle);
+        var token=historyCancellation.Token;Dispatcher.BeginInvoke(new Action(()=>{if(!token.IsCancellationRequested)PrefetchNextHistoryImages(token);}),DispatcherPriority.ApplicationIdle);
     }
     void PrefetchNextHistoryImages(System.Threading.CancellationToken token)
     {
         int start=Math.Min(list.Children.Count,visibleHistory.Count);
-        foreach(var clip in visibleHistory.Skip(start).Take(8).Where(c=>ClipboardVault.Kind(c)=="image"))_=ThumbnailAsync(clip,token);
+        foreach(var clip in visibleHistory.Skip(start).Take(3).Where(c=>ClipboardVault.Kind(c)=="image"))_=ThumbnailAsync(clip,token);
     }
     void RestoreHistoryPosition(double offset,System.Threading.CancellationToken token)
     {
@@ -253,13 +271,6 @@ public sealed partial class LocalClipboardWindow:Window
             }
             historyScroll.ScrollToVerticalOffset(offset);
         }),DispatcherPriority.Background);
-    }
-    void PrefetchAdjacentSource(JsonArray entries,string own)
-    {
-        if(historyCancellation.IsCancellationRequested)return;
-        var next=entries.OfType<JsonObject>().Where(c=>ClipboardVault.Kind(c)=="image" &&
-            (source.Length==0 || c["source"]!["id"]!.GetValue<string>()!=source)).Take(2);
-        foreach(var clip in next)_=ThumbnailAsync(clip,historyCancellation.Token);
     }
     BitmapSource DecodeImage(byte[] bytes,int decodeWidth=0)
     {
@@ -355,12 +366,21 @@ public sealed partial class LocalClipboardWindow:Window
         return row;
     }
     FrameworkElement ActionLabel(string code,string label){var p=new StackPanel{VerticalAlignment=VerticalAlignment.Center,HorizontalAlignment=HorizontalAlignment.Center};p.Children.Add(Glyph(code));p.Children.Add(new TextBlock{Text=label,FontSize=13,HorizontalAlignment=HorizontalAlignment.Center,Margin=new(0,7,0,0)});return p;}
-    IEnumerable<string> UndoImageReferences()=>deleted?.Where(c=>ClipboardVault.Kind(c)=="image").Select(c=>c["imageRef"]?.GetValue<string>()??"").Where(x=>x.Length>0)??Array.Empty<string>();
-    void PruneImagesPreservingUndo(){try{vault.PruneOrphanedImages(UndoImageReferences());}catch{}}
-    void Delete(JsonObject clip){deleted=new List<JsonObject>{(JsonObject)clip.DeepClone()};Edit(clip["id"]!.GetValue<string>(),null);PruneImagesPreservingUndo();}
+    void DiscardUndo()
+    {
+        var previous=deleted;
+        deleted=null;
+        if(previous!=null)TryRemoveImages(previous);
+    }
+    void TryRemoveImages(IEnumerable<JsonObject> rows)
+    {
+        try{vault.RemoveUnreferencedImages(ClipboardVault.ImageReferences(rows));}
+        catch(IOException){}catch(UnauthorizedAccessException){}
+    }
+    void Delete(JsonObject clip){DiscardUndo();deleted=new List<JsonObject>{(JsonObject)clip.DeepClone()};Edit(clip["id"]!.GetValue<string>(),null);}
     void ClearUnprotectedHistory()
     {
-        deleted=null;viewModel.ClearHistoryCommand.Execute(null);UndoBar();syncStatus.Text=viewModel.StatusMessage;
+        DiscardUndo();viewModel.ClearHistoryCommand.Execute(null);UndoBar();syncStatus.Text=viewModel.StatusMessage;
     }
     void UndoBar()
     {
@@ -377,7 +397,7 @@ public sealed partial class LocalClipboardWindow:Window
             foreach(var item in missing.Take(500-clips.Count)){clips.Add(item.DeepClone());ids.Add(item["id"]!.GetValue<string>());}
             vault.Commit(snap["revision"]!.GetValue<string>(),clips);
             deleted=restore.Where(c=>!ids.Contains(c["id"]!.GetValue<string>())).ToList();int restored=restore.Count-deleted.Count;
-            PruneImagesPreservingUndo();Refresh();syncStatus.Text=deleted.Count==0?"已撤销":$"已恢复 {restored} 条；其余 {deleted.Count} 条可在腾出空间后继续撤销，固定和置顶记录已保留";
+            TryRemoveImages(victims);Refresh();syncStatus.Text=deleted.Count==0?"已撤销":$"已恢复 {restored} 条；其余 {deleted.Count} 条可在腾出空间后继续撤销，固定和置顶记录已保留";
         });DockPanel.SetDock(button,Dock.Right);row.Children.Add(button);row.Children.Add(new TextBlock{Text=restore.Count==1?"记录已删除":$"已清除 {restore.Count} 条记录",Foreground=muted,VerticalAlignment=VerticalAlignment.Center});undo.Child=row;
     }
     void Edit(string id,Action<JsonObject>? edit){var snap=vault.Load();var clips=snap["entries"]!.AsArray();var c=clips.OfType<JsonObject>().FirstOrDefault(n=>n["id"]!.GetValue<string>()==id);if(c==null)return;if(edit==null)clips.Remove(c);else{edit(c);c["updatedAt"]=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();}vault.Commit(snap["revision"]!.GetValue<string>(),clips);Refresh();}

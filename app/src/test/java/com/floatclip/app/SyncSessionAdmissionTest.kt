@@ -37,8 +37,8 @@ class SyncSessionAdmissionTest {
     private fun get(target: Any, name: String): Any = target.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(target)!!
     private fun set(target: Any, name: String, value: Any) { target.javaClass.getDeclaredField(name).apply { isAccessible = true }.set(target, value) }
     private fun events(service: ClipboardSyncService, key: String, replace: Boolean) =
-        service.javaClass.getDeclaredMethod("peerMessages", String::class.java, Boolean::class.javaPrimitiveType).apply { isAccessible = true }
-            .invoke(service, key, replace) as ShareSession.Events
+        service.javaClass.getDeclaredMethod("peerMessages", String::class.java, Boolean::class.javaPrimitiveType, String::class.java).apply { isAccessible = true }
+            .invoke(service, key, replace, if(replace) "lan" else "bluetooth") as ShareSession.Events
     private fun session(context: Context, events: ShareSession.Events) = ShareSession(
         ByteArrayInputStream(byteArrayOf()), ByteArrayOutputStream(), Closeable {}, File(context.cacheDir, "admission-test"), events, true)
     private open class EmptyEvents : ShareSession.Events {

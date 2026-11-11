@@ -85,14 +85,22 @@ class FileShelfTest {
             }finally{session.close()}
         }
     }
-    @Test fun nativeCardUsesTwelveDpCornersAndAlignsStatusToFilenameFirstLine(){
+    @Test fun nativeCardUsesTwelveDpCornersAndCentersItsIcons(){
         val controller=Robolectric.buildActivity(FileActivity::class.java).create().start().resume();val activity=controller.get();val density=activity.resources.displayMetrics.density
         try{val file=SharedFile("test","1".repeat(32),"a".repeat(64),"会议纪要与下一步安排.docx",62000,0,0,1,online=true);val method=FileActivity::class.java.getDeclaredMethod("card",SharedFile::class.java).apply{isAccessible=true};val view=method.invoke(activity,file) as ViewGroup
             view.measure(View.MeasureSpec.makeMeasureSpec((320*density).toInt(),View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));view.layout(0,0,view.measuredWidth,view.measuredHeight)
             val front=view.getChildAt(view.childCount-1);assertEquals(12*density,(front.background as GradientDrawable).cornerRadius,1f)
-            val status=descendants(front).filterIsInstance<ImageView>().single();val name=descendants(front).filterIsInstance<TextView>().single{it.text.toString()==file.name}
-            val s=android.graphics.Rect(0,0,status.width,status.height);val n=android.graphics.Rect(0,0,name.width,name.height);view.offsetDescendantRectToMyCoords(status,s);view.offsetDescendantRectToMyCoords(name,n)
-            assertTrue("status center=${s.exactCenterY()}, filename first line=${n.top+name.lineHeight/2f}, density=$density",kotlin.math.abs(s.exactCenterY()-(n.top+name.lineHeight/2f))<=4*density);assertTrue("card exceeds 320dp",view.measuredWidth<=320*density+1)
+            val icons=descendants(front).filterIsInstance<ImageView>()
+            assertEquals(2,icons.size)
+            val frontCenter=front.top+front.height/2f
+            icons.forEach { icon ->
+                val rect=android.graphics.Rect(0,0,icon.width,icon.height)
+                view.offsetDescendantRectToMyCoords(icon,rect)
+                assertTrue(kotlin.math.abs(rect.exactCenterY()-frontCenter)<=2*density)
+            }
+            val name=descendants(front).filterIsInstance<TextView>().single{it.text.toString()==file.name}
+            assertEquals(15*activity.resources.displayMetrics.scaledDensity,name.textSize,1f)
+            assertTrue("card exceeds 320dp",view.measuredWidth<=320*density+1)
         }finally{controller.pause().stop().destroy()}
     }
 }

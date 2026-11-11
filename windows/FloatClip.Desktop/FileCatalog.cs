@@ -34,6 +34,7 @@ public sealed class FileCatalog
     public string? Warning{get;private set;}
     public event Action? Changed;
     public Action<string?>? RequestConnection{get;set;}
+    internal Func<string,CancellationToken,Task<bool>>? PrepareTransport{get;set;}
     public FileCatalog(string root,string cache,Func<string,bool> allowed,Func<string,string> describe)
     {
         this.allowed=allowed;this.describe=describe;this.cache=Path.GetFullPath(cache);path=Path.Combine(root,"remote-file-catalog.json");Store=new FileShelfStore(Path.Combine(root,"file-shelf.json"));
@@ -82,7 +83,7 @@ public sealed class FileCatalog
         {
             var session=pair.Value.Session;
             var files=session.SupportsLargeFiles?entries:entries.Where(file=>file.size<=Wire.LegacyMaxFile).ToArray();
-            session.SendCatalog(Encode(new{v=1,op="list",largeFiles=true,files}));
+            session.SendCatalog(Encode(new{v=1,op="list",largeFiles=true,wifiDirectRole="host",files}));
         }
         catch{pair.Value.Session.Dispose();}
         Notify();
@@ -91,6 +92,7 @@ public sealed class FileCatalog
     {
         using var doc=JsonDocument.Parse(data);var root=doc.RootElement;if(root.GetProperty("v").GetInt32()!=1)throw new IOException("文件协议版本无效");string op=root.GetProperty("op").GetString()??"";
         if(op=="list"){
+            if(root.TryGetProperty("wifiDirectRole",out var direct)&&direct.ValueKind==JsonValueKind.String&&direct.GetString()=="client")link.Session.EnableWifiDirect();
             bool upgrade=!link.Session.SupportsLargeFiles&&root.TryGetProperty("largeFiles",out var capability)&&capability.ValueKind==JsonValueKind.True;
             var array=root.GetProperty("files");if(array.ValueKind!=JsonValueKind.Array||array.GetArrayLength()>MaximumShared)throw new IOException("文件目录过大");var incoming=new List<SharedFileItem>();
             foreach(var f in array.EnumerateArray()){var item=new SharedFileItem(peer,f.GetProperty("id").GetString()!,f.GetProperty("version").GetString()!,f.GetProperty("name").GetString()!,f.GetProperty("size").GetInt64(),f.GetProperty("modified").GetInt64(),f.GetProperty("created").GetInt64(),f.GetProperty("shared").GetInt64()){Online=true};Validate(item);if(incoming.Any(r=>r.Id==item.Id))throw new IOException("重复文件标识");incoming.Add(item);}
@@ -110,11 +112,19 @@ public sealed class FileCatalog
         if(IsLocal(item))return item.LocalPath;
         if(!allowed(item.Peer))throw new IOException("此设备共享已暂停");
         bool Ready(){lock(gate)return allowed(item.Peer)&&links.TryGetValue(item.Peer,out var active)&&!active.Session.IsClosed&&rows.TryGetValue(item.Key,out var row)&&row.Online;}
-        if(!Ready()){
+        async Task WaitForCatalog()
+        {
+            if(Ready())return;
             RequestConnection?.Invoke(item.Peer);
             long until=Environment.TickCount64+25000;
             while(!Ready()&&Environment.TickCount64<until)await Task.Delay(200,cancellation);
             if(!Ready())throw new IOException("未能连接来源设备，请检查蓝牙或连接同一 Wi-Fi / 热点");
+        }
+        await WaitForCatalog();
+        if(item.Size>=8L*1024*1024&&PrepareTransport!=null)
+        {
+            await PrepareTransport(item.Peer,cancellation);
+            await WaitForCatalog();
         }
         lock(gate){if(!rows.TryGetValue(item.Key,out var latest)||latest.Version!=item.Version)throw new IOException("源文件已变化，请重新选择");item=latest;}
         Link link;Pending pending;
@@ -125,8 +135,14 @@ public sealed class FileCatalog
             using var registration=cancellation.Register(()=>{Fail(link,"已取消下载");link.Session.Dispose();});
             using var watchdog=new Timer(_=>
             {
-                lock(gate){if(link.Pending!=pending||Environment.TickCount64-pending.ProgressAt<300000)return;}
-                Fail(link,"下载长时间无进度，可重新连接后重试");link.Session.Dispose();
+                lock(gate)
+                {
+                    if(link.Pending!=pending||Environment.TickCount64-pending.ProgressAt<300000)return;
+                    link.Pending=null;
+                    pending.Item.Error="下载长时间无进度，可重新连接后重试";
+                    pending.Completion.TrySetException(new IOException(pending.Item.Error));
+                }
+                link.Session.Dispose();
             },null,TimeSpan.FromSeconds(15),TimeSpan.FromSeconds(15));
             return await pending.Completion.Task;
         }

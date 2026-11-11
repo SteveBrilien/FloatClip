@@ -63,8 +63,8 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         render()
     }
     override fun onSaveInstanceState(out:Bundle){out.putInt("range",range);out.putBoolean("selecting",selecting);out.putStringArrayList("selected",ArrayList(selected));super.onSaveInstanceState(out)}
-    override fun onResume(){super.onResume();resumed=true;SyncRuntime.setObserver(this);worker.execute{repo.publish();SyncRuntime.current()?.requestFileConnection()};render();pendingHandoff?.let{pendingHandoff=null;it()}}
-    override fun onPause(){menu?.dismiss();resumed=false;SyncRuntime.clearObserver(this);super.onPause()}
+    override fun onResume(){super.onResume();resumed=true;SyncRuntime.setForeground(this);SyncRuntime.setObserver(this);worker.execute{repo.publish();SyncRuntime.current()?.requestFileConnection()};render();pendingHandoff?.let{pendingHandoff=null;it()}}
+    override fun onPause(){menu?.dismiss();resumed=false;SyncRuntime.clearForeground(this);SyncRuntime.clearObserver(this);super.onPause()}
     override fun onDestroy(){menu?.dismiss();canceled=true;active?.cancel(true);batchDialog?.dialog?.dismiss();detailSheet?.dismiss();main.removeCallbacksAndMessages(null);unregisterReceiver(receiver);worker.shutdownNow();super.onDestroy()}
     override fun onConfigurationChanged(config:Configuration){super.onConfigurationChanged(config);if(!busy)render()}
     override fun dispatchTouchEvent(event:android.view.MotionEvent):Boolean{if(event.actionMasked==android.view.MotionEvent.ACTION_DOWN)EntryGestureRow.closeOutside(event.rawX,event.rawY);return super.dispatchTouchEvent(event)}

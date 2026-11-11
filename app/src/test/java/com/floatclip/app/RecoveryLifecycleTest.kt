@@ -26,11 +26,12 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.LEGACY)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 class RecoveryLifecycleTest {
-    private fun service() : org.robolectric.android.controller.ServiceController<ClipboardOverlayService> {
+    private fun service(enabled:Boolean=true) : org.robolectric.android.controller.ServiceController<ClipboardOverlayService> {
         val context=RuntimeEnvironment.getApplication()
         context.getSharedPreferences("floatclip_overlay",Context.MODE_PRIVATE).edit().clear().commit()
         val prefs=OverlayPreferences(context)
         prefs.saveKeepAliveEnabled(false)
+        prefs.saveOverlayEnabled(enabled)
         org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true)
         java.io.File(context.filesDir,"floatclip_vault.bin").delete()
         return Robolectric.buildService(ClipboardOverlayService::class.java).create()
@@ -42,6 +43,13 @@ class RecoveryLifecycleTest {
     }
     private fun closePanel(service:ClipboardOverlayService) {
         service.javaClass.getDeclaredMethod("collapsePanel").apply { isAccessible=true }.invoke(service)
+    }
+    @Test fun delayedServiceStartCannotEnableAnOverlayTheUserTurnedOff() {
+        val owner=service(enabled=false)
+        try {
+            assertFalse(OverlayPreferences(owner.get()).overlayEnabled())
+            assertNull(field(owner.get(),"bubbleView"))
+        } finally { owner.destroy() }
     }
     @Test fun fortyImmediateOpenCloseCyclesRestoreVisibleTouchableBallWithoutWaitingForFrames() {
         val owner=service();val service=owner.get()

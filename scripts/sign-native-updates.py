@@ -8,10 +8,19 @@ root=Path(__file__).resolve().parents[1]
 parser=argparse.ArgumentParser()
 parser.add_argument('--key',type=Path,required=True)
 parser.add_argument('--source',type=Path,default=root/'updates/share-preview.json')
-parser.add_argument('--output',type=Path,default=root/'updates/native-updates.json')
+parser.add_argument('--output',type=Path)
+parser.add_argument('--key-id',default='floatclip-updates-20261023')
 parser.add_argument('--init-key',action='store_true')
 parser.add_argument('--days',type=int,default=90)
 args=parser.parse_args()
+legacy=args.key_id=='floatclip-updates-20261023'
+if not legacy and args.key_id!='floatclip-updates-20261112-v2':
+    parser.error('Unknown native update key id')
+trust=root/'updates'/('native-update-public.pem' if legacy else 'native-update-v2-public.pem')
+output=args.output or root/'updates'/('native-updates.json' if legacy else 'native-updates-v2.json')
+if not legacy and output.resolve()==(root/'updates/native-updates.json').resolve():
+    parser.error('The v2 key may not replace the legacy feed')
+
 if not args.key.exists():
     if not args.init_key:raise SystemExit('Signing key missing; use the existing release key, do not rotate it implicitly')
     args.key.parent.mkdir(parents=True,exist_ok=True)
@@ -20,11 +29,11 @@ if not args.key.exists():
         file.write(key.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption()))
 else:key=serialization.load_pem_private_key(args.key.read_bytes(),password=None)
 public=key.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo).decode()
-trust=root/'updates/native-update-public.pem'
-if trust.exists() and trust.read_text()!=public:raise SystemExit('Pinned public key mismatch: refusing an implicit signing-key change')
-trust.write_text(public)
+if (not trust.exists() and not legacy) or (trust.exists() and trust.read_text()!=public):
+    raise SystemExit('Pinned public key mismatch: refusing an implicit signing-key change')
+if legacy and not trust.exists():trust.write_text(public)
 b64=lambda data:base64.urlsafe_b64encode(data).rstrip(b'=')
-now=int(time.time());kid='floatclip-updates-20261023'
+now=int(time.time());kid=args.key_id
 release=json.loads(args.source.read_text(encoding='utf-8'))
 assert release['schema']==1 and release['channel']=='share-preview'
 tokens={}
@@ -34,16 +43,14 @@ for channel in ['share-preview','share-dev']:
     header={'alg':'RS256','kid':kid,'typ':'JOSE'}
     content=b64(json.dumps(header,separators=(',',':')).encode())+b'.'+b64(json.dumps(payload,ensure_ascii=False,separators=(',',':')).encode())
     tokens[channel]=(content+b'.'+b64(key.sign(content,padding.PKCS1v15(),hashes.SHA256()))).decode()
-args.output.write_text(json.dumps({'nativeUpdates':tokens},indent=2)+'\n',encoding='utf-8')
+output.write_text(json.dumps({'nativeUpdates':tokens},indent=2)+'\n',encoding='utf-8')
 web_metadata=root/'web/public/release.json'
-if web_metadata.exists():
+if legacy and web_metadata.exists():
     web=json.loads(web_metadata.read_text(encoding='utf-8'));web['nativeUpdates']=tokens
     # Keep native download buttons in sync with the signed train; retain the Web version.
     for platform in ('android','windows'):
         web.setdefault('versions',{})[platform]=release[platform]['version']
         web.setdefault('downloads',{})[platform]=copy.deepcopy(release[platform])
     web_metadata.write_text(json.dumps(web,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-(root/'windows/FloatClip.Desktop/UpdateTrust.cs').write_text('namespace FloatClip.Share;\ninternal static class UpdateTrust\n{\n    internal const string KeyId="'+kid+'";\n    internal const string PublicKey="""\n'+public+'""";\n}\n',encoding='utf-8')
 der=key.public_key().public_bytes(serialization.Encoding.DER,serialization.PublicFormat.SubjectPublicKeyInfo)
-(root/'nearby-probe/src/main/java/com/floatclip/probe/UpdateTrust.kt').write_text('package com.floatclip.probe\ninternal object UpdateTrust {\n    const val KEY_ID="'+kid+'"\n    const val PUBLIC_KEY="'+base64.b64encode(der).decode()+'"\n}\n',encoding='utf-8')
 print(json.dumps({'signedVersion':release['version'],'expiresAt':now+args.days*86400,'publicKeySha256':hashlib.sha256(der).hexdigest(),'channels':list(tokens)}))

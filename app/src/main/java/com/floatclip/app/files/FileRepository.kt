@@ -80,7 +80,7 @@ class FileRepository(private val context:Context):AutoCloseable {
         peers.forEach{link->runCatching{
             val files=JSONArray()
             local.filter{link.session.supportsLargeFiles()||it.size<=ShareWire.LEGACY_MAX_FILE}.forEach{files.put(encode(it))}
-            send(link,JSONObject().put("op","list").put("largeFiles",true).put("files",files))
+            send(link,JSONObject().put("op","list").put("largeFiles",true).put("wifiDirectRole",if(android.os.Build.VERSION.SDK_INT>=29)"client" else "").put("files",files))
         }.onFailure{link.session.close()}}
         changed()
     }
@@ -90,7 +90,7 @@ class FileRepository(private val context:Context):AutoCloseable {
         val link=synchronized(lock){links[peer]}?:return;if(!link.allowed())return
         val json=JSONObject(ShareWire.text(data));check(json.getInt("v")==1)
         when(json.getString("op")){
-            "list"->{val upgrade=json.optBoolean("largeFiles")&&!link.session.supportsLargeFiles();val list=json.getJSONArray("files");check(list.length()<=64);val parsed=(0 until list.length()).map{parse(list.getJSONObject(it),peer)};check(parsed.map{it.id}.distinct().size==parsed.size)
+            "list"->{if(json.optString("wifiDirectRole")=="host")link.session.enableWifiDirect();val upgrade=json.optBoolean("largeFiles")&&!link.session.supportsLargeFiles();val list=json.getJSONArray("files");check(list.length()<=64);val parsed=(0 until list.length()).map{parse(list.getJSONObject(it),peer)};check(parsed.map{it.id}.distinct().size==parsed.size)
                 synchronized(lock){
                     warning=""
                     rows.values.filter{it.peer==peer}.forEach{it.online=false}
@@ -111,7 +111,8 @@ class FileRepository(private val context:Context):AutoCloseable {
             else->throw IOException("文件清单操作无效")
         }
     }
-    fun download(row:SharedFile):CompletableFuture<File> {
+    fun download(row:SharedFile):CompletableFuture<File> = download(row,true)
+    private fun download(row:SharedFile,tryDirect:Boolean):CompletableFuture<File> {
         local(row)?.let{return CompletableFuture.completedFuture(it)}
         if(row.peer=="local")return failure("本机文件副本不可用，请重新添加")
         if(synchronized(lock){links[row.peer]?.let{!it.session.isClosed&&it.allowed()&&rows[row.key]?.online==true}!=true}) {
@@ -123,13 +124,25 @@ class FileRepository(private val context:Context):AutoCloseable {
                 val current=synchronized(lock){rows[row.key]?.takeIf{it.online&&links[row.peer]?.let{l->!l.session.isClosed&&l.allowed()}==true}}
                 if(current!=null) {
                     if(current.version!=row.version){result.completeExceptionally(IOException("源文件已变化，请重新选择"));return}
-                    val transfer=downloadConnected(current)
+                    val transfer=download(current,tryDirect)
                     result.whenComplete{_,_->if(result.isCancelled)transfer.cancel(true)}
                     transfer.whenComplete{file,error->if(error==null)result.complete(file) else result.completeExceptionally(error)}
                 } else if(System.nanoTime()>=until)result.completeExceptionally(IOException("未能连接来源设备，请检查蓝牙或连接同一 Wi-Fi / 热点"))
                 else deadlines.schedule({poll()},200,TimeUnit.MILLISECONDS)
             }
             poll();return result
+        }
+        if(tryDirect&&row.size>=8L*1024*1024) {
+            val setup=com.floatclip.app.sync.SyncRuntime.current()?.prepareDirectTransfer(row.peer)
+            if(setup!=null) {
+                val result=CompletableFuture<File>()
+                setup.whenComplete { _,_ -> if(!result.isDone) {
+                    val transfer=download(row,false)
+                    result.whenComplete{_,_->if(result.isCancelled)transfer.cancel(true)}
+                    transfer.whenComplete{file,error->if(error==null)result.complete(file) else result.completeExceptionally(error)}
+                } }
+                return result
+            }
         }
         return downloadConnected(row)
     }

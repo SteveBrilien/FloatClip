@@ -1,5 +1,6 @@
 package com.floatclip.app.sync
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
@@ -23,6 +24,10 @@ object SyncRuntime {
     }
     @Volatile private var runtime: WeakReference<ClipboardSyncService>?=null
     @Volatile private var observer: WeakReference<Observer>?=null
+    @Volatile private var foreground:WeakReference<Activity>?=null
+    internal fun setForeground(activity:Activity) {foreground=WeakReference(activity)}
+    internal fun clearForeground(activity:Activity) {if(foreground?.get()===activity)foreground=null}
+    internal fun foregroundActivity()=foreground?.get()?.takeIf{!it.isFinishing&&!it.isDestroyed}
     private val main=Handler(Looper.getMainLooper())
     fun attach(service: ClipboardSyncService){runtime=WeakReference(service)}
     fun detach(service: ClipboardSyncService){if(runtime?.get()===service)runtime=null}

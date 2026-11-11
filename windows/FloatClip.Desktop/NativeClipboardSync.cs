@@ -45,6 +45,17 @@ public sealed class NativeClipboardSync: IDisposable
     readonly ClipboardSyncEngine engine;
     readonly PairStore pairs;
     BluetoothSyncTransport? bluetooth;
+    readonly WifiDirectTransferHost directHost=new();
+    sealed class DirectAttempt(Guid id,Session control,CancellationToken lifetime)
+    {
+        public readonly Guid Id=id;
+        public readonly Session Control=control;
+        public readonly TaskCompletionSource<bool> Completion=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly CancellationTokenSource Cancel=CancellationTokenSource.CreateLinkedTokenSource(lifetime);
+    }
+    readonly ConcurrentDictionary<string,DirectAttempt> directAttempts=new();
+    readonly ConcurrentDictionary<string,long> directCooldowns=new();
+    readonly ConcurrentDictionary<string,byte> preparingDirectImage=new();
     readonly SemaphoreSlim wake=new(0,1);
     readonly ConcurrentDictionary<string,Link> links=new();
     readonly object linkGate=new();
@@ -87,6 +98,8 @@ public sealed class NativeClipboardSync: IDisposable
         Transfers=new DesktopTransfers(PeerName,FileAllowed);
         Files=new FileCatalog(root,cache,FileAllowed,PeerName);
         Files.RequestConnection=RequestFileConnection;
+        Files.PrepareTransport=PrepareDirectTransfer;
+        Transfers.PrepareTransport=PrepareDirectTransfer;
         if(!pairs.Corrupt)
         {
             // v1 Windows keyed sync peers by the Android TLS pin. PairStore v2 derives the
@@ -284,9 +297,105 @@ public sealed class NativeClipboardSync: IDisposable
         var snapshot=engine.Snapshot();
         return enabled&&ImageSharing&&snapshot.Enabled&&snapshot.Receive&&snapshot.Peers.TryGetValue(key,out var peer)&&peer.Enabled&&peer.Send&&peer.Device!=null&&pairs.GetByKey(key).Length==32;
     }
-    void TrySendImage(string key)
+    Task<bool> PrepareDirectTransfer(string key,CancellationToken cancellation)=BeginDirectTransfer(key,null).WaitAsync(cancellation);
+
+    Task<bool> BeginDirectTransfer(string key,Guid? requested)
     {
-        if(disposed||!enabled||!ImageSharing||!links.TryGetValue(key,out var link)||imageSending.ContainsKey(key))return;
+        if(directAttempts.TryGetValue(key,out var pending))return pending.Completion.Task;
+        if(!FileAllowed(key)||!links.TryGetValue(key,out var link)||link.Kind!="bluetooth"||
+            !link.Session.SupportsWifiDirect||link.Session.HasActiveFile||
+            (directCooldowns.TryGetValue(key,out long until)&&until>Environment.TickCount64))return Task.FromResult(false);
+        var attempt=new DirectAttempt(requested??Guid.NewGuid(),link.Session,OperationToken);
+        if(!directAttempts.TryAdd(key,attempt))
+        {
+            attempt.Cancel.Dispose();
+            return directAttempts.TryGetValue(key,out pending)?pending.Completion.Task:Task.FromResult(false);
+        }
+        directCooldowns[key]=Environment.TickCount64+90000;
+        _=Task.Run(async()=>
+        {
+            bool ready=false;
+            using var timeout=attempt.Cancel;
+            timeout.CancelAfter(TimeSpan.FromSeconds(48));
+            try
+            {
+                var session=await directHost.Open(cache,key,()=>FileAllowed(key)?pairs.GetByKey(key):null,offer=>
+                {
+                    var data=JsonSerializer.SerializeToUtf8Bytes(new{v=1,op="wifi-direct",phase="offer",id=attempt.Id.ToString("N"),ssid=offer.Ssid,password=offer.Password,port=offer.Port,address=offer.Address});
+                    attempt.Control.SendCatalog(data);
+                },ShowWifiOff,timeout.Token);
+                if(timeout.IsCancellationRequested||!FileAllowed(key))session.Dispose();
+                else
+                {
+                    AttachSession(key,session,"wifi-direct");
+                    while(!session.IsClosed&&ConnectionTransport(key)!="wifi-direct")await Task.Delay(100,timeout.Token);
+                    ready=!session.IsClosed&&ConnectionTransport(key)=="wifi-direct";
+                    if(ready)_=CloseDirectWhenIdle(session);
+                }
+            }
+            catch(Exception e)when(e is IOException or TimeoutException or OperationCanceledException or System.Net.Sockets.SocketException or System.Runtime.InteropServices.COMException)
+            {
+                SetStatus("Wi-Fi 直连未建立 · 继续使用已连接设备");
+            }
+            finally
+            {
+                directAttempts.TryRemove(key,out _);
+                if(!ready)SendDirectUnavailable(attempt.Control,attempt.Id);
+                attempt.Completion.TrySetResult(ready);
+            }
+        });
+        return attempt.Completion.Task;
+    }
+
+    async Task CloseDirectWhenIdle(Session session)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(60),lifetime.Token);
+            while(!session.IsClosed&&session.HasActiveFile)await Task.Delay(TimeSpan.FromSeconds(15),lifetime.Token);
+            session.Dispose();
+        }
+        catch(OperationCanceledException){session.Dispose();}
+    }
+
+    static void SendDirectUnavailable(Session session,Guid id)
+    {
+        try{session.SendCatalog(JsonSerializer.SerializeToUtf8Bytes(new{v=1,op="wifi-direct",phase="unavailable",id=id.ToString("N")}));}catch{ }
+    }
+
+    void DirectControl(string key,Session session,JsonElement message)
+    {
+        if(!session.SupportsWifiDirect||!FileAllowed(key)||!links.TryGetValue(key,out var link)||!ReferenceEquals(link.Session,session)||
+            !message.TryGetProperty("v",out var version)||!version.TryGetInt32(out int protocol)||protocol!=1||
+            !message.TryGetProperty("id",out var id)||!Guid.TryParseExact(id.GetString(),"N",out var request))return;
+        string? phase=message.TryGetProperty("phase",out var value)?value.GetString():null;
+        if(phase=="request")
+        {
+            var setup=BeginDirectTransfer(key,request);
+            if(setup.IsCompletedSuccessfully&&!setup.Result)SendDirectUnavailable(session,request);
+        }
+        else if(phase=="declined"&&directAttempts.TryGetValue(key,out var pending)&&pending.Id==request)
+            try{pending.Cancel.Cancel();}catch(ObjectDisposedException){ }
+    }
+
+    static void ShowWifiOff()
+    {
+        var dispatcher=System.Windows.Application.Current?.Dispatcher;
+        if(dispatcher==null)return;
+        dispatcher.BeginInvoke(new Action(()=>
+        {
+            var answer=System.Windows.MessageBox.Show("在此电脑上开启 Wi-Fi，即可重试直连。","FloatClip · Wi-Fi 直连",System.Windows.MessageBoxButton.OKCancel,System.Windows.MessageBoxImage.Information);
+            if(answer==System.Windows.MessageBoxResult.OK)try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-settings:network-wifi"){UseShellExecute=true});
+            }
+            catch(System.ComponentModel.Win32Exception){ }
+        }));
+    }
+
+    void TrySendImage(string key,bool allowDirect=true)
+    {
+        if(disposed||!enabled||!ImageSharing||!links.TryGetValue(key,out var link)||imageSending.ContainsKey(key)||preparingDirectImage.ContainsKey(key))return;
         ImagePending? pending;
         lock(imageGate)
         {
@@ -302,6 +411,15 @@ public sealed class NativeClipboardSync: IDisposable
         {
             var row=vault.FindImage(pending.ImageRef)??throw new IOException("待发送图片已删除");
             byte[] bytes=vault.ReadImage(row);
+            if(allowDirect&&bytes.Length>=1024*1024&&link.Kind=="bluetooth"&&link.Session.SupportsWifiDirect&&preparingDirectImage.TryAdd(key,0))
+            {
+                _=Task.Run(async()=>
+                {
+                    try{await BeginDirectTransfer(key,null);}
+                    finally{preparingDirectImage.TryRemove(key,out _);TrySendImage(key,false);}
+                });
+                return;
+            }
             if(!CryptographicOperations.FixedTimeEquals(SHA256.HashData(bytes),Convert.FromHexString(pending.Sha256)))throw new IOException("待发送图片已变化");
             ClipboardImageTransfer.ValidatePng(bytes,new(pending.Id,pending.CreatedAt,pending.Width,pending.Height));
             File.WriteAllBytes(path,bytes);
@@ -377,7 +495,7 @@ public sealed class NativeClipboardSync: IDisposable
         try
         {
             // An active text-only Bluetooth burst must not prevent a trusted LAN upgrade.
-            if(key!=null&&links.TryGetValue(key,out var current)&&current.Kind=="lan")return;
+            if(key!=null&&links.TryGetValue(key,out var current)&&current.Kind is "lan" or "wifi-direct")return;
             using var cancel=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token,cancellation);
             var session=await Task.Run(()=>Nearby.Connect(device,cache,pairs,verify,cancel.Token,persistent:true),cancel.Token);
             key=pairs.KeyForPin(pin)??throw new IOException("设备授权未保存");
@@ -391,7 +509,7 @@ public sealed class NativeClipboardSync: IDisposable
     void AttachSession(string key,Session session,string kind)
     {
         Trace("transport-admitted",new{kind});
-        int priority=kind=="lan"?2:1;
+        int priority=kind=="wifi-direct"?3:kind=="lan"?2:1;
         Link link;
         lock(linkGate)
         {
@@ -412,14 +530,25 @@ public sealed class NativeClipboardSync: IDisposable
             try
             {
                 engine.Accept(key,frame,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-                if(frame.Type==SyncProtocol.Hello&&engine.Snapshot().Peers.TryGetValue(key,out var peer)&&peer.Device!=null){pairs.RememberDevice(key,peer.Device);link.Ready=true;if(session.CatalogEnabled)Files.Publish(key);TrySendImage(key);Trace("hello-ready",new{kind,send=peer.Send,receive=peer.Receive,catalog=session.CatalogEnabled});SetStatus(ConnectedCount+" 台设备同步就绪 · "+(kind=="bluetooth"?"蓝牙加密连接":"局域网加密共享"));}
+                if(frame.Type==SyncProtocol.Hello&&engine.Snapshot().Peers.TryGetValue(key,out var peer)&&peer.Device!=null){pairs.RememberDevice(key,peer.Device);link.Ready=true;if(session.CatalogEnabled)Files.Publish(key);TrySendImage(key);Trace("hello-ready",new{kind,send=peer.Send,receive=peer.Receive,catalog=session.CatalogEnabled});SetStatus(ConnectedCount+" 台设备同步就绪 · "+(kind=="bluetooth"?"蓝牙加密连接":kind=="wifi-direct"?"Wi-Fi 直连":"局域网加密共享"));}
             }
             catch(PersistenceFailure){Remove(key,link);SetStatus("本机保存失败，内容尚未确认送达；存储恢复后将重试连接");Signal();}
             catch(Exception e){Trace("sync-rejected",new{error=e.GetType().Name});blocked[key]=0;Remove(key,link);SetStatus("设备身份或同步校验失败，请重新核对授权");}
         };
         session.Closed=()=>{Remove(key,link);Signal();};
         Transfers.Attach(key,session,kind);
-        if(session.CatalogEnabled)Files.Attach(key,session);
+        if(session.CatalogEnabled)
+        {
+            Files.Attach(key,session);
+            var catalog=session.Catalog;
+            session.Catalog=data=>
+            {
+                using var doc=JsonDocument.Parse(data);
+                var message=doc.RootElement;
+                if(message.TryGetProperty("op",out var op)&&op.GetString()=="wifi-direct")DirectControl(key,session,message);
+                else catalog?.Invoke(data);
+            };
+        }
         var catalogOffer=session.Offered;var catalogRejected=session.Rejected;var catalogFile=session.File;var catalogFailure=session.FileFailed;
         bool Active()=>enabled&&!disposed&&links.TryGetValue(key,out var current)&&ReferenceEquals(current,link)&&pairs.GetByKey(key).Length==32;
         session.Offered=offer=>{

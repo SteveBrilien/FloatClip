@@ -19,13 +19,16 @@ class ShareUpdatesTest {
         val token=JSONObject(String(data)).getJSONObject("nativeUpdates").getString("share-preview")
         return JSONObject(String(Base64.getUrlDecoder().decode(token.split('.')[1]))).getLong("issuedAt")
     }
+    private fun verifyLegacy(data:ByteArray, now:Long=issued(data)+1)=ShareUpdates.verifySigned(
+        data,now,"MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAsXW4FLhY9+7Mzp3TOrSy5Viq+6fC+g425k0khzgUTiXswWGXaCMPVnqtP0v1UwBQv9wt3TGsOqr5oHWJ4HgggS4EYU/ANi2eU/DO/3VOvlA55IjzlkstgAAVH1+MS9A+bGjERbFc6huDaM0rkOiTz44SX+N3ByxWXGwkUZa5rE3P4nDHCYVZcMvEWOtnPClUBE7DqX4nkOqpsyL1JewV3COsTpwh0uWy6b14njcZ35T97igQeaxXZgOegpnlBbDH4kj9GVkI+Z/lQxKrNpJwX+xICi4TWDGernA2UBnkFwcyx07YxyCrUmiTnS0oFMDTU0hSTMYbe2KzaZVmZMfA4ig5Bsax57eCaP+4PibOf/EoAPRJFdOpxOaVyR8OltgY1fUC2NdDEYvkYH+5w+h8VggrH9+s9p6yvuyr317pUo7BmJAYdY+BOe6AaYvSJgYipM8++AaFFFrlJAVlIkUS6OEK/ApnBTwlBJPsRg5VGmogxwpiVzKZcuEqx2EdI9itAgMBAAE=","floatclip-updates-20261023"
+    )
     private fun altered():ByteArray {
         val json=JSONObject(String(fixture()));val updates=json.getJSONObject("nativeUpdates");val token=updates.getString("share-preview").split('.').toMutableList()
         token[2]=(if(token[2][0]=='A') "B" else "A")+token[2].substring(1);updates.put("share-preview",token.joinToString("."));return json.toString().toByteArray()
     }
     private fun rejected(action:()->Unit) {try { action();fail("Invalid update metadata accepted") } catch(error:Exception) {assertFalse(error is org.junit.internal.AssumptionViolatedException)} }
     @Test fun signedPublicRelease() {
-        val release = ShareUpdates.parse(ShareUpdates.verifySigned(fixture(), issued(fixture()) + 1))
+        val release = ShareUpdates.parse(verifyLegacy(fixture()))
         assertEquals("0.7.1", release.version)
         assertEquals(14, release.build)
         assertEquals(ShareUpdates.PACKAGE, release.packageName)
@@ -33,25 +36,26 @@ class ShareUpdatesTest {
         assertTrue(release.bytes > 0)
     }
     @Test fun rejectsTamperedExpiredAndDevelopmentOnlyManifests() {
-        rejected { ShareUpdates.verifySigned(altered(), issued(fixture()) + 1) }
-        rejected { ShareUpdates.verifySigned(fixture(), issued(fixture()) + 366 * 86400) }
+        rejected { verifyLegacy(altered()) }
+        rejected { verifyLegacy(fixture(), issued(fixture()) + 366 * 86400) }
         val json = JSONObject(String(fixture()))
         val updates = json.getJSONObject("nativeUpdates")
         val development = updates.getString("share-dev")
         updates.remove("share-preview")
-        rejected { ShareUpdates.verifySigned(json.toString().toByteArray(), issued(fixture()) + 1) }
+        rejected { verifyLegacy(json.toString().toByteArray(), issued(fixture()) + 1) }
         updates.put("share-preview", development)
-        rejected { ShareUpdates.verifySigned(json.toString().toByteArray(), issued(fixture()) + 1) }
+        rejected { verifyLegacy(json.toString().toByteArray(), issued(fixture()) + 1) }
     }
     @Test fun primaryFailureUsesFallbackButSignatureFailureDoesNot() {
         var calls=0
-        val release=ShareUpdates.check(fetcher={calls++;if(calls==1)throw ShareUpdates.SourceUnavailable("HTTP 503");fixture()})
+        val release=ShareUpdates.check(fetcher={calls++;if(calls==1)throw ShareUpdates.SourceUnavailable("HTTP 503");fixture()},verify={verifyLegacy(it)})
         assertEquals(2,calls);assertEquals("0.7.1",release.version)
         calls=0;rejected { ShareUpdates.check(fetcher={calls++;altered()}) };assertEquals(1,calls)
         calls=0;rejected { ShareUpdates.check(fetcher={calls++;throw ShareUpdates.SourceUnavailable("offline")}) };assertEquals(2,calls)
     }
+    @Test fun rotatedClientRejectsTheLegacySigner() { rejected { ShareUpdates.verifySigned(fixture(),issued(fixture())+1) } }
     @Test fun validatesPackageIdentityUrlsAndPlatformVersion() {
-        val release=ShareUpdates.verifySigned(fixture(),issued(fixture())+1)
+        val release=verifyLegacy(fixture())
         release.put("version","9.9.9");assertEquals("0.7.1",ShareUpdates.parse(release).version)
         for(url in listOf("http://mcp.wmy-cloud.cn/x","https://mcp.wmy-cloud.cn@evil.test/x","https://evil.test/x","https://github.com:444/x")) {
             val copy=JSONObject(release.toString());copy.getJSONObject("android").put("url",url);rejected { ShareUpdates.parse(copy) }

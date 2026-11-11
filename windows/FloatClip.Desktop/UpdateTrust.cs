@@ -1,18 +1,18 @@
 namespace FloatClip.Share;
 internal static class UpdateTrust
 {
-    internal const string KeyId="floatclip-updates-20261023";
+    internal const string KeyId="floatclip-updates-20261112-v2";
     internal const string PublicKey="""
 -----BEGIN PUBLIC KEY-----
-MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAsXW4FLhY9+7Mzp3TOrSy
-5Viq+6fC+g425k0khzgUTiXswWGXaCMPVnqtP0v1UwBQv9wt3TGsOqr5oHWJ4Hgg
-gS4EYU/ANi2eU/DO/3VOvlA55IjzlkstgAAVH1+MS9A+bGjERbFc6huDaM0rkOiT
-z44SX+N3ByxWXGwkUZa5rE3P4nDHCYVZcMvEWOtnPClUBE7DqX4nkOqpsyL1JewV
-3COsTpwh0uWy6b14njcZ35T97igQeaxXZgOegpnlBbDH4kj9GVkI+Z/lQxKrNpJw
-X+xICi4TWDGernA2UBnkFwcyx07YxyCrUmiTnS0oFMDTU0hSTMYbe2KzaZVmZMfA
-4ig5Bsax57eCaP+4PibOf/EoAPRJFdOpxOaVyR8OltgY1fUC2NdDEYvkYH+5w+h8
-VggrH9+s9p6yvuyr317pUo7BmJAYdY+BOe6AaYvSJgYipM8++AaFFFrlJAVlIkUS
-6OEK/ApnBTwlBJPsRg5VGmogxwpiVzKZcuEqx2EdI9itAgMBAAE=
+MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAmKWdcbS3+3Zb571VSXlg
+GeISbqJ5KgpyyBA3WoWEoxYPq54J1So25OU4Ak3SlSF5EvZNxVSRkXJZtIpEXHCY
+yvakD9KdJPkchR3QBJ9FAUjJ6+vsporrM8l2ZEO3SUAZPYnOaIzpxhTRzevrziEg
+fJx3uIj5O/uyA/6gqmMXLNg625uiSvCwGGkYP01YqoG3AiZXOAH2IB03QXMYKUp1
+wXb/7lTxe6EsPwc7yGlSOuUihj5m/DgngXYpW3zBoXf12LgsK2tfvvXfw5j3jwwI
+CdhzTPIn6KWpyCg9E3ULPc0soiXOIxN53KvG1b8ntAJsWjdBmtAemXJjNKfGKIWF
+9P01OwZTj1mvNHZw0BbiSpQ8FDM7L3P4sCCqVZ5G08puwfBaAkIxfkA6R+iKt9ZT
+PWwGMTkHr3W/4Zcuc3g1hO9LWwckwn+M1YBMWg05cSA645d2JoErze+657xNrLJn
+KIajoAK+w2WDxaXNhqbds1MQp5Oq1ino325Ouy5DtJ4NAgMBAAE=
 -----END PUBLIC KEY-----
 """;
 }

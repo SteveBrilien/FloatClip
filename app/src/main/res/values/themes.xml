@@ -14,4 +14,8 @@
         <item name="android:activityCloseEnterAnimation">@anim/floatclip_activity_close_enter</item>
         <item name="android:activityCloseExitAnimation">@anim/floatclip_activity_close_exit</item>
     </style>
+    <style name="Theme.FloatClip.DirectConsent" parent="Theme.FloatClip">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
 </resources>

@@ -12,7 +12,7 @@ internal static class UpdateManifestVerifier
         if(value.Length>100000)throw new IOException("更新清单过大");
         string normalized=value.Replace('-','+').Replace('_','/');return Convert.FromBase64String(normalized.PadRight((normalized.Length+3)/4*4,'='));
     }
-    internal static byte[] Verify(byte[] data,string channel="share-preview",string? publicKey=null,long? now=null)
+    internal static byte[] Verify(byte[] data,string channel="share-preview",string? publicKey=null,long? now=null,string keyId=UpdateTrust.KeyId)
     {
         try
         {
@@ -21,7 +21,7 @@ internal static class UpdateManifestVerifier
             var parts=token.Split('.');if(parts.Length!=3)throw new IOException("更新清单签名格式无效");
             using var header=JsonDocument.Parse(Decode(parts[0]));
             if(header.RootElement.TryGetProperty("crit",out _)||header.RootElement.TryGetProperty("b64",out _))throw new IOException("更新清单使用了不受支持的签名扩展");
-            if(header.RootElement.GetProperty("alg").GetString()!="RS256"||header.RootElement.GetProperty("kid").GetString()!=UpdateTrust.KeyId||header.RootElement.GetProperty("typ").GetString()!="JOSE")throw new IOException("更新清单签名算法或密钥不受支持");
+            if(header.RootElement.GetProperty("alg").GetString()!="RS256"||header.RootElement.GetProperty("kid").GetString()!=keyId||header.RootElement.GetProperty("typ").GetString()!="JOSE")throw new IOException("更新清单签名算法或密钥不受支持");
             using var key=RSA.Create();key.ImportFromPem(publicKey??UpdateTrust.PublicKey);
             if(!key.VerifyData(Encoding.ASCII.GetBytes(parts[0]+"."+parts[1]),Decode(parts[2]),HashAlgorithmName.SHA256,RSASignaturePadding.Pkcs1))throw new IOException("更新清单签名校验失败");
             using var payload=JsonDocument.Parse(Decode(parts[1]));var root=payload.RootElement;long timestamp=now??DateTimeOffset.UtcNow.ToUnixTimeSeconds();

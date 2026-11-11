@@ -56,6 +56,24 @@ public final class CoreChecks {
             yes(Arrays.equals(data,Files.readAllBytes(ea.receivedFile.toPath())));
             eb.reject=true; ea.session.sendFile(source,"rejected.bin"); yes(ea.refused.await(5,TimeUnit.SECONDS)); ea.session.close(); eb.session.close();
         }
+        // The old endpoint must never receive a large offer. Once negotiated, stream past 64 MiB.
+        File large=temp.resolve("large.bin").toFile();
+        try(RandomAccessFile sparse=new RandomAccessFile(large,"rw")){sparse.setLength(LEGACY_MAX_FILE+65537);}
+        try(ServerSocket listener=new ServerSocket(0,1,InetAddress.getByName("127.0.0.1"))) {
+            Socket a=new Socket("127.0.0.1",listener.getLocalPort()),b=listener.accept(); Events ea=new Events(),eb=new Events();
+            try(ShareSession sender=new ShareSession(a,temp.resolve("large-a").toFile(),ea,true,true);
+                ShareSession receiver=new ShareSession(b,temp.resolve("large-b").toFile(),eb,true,true)) {
+                ea.session=sender;eb.session=receiver;
+                rejected(()->sender.sendFile(large,"large.bin"));
+                sender.enableLargeFiles();receiver.enableLargeFiles();sender.start();receiver.start();
+                sender.sendFile(large,"large.bin");
+                long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(25);
+                while(eb.receivedFile==null && System.nanoTime()<until) {
+                    if(eb.closed.await(20,TimeUnit.MILLISECONDS))throw new AssertionError("large transfer closed");
+                }
+                yes(eb.receivedFile!=null&&eb.receivedFile.length()==large.length());
+            }
+        }
         // A peer that disconnects partway through a file must leave no completed or partial object.
         try(ServerSocket listener=new ServerSocket(0,1,InetAddress.getByName("127.0.0.1"))) {
             Socket sender=new Socket("127.0.0.1",listener.getLocalPort()),receiver=listener.accept(); Events events=new Events();

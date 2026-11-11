@@ -87,12 +87,13 @@ class DeviceActivity : ShareActivity(),SyncRuntime.Observer {
     }
     override fun onResume(){
         super.onResume()
+        SyncRuntime.setForeground(this)
         SyncRuntime.setObserver(this)
         val enabled=SyncPreferences(this).enabled()
         if(!enabled)managedState(null,"共享已关闭，请在剪贴板设置中开启",false)
         SyncRuntime.refresh(this)
     }
-    override fun onPause(){SyncRuntime.clearObserver(this);syncDialog?.dismiss();syncDialog=null;super.onPause()}
+    override fun onPause(){SyncRuntime.clearForeground(this);SyncRuntime.clearObserver(this);syncDialog?.dismiss();syncDialog=null;super.onPause()}
     override fun changed(service: ClipboardSyncService){managedState(service.firstSession(),service.status,service.pairingOpen())}
     override fun verify(code: String,answer: Consumer<Boolean>) {
         syncDialog?.dismiss()

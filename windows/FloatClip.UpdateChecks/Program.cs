@@ -36,7 +36,7 @@ static class Program
                 Check((await ShareUpdates.CheckWithClient(validHttp,verify:data=>data)).Version=="0.8.0","update response parsed through actual request path");
             }
             using(var unavailable=new HttpClient(new CheckHandler((request,_)=>Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable){RequestMessage=request}))))await RejectMessage(()=>ShareUpdates.CheckWithClient(unavailable),"HTTP 503");
-            using(var detailed=new HttpClient(new CheckHandler((request,_)=>Task.FromResult(new HttpResponseMessage(request.RequestUri!.Host=="clip.wmy-cloud.cn"?HttpStatusCode.BadGateway:HttpStatusCode.ServiceUnavailable){RequestMessage=request})))){
+            using(var detailed=new HttpClient(new CheckHandler((request,_)=>Task.FromResult(new HttpResponseMessage(request.RequestUri!.AbsoluteUri==ShareUpdates.Feed?HttpStatusCode.BadGateway:HttpStatusCode.ServiceUnavailable){RequestMessage=request})))){
                 try{await ShareUpdates.CheckWithClient(detailed);throw new Exception("source errors discarded");}
                 catch(IOException error){Check(error.Message.Contains("公网更新源返回 HTTP 502")&&error.Message.Contains("GitHub 备用更新源返回 HTTP 503"),"failure reports retain both source diagnoses");}
             }
@@ -56,9 +56,12 @@ static class Program
             byte[] liveFixture=File.ReadAllBytes("updates/native-updates.json");
             using var fixtureEnvelope=JsonDocument.Parse(liveFixture);string fixtureToken=fixtureEnvelope.RootElement.GetProperty("nativeUpdates").GetProperty("share-preview").GetString()!;string rawPayload=fixtureToken.Split('.')[1].Replace('-','+').Replace('_','/');using var fixturePayload=JsonDocument.Parse(Convert.FromBase64String(rawPayload.PadRight((rawPayload.Length+3)/4*4,'=')));long fixtureTime=fixturePayload.RootElement.GetProperty("issuedAt").GetInt64()+1;
             var expectedFixture=ShareUpdates.Parse(System.Text.Encoding.UTF8.GetBytes(fixturePayload.RootElement.GetProperty("release").GetRawText()));
-            var verifiedFixture=ShareUpdates.Parse(UpdateManifestVerifier.Verify(liveFixture,now:fixtureTime));
-            Check(verifiedFixture==expectedFixture,"Python RS256 publication verifies with the compiled Windows public key and preserves the signed platform release");
-            await Reject(()=>Task.FromResult(UpdateManifestVerifier.Verify(liveFixture,now:DateTimeOffset.UtcNow.AddYears(2).ToUnixTimeSeconds())),"expired signature metadata rejected");
+            string legacyPublicKey=File.ReadAllText("updates/native-update-public.pem");
+            const string legacyKeyId="floatclip-updates-20261023";
+            var verifiedFixture=ShareUpdates.Parse(UpdateManifestVerifier.Verify(liveFixture,publicKey:legacyPublicKey,now:fixtureTime,keyId:legacyKeyId));
+            await Reject(()=>Task.FromResult(UpdateManifestVerifier.Verify(liveFixture,now:fixtureTime)),"rotated client rejects the legacy signer");
+            Check(verifiedFixture==expectedFixture,"Python RS256 publication verifies with the recorded legacy Windows public key and preserves the signed platform release");
+            await Reject(()=>Task.FromResult(UpdateManifestVerifier.Verify(liveFixture,now:DateTimeOffset.UtcNow.AddYears(2).ToUnixTimeSeconds(),publicKey:legacyPublicKey,keyId:legacyKeyId)),"expired signature metadata rejected");
             using(var rsa=RSA.Create(2048)) {
                 string B64(byte[] data)=>Convert.ToBase64String(data).TrimEnd('=').Replace('+','-').Replace('/','_');
                 byte[] Signed(string algorithm="RS256",string channel="share-preview",long? issued=null) {

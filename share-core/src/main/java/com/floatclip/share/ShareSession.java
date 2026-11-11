@@ -32,7 +32,7 @@ public final class ShareSession implements AutoCloseable {
     private final AtomicBoolean closed=new AtomicBoolean();
     private final boolean persistent;
     public final boolean catalogEnabled;
-    private volatile boolean largeFiles;
+    private volatile boolean largeFiles,wifiDirect;
     private volatile long lastRead=System.nanoTime();
     private final ExecutorService fileWorker=Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService timer=Executors.newSingleThreadScheduledExecutor();
@@ -78,6 +78,8 @@ public final class ShareSession implements AutoCloseable {
     public boolean isClosed(){return closed.get();}
     public boolean supportsLargeFiles(){return largeFiles;}
     public void enableLargeFiles(){if(catalogEnabled)largeFiles=true;}
+    public boolean supportsWifiDirect(){return wifiDirect;}
+    public void enableWifiDirect(){if(catalogEnabled)wifiDirect=true;}
     public boolean hasActiveFile(){synchronized(state){return incoming!=null || outgoing!=null;}}
     public void closeWhenIdle(java.util.concurrent.ScheduledExecutorService scheduler,long delaySeconds){
         scheduler.schedule(()->{if(isClosed())return;if(hasActiveFile())closeWhenIdle(scheduler,15);else close();},delaySeconds,TimeUnit.SECONDS);

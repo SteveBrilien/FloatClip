@@ -12,10 +12,10 @@ import javax.net.ssl.HttpsURLConnection
 
 /** One authenticated public manifest for both native clients; no account or clipboard data is sent. */
 internal object ShareUpdates {
-    const val BUILD = 40
+    const val BUILD = 50
     const val VERSION = "0.7.9"
-    const val FEED = "https://clip.wmy-cloud.cn/release.json"
-    const val FALLBACK_FEED = "https://raw.githubusercontent.com/SteveBrilien/FloatClip/main/updates/native-updates.json"
+    const val FEED = "https://raw.githubusercontent.com/SteveBrilien/FloatClip/native-updates-v2/updates/native-updates-v2.json"
+    const val FALLBACK_FEED = "https://cdn.jsdelivr.net/gh/SteveBrilien/FloatClip@native-updates-v2/updates/native-updates-v2.json"
     private const val PUBLIC_FEED_ID = "share-preview"
     const val PACKAGE = "com.floatclip.probe"
     const val SIGNER = "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c"
@@ -40,17 +40,18 @@ internal object ShareUpdates {
         fetcher:((String)->ByteArray)?=null,
         cancellation:CheckCancellation=CheckCancellation(),
         onSource:(String)->Unit={},
+        verify:(ByteArray)->JSONObject={ verifySigned(it) },
     ):Release {
         val failures=mutableListOf<String>()
         for(source in listOf(FEED,FALLBACK_FEED)) {
             cancellation.ensureActive()
-            val label=if(source==FEED)"公网更新源" else "GitHub 备用源"
+            val label=if(source==FEED)"公网更新源" else "GitHub CDN 备用源"
             onSource(label)
             val content=try { fetcher?.invoke(source) ?: fetch(source,cancellation) }
                 catch(error:SourceUnavailable) { failures+=label+"："+error.message;continue }
             cancellation.ensureActive()
             // A bad signature is a hard failure; it must never be hidden by another source.
-            return parse(verifySigned(content))
+            return parse(verify(content))
         }
         throw IOException("更新源暂不可用：\n"+failures.joinToString("\n"))
     }
@@ -75,14 +76,14 @@ internal object ShareUpdates {
         catch(error:IOException) { cancellation.ensureActive();throw SourceUnavailable("网络连接失败，请稍后重试",error) }
         finally { cancellation.detach(connection);connection.disconnect() }
     }
-    internal fun verifySigned(data:ByteArray,now:Long=System.currentTimeMillis()/1000,publicKey:String=UpdateTrust.PUBLIC_KEY):JSONObject {
+    internal fun verifySigned(data:ByteArray,now:Long=System.currentTimeMillis()/1000,publicKey:String=UpdateTrust.PUBLIC_KEY,keyId:String=UpdateTrust.KEY_ID):JSONObject {
         require(data.size<=131072) { "更新信息过大" }
         val token=JSONObject(String(data,Charsets.UTF_8)).getJSONObject("nativeUpdates").getString(PUBLIC_FEED_ID)
         val parts=token.split('.');require(parts.size==3) { "更新清单签名格式无效" }
         fun decode(value:String):ByteArray { require(value.length<=100000);return Base64.getUrlDecoder().decode(value) }
         val header=JSONObject(String(decode(parts[0]),Charsets.UTF_8))
         require(!header.has("crit") && !header.has("b64")) { "更新清单使用了不受支持的签名扩展" }
-        require(header.getString("alg")=="RS256" && header.getString("kid")==UpdateTrust.KEY_ID && header.getString("typ")=="JOSE") { "更新签名算法或密钥不受支持" }
+        require(header.getString("alg")=="RS256" && header.getString("kid")==keyId && header.getString("typ")=="JOSE") { "更新签名算法或密钥不受支持" }
         val key=KeyFactory.getInstance("RSA").generatePublic(X509EncodedKeySpec(Base64.getDecoder().decode(publicKey)))
         val verifier=Signature.getInstance("SHA256withRSA");verifier.initVerify(key);verifier.update((parts[0]+"."+parts[1]).toByteArray(Charsets.US_ASCII))
         require(verifier.verify(decode(parts[2]))) { "更新清单签名校验失败" }

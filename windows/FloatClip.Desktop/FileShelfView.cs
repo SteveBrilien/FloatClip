@@ -399,10 +399,10 @@ public sealed class FileShelfView:UserControl,IDisposable
         catch(Exception e){status.Text=token.IsCancellationRequested?"下载已取消；正在传输的设备会自动重连。":$"下载未完成：{e.Message}。已完成文件保留，可重新选择后重试。";}
         finally{timer.Stop();batchProgress.Visibility=Visibility.Collapsed;batch=null;token.Dispose();RefreshLocal();}
     }
-    void SendSelected()
+    async void SendSelected()
     {
         if(sync==null||localList.SelectedItem is not FileShelfRow row||!row.IsAvailable||peers.SelectedItem is not FilePeer peer)return;
-        try{var id=sync.Transfers.Send(peer.Key,row.Path);RefreshTransfers(id);status.Text="已发起文件传输；接收端需要确认。";}
+        try{var id=await sync.Transfers.SendAsync(peer.Key,row.Path);RefreshTransfers(id);status.Text="已发起文件传输；接收端需要确认。";}
         catch(Exception e){status.Text=e is IOException?e.Message:"文件发送未完成，请检查设备连接后重试。";}
     }
     void AcceptSelected(){if(sync==null||transferList.SelectedItem is not FileShelfRow row||row.TransferId is not Guid id)return;Run(()=>sync.Transfers.Accept(id));}
@@ -436,7 +436,7 @@ public sealed class FileShelfView:UserControl,IDisposable
     void ForwardSelected(FrameworkElement anchor)
     {
         if(localList.SelectedItem is not FileShelfRow row||!row.IsAvailable)return;
-        var menu=new ContextMenu();foreach(var peer in sync?.Transfers.Peers()??Array.Empty<FilePeer>()){var item=new MenuItem{Header="发送到 "+peer.Name};item.Click+=(_,_)=>Run(()=>sync!.Transfers.Send(peer.Key,row.Path));menu.Items.Add(item);}
+        var menu=new ContextMenu();foreach(var peer in sync?.Transfers.Peers()??Array.Empty<FilePeer>()){var item=new MenuItem{Header="发送到 "+peer.Name};item.Click+=async(_,_)=>{try{await sync!.Transfers.SendAsync(peer.Key,row.Path);}catch(Exception error){status.Text=error.Message;}};menu.Items.Add(item);}
         if(menu.Items.Count==0)menu.Items.Add(new MenuItem{Header="连接局域网设备后可转发",IsEnabled=false});menu.PlacementTarget=anchor;menu.IsOpen=true;
     }
     void ShowProperties()=>SetDetails(true,preview:false);

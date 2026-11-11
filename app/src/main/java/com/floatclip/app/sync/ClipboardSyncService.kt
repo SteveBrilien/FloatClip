@@ -33,6 +33,7 @@ import com.floatclip.share.ClipboardSync
 import com.floatclip.share.ClipboardImageTransfer
 import com.floatclip.share.ShareSession
 import com.floatclip.share.ShareWire
+import org.json.JSONObject
 import java.io.File
 import java.net.Inet4Address
 import java.net.NetworkInterface
@@ -59,6 +60,7 @@ class ClipboardSyncService: Service() {
     private var pendingImage: ClipboardImageSyncStorage.Pending?=null
     private var imageStorageHealthy=true
     private val imageSending=ConcurrentHashMap<String,UUID>()
+    private val preparingDirectImage=mutableSetOf<String>()
     private lateinit var clipboard: ClipboardManager
     private lateinit var networkManager: ConnectivityManager
     @Volatile private var paused=false
@@ -70,6 +72,28 @@ class ClipboardSyncService: Service() {
     private var backgroundCapture: com.floatclip.app.capture.BackgroundClipboardCapture?=null
     val backgroundCaptureConnected get()=backgroundCapture?.connected==true
     fun captureBootstrap()=if(!closing&&!paused&&prefs.enabled()&&prefs.backgroundCapture())backgroundCapture?.bootstrap() else null
+    private val directRuntime=lazy {
+        WifiDirectUpgrade(this,actor,
+            {peer->links[peer]?.takeIf{it.kind=="bluetooth"&&!it.session.isClosed&&authorized(peer)}?.session},
+            {peer->credentials.get(peer)?.token},
+            {peer,offer,token,failed,registered ->
+                runCatching {
+                    val messages=peerMessages(peer,true,"wifi-direct")
+                    WifiDirectTransferClient.join(this,offer,token,File(cacheDir,"sync-files"),messages,{ session ->
+                        if(closing){session.close()}
+                        else {
+                            messages.attached(session)
+                            session.start()
+                            session.closeWhenIdle(actor,60)
+                        }
+                    },failed)
+                }.onSuccess(registered).onFailure{failed()}
+            })
+    }
+    private val direct get()=directRuntime.value
+    internal fun prepareDirectTransfer(peer:String):java.util.concurrent.CompletableFuture<Boolean> = direct.prepare(peer)
+    internal fun continueDirectTransfer(peer:String,id:String) = direct.continueAttempt(peer,id)
+    internal fun declineDirectTransfer(peer:String,id:String) = direct.decline(peer,id)
     private var bluetooth: BluetoothSyncTransport?=null
     private var bluetoothPairing: BluetoothPairHost?=null
     private val trustListener=android.content.SharedPreferences.OnSharedPreferenceChangeListener { _,_ -> if(!closing)actor.execute {
@@ -95,7 +119,7 @@ class ClipboardSyncService: Service() {
     fun firstSession(): ShareSession?=links.values.firstOrNull()?.session
 
     private data class Queued(val frame: ShareWire.Frame,val sendGeneration: String,val receiveGeneration: String)
-    private inner class Link(val key: String,val session: ShareSession) {
+    private inner class Link(val key: String,val session: ShareSession,val kind:String) {
         private val writer=Executors.newSingleThreadExecutor()
         private val pending=ConcurrentHashMap<Int,Queued>()
         private val scheduled=AtomicBoolean()
@@ -333,17 +357,26 @@ class ClipboardSyncService: Service() {
         if(inFlight)closeLinksForOrdering(listOf(key))
     }
     private fun imageTemp(id:UUID,key:String)=File(File(cacheDir,"sync-files").apply{mkdirs()},"clipboard-"+id.toString().replace("-","")+"-"+key.take(12)+".png")
-    private fun trySendImage(key:String) {
+    private fun trySendImage(key:String,allowDirect:Boolean=true) {
         if(closing||paused||prefs.connectionsPaused()||!prefs.enabled()||!prefs.sending()||!prefs.imageSharing()||!imageStorageHealthy||imageSending.containsKey(key))return
         val link=links[key]?:return
         val pending=pendingImage?:return
         if(key !in currentImagePeers(System.currentTimeMillis()))return
         val peer=engine.peerViews().firstOrNull{it.key==key}
         if(peer==null||!peer.enabled||!peer.receive||!authorized(key)){dropImagePeer(key);return}
+        if(key in preparingDirectImage)return
         val path=imageTemp(pending.id,key)
         runCatching {
             val entry=library.findImage(pending.imageRef)?:error("待发送图片已删除")
             val bytes=library.readImage(entry)
+            if(allowDirect&&bytes.size>=1024*1024&&link.kind=="bluetooth"&&link.session.supportsWifiDirect()) {
+                preparingDirectImage.add(key)
+                prepareDirectTransfer(key).whenComplete { _,_ -> if(!closing)actor.execute {
+                    preparingDirectImage.remove(key)
+                    trySendImage(key,false)
+                } }
+                return
+            }
             val expected=pending.sha256.chunked(2).map{it.toInt(16).toByte()}.toByteArray()
             check(MessageDigest.isEqual(MessageDigest.getInstance("SHA-256").digest(bytes),expected)){"待发送图片已变化"}
             ClipboardImageTransfer.validatePng(bytes,ClipboardImageTransfer.Meta(pending.id,pending.createdAt,pending.width,pending.height))
@@ -433,7 +466,7 @@ class ClipboardSyncService: Service() {
         if(bluetooth!=null){bluetooth?.start();return}
         bluetooth=BluetoothSyncTransport(this,credentials,::authorized,
             {key->!closing&&!paused&&prefs.enabled()&&!prefs.connectionsPaused()&&prefs.reconnect()&&!links.containsKey(key)},
-            {key->peerMessages(key,false)},
+            {key->peerMessages(key,false,"bluetooth")},
             {message->if(!closing&&links.isEmpty())setStatus(message)}
         ).also{it.start()}
     }
@@ -478,18 +511,18 @@ class ClipboardSyncService: Service() {
         if(host.start())bluetoothPairing=host else host.close()
     }
 
-    private fun peerMessages(peer: String,replaceExisting: Boolean=true): ShareSession.Events {
+    private fun peerMessages(peer: String,replaceExisting: Boolean=true,kind:String="lan"): ShareSession.Events {
         val token=UUID.randomUUID()
         return object:ShareSession.Events {
             override fun attached(session: ShareSession){actor.execute {
                 if(closing||paused||!prefs.enabled()||prefs.connectionsPaused()||!authorized(peer)||session.isClosed||(!replaceExisting&&!prefs.reconnect())){session.close();return@execute}
                 val previous=links[peer]
-                if(previous!=null&&(!replaceExisting||previous.session.hasActiveFile())){session.close();return@execute}
+                if(previous!=null&&(!replaceExisting||previous.session.hasActiveFile()||previous.kind=="wifi-direct")){session.close();return@execute}
                 // Publish ownership only after admission. A rejected Bluetooth candidate
                 // must never invalidate callbacks belonging to the existing LAN session.
                 connectionTokens[peer]=token
                 if(previous!=null){FileRuntime.get(this@ClipboardSyncService).disconnected(peer,previous.session);links.remove(peer,previous);previous.close()}
-                links[peer]=Link(peer,session)
+                links[peer]=Link(peer,session,kind)
                 FileRuntime.get(this@ClipboardSyncService).attach(peer,session){!closing&&!paused&&!prefs.connectionsPaused()&&prefs.enabled()&&authorized(peer)&&connectionTokens[peer]==token&&engine.peerViews().none{it.key==peer&&!it.enabled}}
                 runCatching{configureEngine();engine.connected(peer);setStatus("${links.size} 台设备已连接 · 加密共享")}.onFailure{links.remove(peer)?.close();setStatus("设备授权状态未保存")}
             }}
@@ -498,12 +531,25 @@ class ClipboardSyncService: Service() {
                 if(frame.type==ClipboardSync.HELLO) {
                     engine.peerViews().firstOrNull{it.key==peer}?.let{credentials.rememberDevice(peer,it.device)}
                     FileRuntime.get(this@ClipboardSyncService).publish()
+                    if(kind=="wifi-direct")direct.ready(peer)
                     trySendImage(peer)
                     refreshUi()
                 }
             }.onFailure{links.remove(peer)?.close();setStatus("设备授权或同步校验失败，请重新核对")}}}
             override fun text(id: UUID,value: String,outgoing: Boolean)=Unit
-            override fun catalog(data:ByteArray){if(!closing)actor.execute{if(connectionTokens[peer]==token)runCatching{FileRuntime.get(this@ClipboardSyncService).catalog(peer,data)}.onFailure{links[peer]?.close();setStatus("文件清单校验失败，可重新连接后重试")}}}
+            override fun catalog(data:ByteArray) {
+                if(closing)return
+                actor.execute {
+                    if(connectionTokens[peer]!=token)return@execute
+                    runCatching {
+                        val json=JSONObject(ShareWire.text(data))
+                        val session=links[peer]?.session?:return@runCatching
+                        if(json.optString("op")=="wifi-direct")direct.receive(peer,session,json)
+                        else FileRuntime.get(this@ClipboardSyncService).catalog(peer,data)
+                    }.onFailure {links[peer]?.close();setStatus("文件清单校验失败，可重新连接后重试")}
+                }
+            }
+
             override fun offered(offer: ShareWire.Offer){
                 if(connectionTokens[peer]!=token)return
                 val image=ClipboardImageTransfer.tryParse(offer.name)
@@ -590,6 +636,7 @@ class ClipboardSyncService: Service() {
     override fun onDestroy(){
         backgroundCapture?.close();backgroundCapture=null
         closing=true;paused=true;pairRequest?.accept(false);pairRequest=null
+        if(directRuntime.isInitialized())direct.stop()
         trust.unregisterOnSharedPreferenceChangeListener(trustListener)
         clipboard.removePrimaryClipChangedListener(clipListener)
         if(registered){unregisterReceiver(hotspotReceiver);unregisterReceiver(bluetoothReceiver);runCatching{networkManager.unregisterNetworkCallback(networkCallback)}}

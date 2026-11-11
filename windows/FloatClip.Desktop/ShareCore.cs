@@ -75,7 +75,7 @@ public sealed class Session : IDisposable
     readonly Stream stream; readonly Action closeSocket; readonly string cache;
     readonly object writing=new(),state=new(); readonly Timer expiry;
     readonly bool persistent;
-    volatile bool largeFiles;
+    volatile bool largeFiles,wifiDirect;
     long lastRead=Environment.TickCount64;
     readonly Dictionary<Guid,(byte[] Hash,string Text)> pending=new();
     readonly Dictionary<Guid,byte[]> received=new(); readonly Queue<Guid> receivedOrder=new();
@@ -96,6 +96,8 @@ public sealed class Session : IDisposable
     public bool CatalogEnabled{get;}
     public bool SupportsLargeFiles=>largeFiles;
     public void EnableLargeFiles(){if(CatalogEnabled)largeFiles=true;}
+    public bool SupportsWifiDirect=>wifiDirect;
+    public void EnableWifiDirect(){if(CatalogEnabled)wifiDirect=true;}
     public bool IsClosed=>Volatile.Read(ref closed)!=0;
     public bool HasActiveFile{get{lock(state)return incoming!=null||outgoing!=null;}}
     public Session(Stream stream,Action closeSocket,string cache,bool persistent=false,bool catalog=false)

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using FloatClip.Share;
 
 namespace FloatClip.Desktop;
@@ -23,6 +25,7 @@ public sealed class DesktopTransfers
     readonly Func<string,string> peerName;
     readonly Func<string,bool> allowed;
     public event Action? Changed;
+    internal Func<string,CancellationToken,Task<bool>>? PrepareTransport{get;set;}
     public DesktopTransfers(Func<string,string> peerName,Func<string,bool>? allowed=null){this.peerName=peerName;this.allowed=allowed??(_=>true);}
     static bool Active(TransferPhase phase)=>phase is TransferPhase.Offered or TransferPhase.Preparing or TransferPhase.Transferring;
     void Notify(){try{Changed?.Invoke();}catch{/* Views cannot invalidate a completed transfer. */}}
@@ -42,11 +45,19 @@ public sealed class DesktopTransfers
         Notify();
     }
     void Trim(){foreach(var row in rows.Values.Where(r=>!Active(r.Phase)&&r.Path==null).Take(Math.Max(0,rows.Count-49)).ToArray())rows.Remove(row.Id);}
+    public async Task<Guid> SendAsync(string key,string path,CancellationToken cancellation=default)
+    {
+        var info=new FileInfo(path);
+        if(info.Exists&&info.Length>=8L*1024*1024&&PrepareTransport!=null)
+            await PrepareTransport(key,cancellation);
+        cancellation.ThrowIfCancellationRequested();
+        return Send(key,path);
+    }
     public Guid Send(string key,string path)
     {
         if(!allowed(key))throw new IOException("此设备的共享已暂停");
         var info=new FileInfo(path);if(!info.Exists||(info.Attributes&FileAttributes.ReparsePoint)!=0)throw new IOException("请选择普通文件");Wire.SafeName(info.Name);
-        Link link;Guid id=Guid.NewGuid();lock(gate){link=links.Values.Where(l=>l.Key==key&&(l.Transport=="lan"||l.Session.CatalogEnabled)).OrderByDescending(l=>l.Transport=="lan").FirstOrDefault()??throw new IOException("请先连接该设备的局域网或蓝牙文件通道");if(link.Active!=null)throw new IOException("请等待该设备的当前文件完成");Trim();rows[id]=new(id,peerName(key),info.Name,info.Length,0,true,TransferPhase.Preparing,"正在准备文件",null,path);link.Active=id;}
+        Link link;Guid id=Guid.NewGuid();lock(gate){link=links.Values.Where(l=>l.Key==key&&(l.Transport=="lan"||l.Session.CatalogEnabled)).OrderByDescending(l=>l.Transport=="wifi-direct"?2:l.Transport=="lan"?1:0).FirstOrDefault()??throw new IOException("请先连接该设备的局域网或蓝牙文件通道");if(link.Active!=null)throw new IOException("请等待该设备的当前文件完成");Trim();rows[id]=new(id,peerName(key),info.Name,info.Length,0,true,TransferPhase.Preparing,"正在准备文件",null,path);link.Active=id;}
         try{link.Session.SendFile(path,id);}catch{lock(gate){rows[id]=rows[id] with{Phase=TransferPhase.Failed,Message="文件未发送，请检查连接后重试"};link.Active=null;}Notify();throw;}Notify();return id;
     }
     Link Find(Guid id){lock(gate)return links.Values.FirstOrDefault(l=>l.Active==id)??throw new IOException("文件请求已结束");}

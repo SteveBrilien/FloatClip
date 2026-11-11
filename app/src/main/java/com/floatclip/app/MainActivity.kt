@@ -184,6 +184,7 @@ open class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        SyncRuntime.setForeground(this)
         if(updateAwaitingInstallPermission){
             updateAwaitingInstallPermission=false
             when(updateInstaller.installPending(requestPermission=false)){
@@ -215,6 +216,8 @@ open class MainActivity : Activity() {
         if(event.actionMasked==MotionEvent.ACTION_DOWN) EntryGestureRow.closeOutside(event.rawX,event.rawY)
         return super.dispatchTouchEvent(event)
     }
+    override fun onPause() { SyncRuntime.clearForeground(this);super.onPause() }
+
     override fun onDestroy() {
         prefetchTask?.let(prefetchHandler::removeCallbacks)
         updateCheck?.close();updateCheck=null
@@ -822,6 +825,7 @@ open class MainActivity : Activity() {
                 "悬浮窗" to "在系统的特殊应用权限中单独开启。允许后，FloatClip 可以在其他应用上方显示悬浮球和剪贴板。",
                 "无障碍（可选）" to "在系统无障碍设置中单独开启，用于执行你主动选择的文字粘贴，不用于识别屏幕内容。",
                 "网络与蓝牙" to "用于设备连接、共享和更新。Android 11 的已配对蓝牙通信无需弹窗；较新系统可能需要授予附近设备权限。",
+                "直连网络（可选）" to "首次使用 Wi-Fi 直连时，Android 需要位置权限来选择对方的网络。FloatClip 不读取定位结果。",
                 "前台服务与通知" to "在后台保持共享和悬浮窗运行，显示服务状态。通知可在系统设置中管理。",
                 "开机广播" to "按已开启的服务开关，在系统允许时恢复运行。",
                 "照片与文件" to "只读取你主动选择、分享或复制的项目。系统文件选择器仅授权所选文件或文件夹。",

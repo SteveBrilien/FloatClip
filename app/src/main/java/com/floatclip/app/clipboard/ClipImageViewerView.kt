@@ -24,6 +24,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.floatclip.app.R
 import com.floatclip.app.model.ClipEntry
+import com.floatclip.app.prefs.CategoryStore
 import com.floatclip.app.prefs.OverlayPreferences
 import com.floatclip.app.sync.ClipboardSyncService
 import com.floatclip.app.ui.ZoomImageView

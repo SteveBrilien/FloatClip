@@ -11,7 +11,7 @@ using System.Buffers.Binary;
 namespace FloatClip.Desktop;
 
 /** Local clipboard storage. Injected protection is used only by cross-platform model checks. */
-public sealed class ClipboardVault
+public sealed partial class ClipboardVault
 {
     readonly string directory,path,mutexName;
     string imageDirectory;
@@ -24,13 +24,15 @@ public sealed class ClipboardVault
     public const long MaximumBackupBytes=128L*1024*1024;
     static readonly uint[] PngCrcTable=CreatePngCrcTable();
     static uint[] CreatePngCrcTable(){var table=new uint[256];for(uint n=0;n<256;n++){uint crc=n;for(int bit=0;bit<8;bit++)crc=(crc>>1)^((crc&1)!=0?0xedb88320u:0);table[n]=crc;}return table;}
-    public ClipboardVault(string? directory=null,Func<byte[],byte[]>? protect=null,Func<byte[],byte[]>? unprotect=null,string? imageDirectoryOverride=null)
+    public ClipboardVault(string? directory=null,Func<byte[],byte[]>? protect=null,Func<byte[],byte[]>? unprotect=null,string? imageDirectoryOverride=null,string? recoveryDirectory=null)
     {
         this.directory=directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"FloatClip","Library");
         Directory.CreateDirectory(this.directory); imageDirectory=DesktopStoragePreferences.NormalizeDirectory(imageDirectoryOverride,Path.Combine(this.directory,"Images"));path=Path.Combine(this.directory,"clipboard.v1.bin");
         mutexName=(OperatingSystem.IsWindows()?"Local\\":"")+"FloatClipVault-"+Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(this.directory))))[..24];
         this.protect=protect??new Func<byte[],byte[]>(b=>ProtectedData.Protect(b,null,DataProtectionScope.CurrentUser));
         this.unprotect=unprotect??new Func<byte[],byte[]>(b=>ProtectedData.Unprotect(b,null,DataProtectionScope.CurrentUser));
+        this.recoveryDirectory=recoveryDirectory==null?null:Path.GetFullPath(recoveryDirectory);
+        CheckRecoverySeparation(imageDirectory);
     }
     T Locked<T>(Func<T> action)
     {
@@ -41,32 +43,45 @@ public sealed class ClipboardVault
     }
     public JsonObject Device()=>Locked(()=>{
         string file=Path.Combine(directory,"device-id.txt");string id;
+        if(!File.Exists(file)&&!File.Exists(path))RestoreMissingIndex();
         if(File.Exists(file)){id=File.ReadAllText(file).Trim();if(!Guid.TryParse(id,out _))throw new IOException("设备标识损坏，请保留本机数据");}
         else{id=Guid.NewGuid().ToString();File.WriteAllText(file,id);}
         return new JsonObject{["id"]=id,["name"]=Environment.MachineName,["platform"]="windows"};
     });
     JsonObject LoadCore()
     {
-        if(!File.Exists(path))
+        if(!File.Exists(path)&&!RestoreMissingIndex())
         {
+            if(snapshotLength>0)throw new IOException("本机剪贴板索引已消失，请检查恢复副本");
             var empty=new JsonObject{["revision"]="0",["entries"]=new JsonArray()};
-            memorySnapshot=(JsonObject)empty.DeepClone();snapshotLength=0;snapshotWriteTicks=0;return empty;
+            memorySnapshot=empty;snapshotLength=0;snapshotWriteTicks=0;return empty;
         }
         var info=new FileInfo(path);
         if(info.Length>MaximumBytes+65536)throw new IOException("本机剪贴板库过大，请保留数据");
         long writeTicks=info.LastWriteTimeUtc.Ticks;
         if(memorySnapshot!=null&&snapshotLength==info.Length&&snapshotWriteTicks==writeTicks)
-            return (JsonObject)memorySnapshot.DeepClone();
+            return memorySnapshot;
         byte[] cipher=File.ReadAllBytes(path);
+        var entries=DecodeIndex(cipher);
+        var loaded=new JsonObject{["revision"]=Convert.ToHexString(SHA256.HashData(cipher)),["entries"]=entries};
+        memorySnapshot=loaded;snapshotLength=info.Length;snapshotWriteTicks=writeTicks;
+        return loaded;
+    }
+    JsonArray DecodeIndex(byte[] cipher)
+    {
+        if(cipher.Length>MaximumBytes+65536)throw new IOException("本机剪贴板库过大，请保留数据");
         byte[] plain;
         try{plain=unprotect(cipher);}catch{throw new IOException("本机剪贴板无法解密，请保留数据并从备份恢复");}
         if(plain.Length>MaximumBytes)throw new IOException("本机剪贴板库过大，请保留数据");
-        var entries=JsonNode.Parse(plain) as JsonArray??throw new IOException("本机剪贴板格式无效");Validate(entries);
-        var loaded=new JsonObject{["revision"]=Convert.ToHexString(SHA256.HashData(cipher)),["entries"]=entries};
-        memorySnapshot=(JsonObject)loaded.DeepClone();snapshotLength=info.Length;snapshotWriteTicks=writeTicks;
-        return loaded;
+        var entries=JsonNode.Parse(plain) as JsonArray??throw new IOException("本机剪贴板格式无效");
+        Validate(entries);
+        return entries;
     }
-    public JsonObject Load()=>Locked(LoadCore);
+    public JsonObject Load()=>Locked(()=>(JsonObject)LoadCore().DeepClone());
+    public JsonObject? LoadIfChanged(string? revision)=>Locked(()=>{
+        var snapshot=LoadCore();
+        return snapshot["revision"]!.GetValue<string>()==revision?null:(JsonObject)snapshot.DeepClone();
+    });
     public JsonObject Commit(string revision,JsonArray entries)=>Locked(()=>{
         var current=LoadCore();if(current["revision"]!.GetValue<string>()!=revision)throw new IOException("VAULT_CONFLICT");
         Validate(entries);byte[] plain=Encoding.UTF8.GetBytes(entries.ToJsonString());if(plain.Length>MaximumBytes)throw new IOException("剪贴板库超过 16 MiB");
@@ -75,6 +90,7 @@ public sealed class ClipboardVault
         finally{if(File.Exists(temporary))File.Delete(temporary);}
         var result=new JsonObject{["revision"]=Convert.ToHexString(SHA256.HashData(cipher)),["entries"]=entries.DeepClone()};
         var info=new FileInfo(path);memorySnapshot=(JsonObject)result.DeepClone();snapshotLength=info.Length;snapshotWriteTicks=info.LastWriteTimeUtc.Ticks;
+        RequestRecoveryCheckpoint();
         return result;
     });
     public JsonObject AddText(string text,JsonObject? source=null)
@@ -83,12 +99,17 @@ public sealed class ClipboardVault
         for(int retry=0;;retry++){
             var snapshot=Load();var entries=(JsonArray)snapshot["entries"]!;long now=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var duplicate=entries.OfType<JsonObject>().FirstOrDefault(c=>Kind(c)=="text"&&c["text"]?.GetValue<string>()==text&&c["source"]?["id"]?.GetValue<string>()==source["id"]!.GetValue<string>());
+            JsonObject? evicted=null;
             if(duplicate!=null){duplicate["updatedAt"]=now;duplicate["source"]=source.DeepClone();}
             else{
-                if(entries.Count>=500){var remove=entries.OfType<JsonObject>().Where(c=>!IsPinned(c)&&!IsLocked(c)).OrderBy(c=>c["updatedAt"]!.GetValue<long>()).FirstOrDefault();if(remove==null)throw new IOException("剪贴板已满，请先整理固定或置顶记录");entries.Remove(remove);}
+                if(entries.Count>=500){evicted=entries.OfType<JsonObject>().Where(c=>!IsPinned(c)&&!IsLocked(c)).OrderBy(c=>c["updatedAt"]!.GetValue<long>()).FirstOrDefault();if(evicted==null)throw new IOException("剪贴板已满，请先整理固定或置顶记录");entries.Remove(evicted);}
                 entries.Add(new JsonObject{["id"]=Guid.NewGuid().ToString(),["kind"]="text",["text"]=text,["pinned"]=false,["locked"]=false,["category"]="未分类",["createdAt"]=now,["updatedAt"]=now,["source"]=source.DeepClone()});
             }
-            try{return Commit(snapshot["revision"]!.GetValue<string>(),entries);}catch(IOException e)when(e.Message=="VAULT_CONFLICT"&&retry<3){}
+            try{
+                var committed=Commit(snapshot["revision"]!.GetValue<string>(),entries);
+                if(evicted!=null)RemoveUnreferencedImages(ImageReferences(new[]{evicted}));
+                return committed;
+            }catch(IOException e)when(e.Message=="VAULT_CONFLICT"&&retry<3){}
         }
     }
     public static string Kind(JsonObject entry)=>entry["kind"]?.GetValue<string>()??"text";
@@ -128,6 +149,7 @@ public sealed class ClipboardVault
 
     public void SetImageDirectory(string target)=>Locked(()=>{
         target=DesktopStoragePreferences.NormalizeDirectory(target,imageDirectory);
+        CheckRecoverySeparation(target);
         string prior=Path.GetFullPath(imageDirectory);
         if(string.Equals(prior,target,StringComparison.OrdinalIgnoreCase))return true;
         Directory.CreateDirectory(target);
@@ -205,9 +227,15 @@ public sealed class ClipboardVault
                 // A new copy is also a recovery opportunity for an interrupted or damaged blob write.
                 bool repair=false;try{ReadImage(duplicate);}catch(IOException){repair=true;}
                 string? repairedRef=null;
+                string previousRef=duplicate["imageRef"]!.GetValue<string>();
                 if(repair){repairedRef=Guid.NewGuid().ToString("N");WriteImageBlob(repairedRef,pngBytes);duplicate["imageRef"]=repairedRef;}
                 duplicate["updatedAt"]=now;duplicate["imageBytes"]=(long)pngBytes.Length;duplicate["imageWidth"]=(long)width;duplicate["imageHeight"]=(long)height;
-                try{return Commit(snapshot["revision"]!.GetValue<string>(),entries);}
+                try{
+                    var committed=Commit(snapshot["revision"]!.GetValue<string>(),entries);
+                    if(repairedRef!=null&&!ImageReferences(entries.OfType<JsonObject>()).Contains(previousRef,StringComparer.OrdinalIgnoreCase))
+                        DeleteImageBlob(previousRef);
+                    return committed;
+                }
                 catch(IOException e)when(e.Message=="VAULT_CONFLICT"&&retry<3){if(repairedRef!=null)DeleteImageBlob(repairedRef);}
                 catch{if(repairedRef!=null)DeleteImageBlob(repairedRef);throw;}
                 continue;
@@ -259,13 +287,14 @@ public sealed class ClipboardVault
             }
             var previous=entries.OfType<JsonObject>().FirstOrDefault(c=>Kind(c)=="image"&&c["imageSha256"]?.GetValue<string>()==hash&&c["source"]?["id"]?.GetValue<string>()==source.Id.ToString());
             JsonObject row;string imageRef;bool fresh=previous==null;
+            JsonObject? evicted=null;
             if(previous!=null){row=(JsonObject)previous.DeepClone();imageRef=row["imageRef"]!.GetValue<string>();entries.Remove(previous);}
             else
             {
                 if(entries.Count>=500)
                 {
-                    var removable=entries.OfType<JsonObject>().Where(c=>!IsPinned(c)&&!IsLocked(c)).OrderBy(c=>c["updatedAt"]!.GetValue<long>()).FirstOrDefault()??throw new IOException("固定和置顶记录已满");
-                    entries.Remove(removable);
+                    evicted=entries.OfType<JsonObject>().Where(c=>!IsPinned(c)&&!IsLocked(c)).OrderBy(c=>c["updatedAt"]!.GetValue<long>()).FirstOrDefault()??throw new IOException("固定和置顶记录已满");
+                    entries.Remove(evicted);
                 }
                 imageRef=Guid.NewGuid().ToString("N");row=new JsonObject{["kind"]="image",["text"]="图片",["pinned"]=false,["locked"]=false,["category"]="未分类"};
             }
@@ -273,9 +302,12 @@ public sealed class ClipboardVault
             row["id"]=key;row["imageRef"]=imageRef;row["imageSha256"]=hash;row["imageBytes"]=(long)pngBytes.Length;
             row["imageWidth"]=(long)width;row["imageHeight"]=(long)height;row["mimeType"]="image/png";
             row["createdAt"]=previous?["createdAt"]?.GetValue<long>()??createdAt;row["updatedAt"]=now;row["source"]=sourceJson.DeepClone();entries.Add(row);
-            try{return Commit(snapshot["revision"]!.GetValue<string>(),entries);}
-            catch(IOException e)when(e.Message=="VAULT_CONFLICT"&&retry<3){if(fresh)DeleteImageBlob(imageRef);}
+            JsonObject committed;
+            try{committed=Commit(snapshot["revision"]!.GetValue<string>(),entries);}
+            catch(IOException e)when(e.Message=="VAULT_CONFLICT"&&retry<3){if(fresh)DeleteImageBlob(imageRef);continue;}
             catch{if(fresh)DeleteImageBlob(imageRef);throw;}
+            if(evicted!=null)RemoveUnreferencedImages(ImageReferences(new[]{evicted}));
+            return committed;
         }
     }
 
@@ -285,7 +317,16 @@ public sealed class ClipboardVault
         string imageRef=entry["imageRef"]?.GetValue<string>()??throw new IOException("图片引用缺失");
         string expected=entry["imageSha256"]?.GetValue<string>()??throw new IOException("图片校验信息缺失");
         if(expected.Length!=64||!System.Text.RegularExpressions.Regex.IsMatch(expected,"^[0-9a-f]{64}$"))throw new IOException("图片校验信息无效");
-        string file=ImagePath(imageRef);if(new FileInfo(file).Length>MaximumImageBytes+65536)throw new IOException("图片存储大小无效");byte[] cipher=File.ReadAllBytes(file);
+        string file=ImagePath(imageRef);
+        if(!File.Exists(file)&&recoveryDirectory!=null)
+            return Locked(()=>File.Exists(file)?DecodeImageBlob(file,entry,expected):RestoreMissingImage(file,entry,expected));
+        return DecodeImageBlob(file,entry,expected);
+    }
+
+    byte[] DecodeImageBlob(string file,JsonObject entry,string expected)
+    {
+        if(new FileInfo(file).Length>MaximumImageBytes+65536)throw new IOException("图片存储大小无效");
+        byte[] cipher=File.ReadAllBytes(file);
         byte[] bytes;try{bytes=unprotect(cipher);}catch{throw new IOException("图片无法解密，请保留本机数据");}
         if(bytes.Length!=entry["imageBytes"]!.GetValue<long>()||!CryptographicOperations.FixedTimeEquals(SHA256.HashData(bytes),Convert.FromHexString(expected)))throw new IOException("图片校验失败，请保留本机数据");
         ValidatePng(bytes,checked((int)entry["imageWidth"]!.GetValue<long>()),checked((int)entry["imageHeight"]!.GetValue<long>()));
@@ -358,27 +399,31 @@ public sealed class ClipboardVault
             var removed=entries.OfType<JsonObject>().Where(c=>!IsPinned(c)&&!IsLocked(c)).ToList();
             if(removed.Count==0)return 0;
             foreach(var entry in removed)entries.Remove(entry);
-            try{Commit(snapshot["revision"]!.GetValue<string>(),entries);return removed.Count;}
+            try{
+                Commit(snapshot["revision"]!.GetValue<string>(),entries);
+                RemoveUnreferencedImages(ImageReferences(removed));
+                return removed.Count;
+            }
             catch(IOException e)when(e.Message=="VAULT_CONFLICT"&&retry<3){}
         }
     }
 
-    /** Remove stale image blobs only at process startup, when no in-memory undo can reference them. */
-    public void PruneOrphanedImages(IEnumerable<string>? preserveReferences=null)
+    /** Only remove candidates from a successful, explicit edit or eviction. */
+    public void RemoveUnreferencedImages(IEnumerable<string> candidates)
     {
+        var references=candidates.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        if(references.Length==0)return;
         Locked(()=>{
-            var entries=Load()["entries"]!.AsArray().OfType<JsonObject>().ToList();
-            var referenced=new HashSet<string>(entries.Where(c=>Kind(c)=="image").Select(c=>c["imageRef"]?.GetValue<string>()??"").Where(x=>x.Length>0).Select(NormalizeImageRef));
-            if(preserveReferences!=null)foreach(string value in preserveReferences)try{referenced.Add(NormalizeImageRef(value));}catch{}
-            foreach(string file in Directory.EnumerateFiles(imageDirectory))
-            {
-                string extension=Path.GetExtension(file),name=Path.GetFileNameWithoutExtension(file);
-                bool staleTemporary=extension==".tmp"&&File.GetLastWriteTimeUtc(file)<DateTime.UtcNow.AddDays(-1);
-                if(staleTemporary||extension==".bin"&&!referenced.Contains(name))try{File.Delete(file);}catch{}
-            }
+            if(!File.Exists(path))return false;
+            var referenced=ImageReferences(LoadCore()["entries"]!.AsArray().OfType<JsonObject>()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach(string reference in references)
+                if(!referenced.Contains(reference))DeleteImageBlob(reference);
             return true;
         });
     }
+
+    internal static IEnumerable<string> ImageReferences(IEnumerable<JsonObject> rows)=>
+        rows.Where(row=>Kind(row)=="image").Select(row=>NormalizeImageRef(row["imageRef"]!.GetValue<string>()));
 
     public static void Validate(JsonArray entries)
     {
@@ -394,14 +439,19 @@ public sealed class ClipboardVault
             long now=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var row=previous==null?new JsonObject{["kind"]="text",["pinned"]=false,["locked"]=false,["category"]="未分类",["createdAt"]=now}:(JsonObject)previous.DeepClone();
             if(previous!=null)entries.Remove(previous);
+            JsonObject? evicted=null;
             if(entries.Count>=500)
             {
-                var removable=entries.OfType<JsonObject>().Where(c=>!IsPinned(c)&&!IsLocked(c)).OrderBy(c=>c["updatedAt"]!.GetValue<long>()).FirstOrDefault()??throw new IOException("固定和置顶记录已满");
-                entries.Remove(removable);
+                evicted=entries.OfType<JsonObject>().Where(c=>!IsPinned(c)&&!IsLocked(c)).OrderBy(c=>c["updatedAt"]!.GetValue<long>()).FirstOrDefault()??throw new IOException("固定和置顶记录已满");
+                entries.Remove(evicted);
             }
             row["id"]=key;row["text"]=entry.Text;row["updatedAt"]=now;
             row["source"]=new JsonObject{["id"]=entry.Source.Id.ToString(),["name"]=entry.Source.Name,["platform"]=entry.Source.Platform};entries.Add(row);
-            try{Commit(snapshot["revision"]!.GetValue<string>(),entries);return;}catch(IOException e)when(e.Message=="VAULT_CONFLICT"&&retry<3){}
+            try{
+                Commit(snapshot["revision"]!.GetValue<string>(),entries);
+                if(evicted!=null)RemoveUnreferencedImages(ImageReferences(new[]{evicted}));
+                return;
+            }catch(IOException e)when(e.Message=="VAULT_CONFLICT"&&retry<3){}
         }
     }
     static void ValidateEntries(JsonArray entries)

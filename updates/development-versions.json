@@ -8,8 +8,8 @@
     },
     "windows": {
       "version": "0.7.9",
-      "build": 42,
-      "review": "docs/IMAGE_SETTINGS_BUILD42_2026-11-06.md"
+      "build": 44,
+      "review": "docs/WINDOWS_RECOVERY_BUILD44_2026-11-10.md"
     }
   }
 }

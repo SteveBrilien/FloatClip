@@ -81,7 +81,7 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
                 setPadding(dp(12),dp(10),dp(markerWidth),dp(30))
             }
             val label=TextView(context).apply {
-                text="${entry.imageWidth} × ${entry.imageHeight} · ${if(longImage) "长图 · 点击展开" else "点击预览"}"
+                text=entry.imageNote.ifBlank { "${entry.imageWidth} × ${entry.imageHeight} · ${if(longImage) "长图 · 点击展开" else "点击预览"}" }
                 textSize=12f;maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END
                 setTextColor(foreground);alpha=.72f;setPadding(dp(14),0,dp(markerWidth),dp(9))
             }

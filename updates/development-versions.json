@@ -3,8 +3,8 @@
   "platforms": {
     "android": {
       "version": "0.7.9",
-      "build": 43,
-      "review": "docs/SETTINGS_ROLLBACK_BUILD43_2026-11-06.md"
+      "build": 49,
+      "review": "docs/ANDROID_BUILD49_RECOVERY.md"
     },
     "windows": {
       "version": "0.7.9",

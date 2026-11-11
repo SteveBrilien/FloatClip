@@ -36,6 +36,8 @@ object ClipboardImages {
     private val thumbnails=object:android.util.LruCache<String,Bitmap>(8*1024*1024) {
         override fun sizeOf(key:String,value:Bitmap)=value.allocationByteCount
     }
+    fun trimThumbnailsForStandby() = thumbnails.trimToSize(2 * 1024 * 1024)
+
     fun captureAsync(context:Context,clip:ClipData,store:ClipStore,done:(Result<ClipEntry?>)->Unit) {
         captures.execute { val result=runCatching { capture(context,clip,store) };main.post { done(result) } }
     }
@@ -134,6 +136,12 @@ object ClipboardImages {
     }
 
     private val copies=java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task,"FloatClip image copy").apply {isDaemon=true} }
+    fun isPrimaryImage(context: Context, clipboard: ClipboardManager, entry: ClipEntry): Boolean = runCatching {
+        if (clipboard.primaryClipDescription?.hasMimeType("image/*") != true) return@runCatching false
+        val clip = clipboard.primaryClip ?: return@runCatching false
+        clip.itemCount > 0 && ClipboardImageProvider.reference(clip.getItemAt(0).uri, context.packageName) == entry.imageRef
+    }.getOrDefault(false)
+
     private fun publishCopy(context:Context,entry:ClipEntry) {
         ClipboardWrites.writeImage(context,context.getSystemService(ClipboardManager::class.java),ClipboardImageProvider.uri(context.packageName,entry.imageRef))
         com.floatclip.app.sync.SyncRuntime.userCopiedImage(context,entry)

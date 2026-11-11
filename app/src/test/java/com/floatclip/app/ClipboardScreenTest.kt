@@ -35,13 +35,15 @@ class ClipboardScreenTest {
         }
         try {
             activity.findViewById<View>(R.id.clipboard_settings).performClick()
+            assertFalse(views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>()
+                .any { it.text.toString() in listOf("检查更新", "更新通道") })
             click("关于")
             val labels=views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().map{it.text.toString()}
             assertTrue(labels.contains("FloatClip"));assertTrue(labels.any {it.contains(" · build ")})
+            assertTrue(labels.contains("检查更新"))
             click("权限声明")
             assertTrue(views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().any {it.text.toString().contains("你主动选择的文字粘贴")})
             activity.findViewById<View>(R.id.clipboard_back).performClick()
-            click("关于")
             click("开源组件")
             click("Kotlin 标准库")
             assertTrue(views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().any {it.text.toString().contains("Apache License")&&it.isTextSelectable})

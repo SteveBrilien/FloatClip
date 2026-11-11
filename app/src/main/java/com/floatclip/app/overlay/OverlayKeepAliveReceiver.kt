@@ -39,7 +39,7 @@ object OverlayKeepAliveScheduler {
             PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         alarm.setAndAllowWhileIdle(
-            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+            AlarmManager.ELAPSED_REALTIME,
             SystemClock.elapsedRealtime() + RESTART_DELAY_MS,
             pending,
         )

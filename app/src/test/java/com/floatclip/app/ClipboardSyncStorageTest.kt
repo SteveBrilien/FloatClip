@@ -9,7 +9,6 @@ import com.floatclip.app.sync.SyncPreferences
 import com.floatclip.app.sync.SyncPolicy
 import com.floatclip.app.sync.TrustedPeerStore
 import com.floatclip.app.prefs.UpdatePreferences
-import com.floatclip.app.prefs.UpdateChannel
 import com.floatclip.share.ShareWire
 import com.floatclip.share.ClipboardSync
 import com.floatclip.probe.FloatClipAccent
@@ -202,12 +201,13 @@ class ClipboardSyncStorageTest {
         assertEquals(android.graphics.Color.rgb(122,162,247),FloatClipAccent.color("blue",true))
     }
 
-    @Test fun updateChannelDefaultsToPreviewAndPersistsDevChoice() {
-        val context=context()
-        context.getSharedPreferences("floatclip_update",Context.MODE_PRIVATE).edit().clear().commit()
-        val prefs=UpdatePreferences(context)
-        assertEquals(UpdateChannel.PREVIEW,prefs.channel())
-        prefs.saveChannel(UpdateChannel.DEV)
-        assertEquals(UpdateChannel.DEV,UpdatePreferences(context).channel())
+    @Test fun publicUpdateHistorySurvivesRemovalOfChannelSelection() {
+        val context = context()
+        context.getSharedPreferences("floatclip_update", Context.MODE_PRIVATE).edit().clear()
+            .putString("channel", "DEV").putString("last_PREVIEW", "preview").putString("last_DEV", "development")
+            .putString("last_notified", "PREVIEW:0.7.9:43").commit()
+        val prefs = UpdatePreferences(context)
+        assertEquals("preview", prefs.lastCheck())
+        assertEquals("0.7.9:43", prefs.lastNotified())
     }
 }

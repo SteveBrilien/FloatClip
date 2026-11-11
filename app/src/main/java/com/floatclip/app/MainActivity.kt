@@ -44,7 +44,6 @@ import com.floatclip.app.prefs.CategoryIcons
 import com.floatclip.app.prefs.OverlayPreferences
 import com.floatclip.app.prefs.OverlayThemeMode
 import com.floatclip.app.prefs.UpdatePreferences
-import com.floatclip.app.prefs.UpdateChannel
 import com.floatclip.app.security.VaultSettings
 import com.floatclip.app.clipboard.ClipboardQuery
 import com.floatclip.app.clipboard.ClipboardSources
@@ -81,10 +80,10 @@ open class MainActivity : Activity() {
     private var updateAwaitingInstallPermission=false
     private val updateInstaller by lazy(LazyThreadSafetyMode.NONE){ClientUpdateInstaller(this)}
     private var silentUpdateCheck=false
-    private var updateSelectedChannel=UpdateChannel.PREVIEW
     private var firstResume=true
     private var categoryManagement = false
-    private var settingsSection = ""
+    private val settingsPath = mutableListOf<String>()
+    private val settingsSection get() = settingsPath.lastOrNull().orEmpty()
     private var historyCategory: String = ALL_CATEGORY
     private var sourceFilter = ""
     private var historyList: com.floatclip.app.ui.ClipboardHistoryList? = null
@@ -125,23 +124,24 @@ open class MainActivity : Activity() {
         currentPage = if(savedInstanceState?.getInt(STATE_PAGE, PAGE_CLIPBOARD)==PAGE_SETTINGS) PAGE_SETTINGS else PAGE_CLIPBOARD
         searchQuery = savedInstanceState?.getString("searchQuery").orEmpty()
         sourceFilter = savedInstanceState?.getString("sourceFilter").orEmpty()
-        settingsSection = savedInstanceState?.getString("settingsSection").orEmpty()
-        if(intent?.getBooleanExtra("floatclip_update",false)==true)window.decorView.post { checkClientUpdate() }
-        if(intent?.getStringExtra("floatclip_page")=="clipboard_sync"){currentPage=PAGE_SETTINGS;settingsSection="剪贴板共享"}
+        settingsPath.addAll(savedInstanceState?.getStringArrayList("settingsPath").orEmpty())
+        if (savedInstanceState == null) applySettingsIntent(intent)
         categoryManagement = savedInstanceState?.getBoolean("categoryManagement") ?: false
         render()
         window.decorView.post {
             if(!isFinishing && !isDestroyed && SyncPreferences(this).enabled())SyncRuntime.refresh(this)
         }
         getSystemService(ClipboardManager::class.java).addPrimaryClipChangedListener(clipboardChanged)
-        if(savedInstanceState==null && UpdatePreferences(this).checkOnLaunch())window.decorView.postDelayed({
+        if (savedInstanceState == null && intent?.getBooleanExtra("floatclip_update", false) == true) {
+            window.decorView.post { checkClientUpdate() }
+        } else if(savedInstanceState==null && UpdatePreferences(this).checkOnLaunch())window.decorView.postDelayed({
             if(!isFinishing && !isDestroyed)checkClientUpdate(silent=true)
         },1200)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putInt(STATE_PAGE, currentPage)
-        outState.putString("settingsSection", settingsSection)
+        outState.putStringArrayList("settingsPath", ArrayList(settingsPath))
         outState.putBoolean("categoryManagement", categoryManagement)
         outState.putString("searchQuery",searchQuery)
         outState.putString("sourceFilter",sourceFilter)
@@ -151,9 +151,13 @@ open class MainActivity : Activity() {
     @Deprecated("Fixed Android 11 navigation")
     override fun onBackPressed() {
         when {
-            currentPage == PAGE_SETTINGS && settingsSection.isNotEmpty() -> { settingsSection = ""; render() }
+            currentPage == PAGE_SETTINGS && settingsSection.isNotEmpty() -> { settingsPath.removeAt(settingsPath.lastIndex); render() }
             currentPage == PAGE_CLIPBOARD && categoryManagement -> { categoryManagement = false; render() }
-            currentPage != PAGE_CLIPBOARD -> { currentPage=PAGE_CLIPBOARD; settingsSection=""; render() }
+            currentPage != PAGE_CLIPBOARD -> { currentPage=PAGE_CLIPBOARD; settingsPath.clear(); render() }
+            isTaskRoot && overlayPreferences.keepAliveEnabled() && overlayPreferences.overlayEnabled() && Settings.canDrawOverlays(this) -> {
+                startOverlayRuntime()
+                finishAndRemoveTask()
+            }
             else -> super.onBackPressed()
         }
     }
@@ -161,11 +165,25 @@ open class MainActivity : Activity() {
     override fun onNewIntent(intent:Intent) {
         super.onNewIntent(intent);setIntent(intent)
         if(intent.action==Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER) && UpdatePreferences(this).checkOnLaunch())checkClientUpdate(silent=true)
-        if(intent.getBooleanExtra("floatclip_update",false))checkClientUpdate()
-        if(intent.getStringExtra("floatclip_page")=="clipboard_sync") {
-            currentPage=PAGE_SETTINGS;settingsSection="剪贴板共享"
-            if(::content.isInitialized)render()
+        if (applySettingsIntent(intent) && ::content.isInitialized) render()
+        if (intent.getBooleanExtra("floatclip_update", false)) checkClientUpdate()
+    }
+
+    private fun applySettingsIntent(intent: Intent?): Boolean {
+        val section = when {
+            intent?.getBooleanExtra("floatclip_update", false) == true -> "关于"
+            intent?.getStringExtra("floatclip_page") == "clipboard_sync" -> "剪贴板共享"
+            else -> return false
         }
+        currentPage = PAGE_SETTINGS
+        settingsPath.clear()
+        settingsPath.add(section)
+        return true
+    }
+
+    private fun openSettingsSection(section: String) {
+        settingsPath.add(section)
+        render()
     }
 
     override fun onResume() {
@@ -315,7 +333,7 @@ open class MainActivity : Activity() {
 
     private fun renderRouteKey():String=when {
         currentPage==PAGE_CLIPBOARD && categoryManagement -> "clipboard/category"
-        currentPage==PAGE_SETTINGS && settingsSection.isNotEmpty() -> "settings/"+settingsSection
+        currentPage==PAGE_SETTINGS && settingsSection.isNotEmpty() -> "settings/"+settingsPath.joinToString("/")
         currentPage==PAGE_SETTINGS -> "settings"
         else -> "clipboard"
     }
@@ -323,7 +341,7 @@ open class MainActivity : Activity() {
     private fun routeDepth(route:String):Int=when {
         route=="clipboard" -> 0
         route=="settings" || route=="clipboard/category" -> 1
-        else -> 2
+        else -> 1 + route.count { it == '/' }
     }
 
     private fun animateRouteIn(root:View,from:String,to:String) {
@@ -379,7 +397,7 @@ open class MainActivity : Activity() {
                 startActivity(Intent(this,com.floatclip.app.files.FileActivity::class.java))
             },LinearLayout.LayoutParams(dp(48),dp(48)))
             bar.addView(headerIcon(R.drawable.ic_settings_controls,"设置") {
-                currentPage=PAGE_SETTINGS; settingsSection=""; render()
+                currentPage=PAGE_SETTINGS; settingsPath.clear(); render()
             }.apply { id=R.id.clipboard_settings },LinearLayout.LayoutParams(dp(48),dp(48)))
         }
         content.addView(bar)
@@ -731,41 +749,18 @@ open class MainActivity : Activity() {
         })
         spacer(12)
         addCard(card().apply {
-            addView(settingRow("外观", "", "›", R.drawable.ic_appearance) { settingsSection="外观"; render() })
+            addView(settingRow("外观", "", "›", R.drawable.ic_appearance) { openSettingsSection("外观") })
             addView(divider())
-            addView(settingRow("剪贴板共享", "", "›", R.drawable.ic_share) { settingsSection="剪贴板共享"; render() })
+            addView(settingRow("剪贴板共享", "", "›", R.drawable.ic_share) { openSettingsSection("剪贴板共享") })
             addView(divider())
-            addView(settingRow("权限与后台", "", "›", R.drawable.ic_shield) { settingsSection="权限与后台"; render() })
+            addView(settingRow("权限与后台", "", "›", R.drawable.ic_shield) { openSettingsSection("权限与后台") })
             addView(divider())
-            addView(settingRow("备份与迁移", "", "›", R.drawable.ic_backup) { settingsSection="备份与迁移"; render() })
+            addView(settingRow("备份与迁移", "", "›", R.drawable.ic_backup) { openSettingsSection("备份与迁移") })
             addView(divider())
             addView(settingRow("分类","","›", R.drawable.ic_category) { currentPage=PAGE_CLIPBOARD;categoryManagement=true;render() })
             addView(divider())
-            val updatePrefs=UpdatePreferences(this@MainActivity)
-            addView(settingRow("更新通道",updatePrefs.channel().label,"›",R.drawable.ic_update) {
-                val values=UpdateChannel.values().toList()
-                FloatDialog.choices(
-                    this@MainActivity,
-                    "更新通道",
-                    values.map { it.label },
-                    values.indexOf(updatePrefs.channel()),
-                ) { index ->
-                    updatePrefs.saveChannel(values[index])
-                    render()
-                }
-            })
-            addView(divider())
-            addView(settingRow("启动时检查更新","",if(updatePrefs.checkOnLaunch())"已开启" else "已关闭") {
-                val enabled=!updatePrefs.checkOnLaunch();updatePrefs.saveCheckOnLaunch(enabled)
-                if(enabled && android.os.Build.VERSION.SDK_INT>=33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)
-                    requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),638)
-                render()
-            })
-            addView(divider())
-            addView(settingRow("检查更新",updatePrefs.lastCheck(updatePrefs.channel()),"›", R.drawable.ic_update) { checkClientUpdate() })
-            addView(divider())
             addView(settingRow("关于", "", "›", R.drawable.ic_info) {
-                settingsSection="关于";render()
+                openSettingsSection("关于")
             })
         })
     }
@@ -786,9 +781,23 @@ open class MainActivity : Activity() {
         })
         spacer(12)
         addCard(card().apply {
-            addView(settingRow("权限声明","","›",R.drawable.ic_shield) { settingsSection="权限声明";render() })
+            val prefs = UpdatePreferences(this@MainActivity)
+            addView(settingRow("检查更新", prefs.lastCheck(), "›", R.drawable.ic_update) { checkClientUpdate() })
             addView(divider())
-            addView(settingRow("开源组件","","›",R.drawable.ic_code) { settingsSection="开源组件";render() })
+            addView(settingRow("启动时检查更新", "", if (prefs.checkOnLaunch()) "已开启" else "已关闭") {
+                val enabled = !prefs.checkOnLaunch()
+                prefs.saveCheckOnLaunch(enabled)
+                if (enabled && android.os.Build.VERSION.SDK_INT >= 33 &&
+                    checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 638)
+                render()
+            })
+        })
+        spacer(12)
+        addCard(card().apply {
+            addView(settingRow("权限声明","","›",R.drawable.ic_shield) { openSettingsSection("权限声明") })
+            addView(divider())
+            addView(settingRow("开源组件","","›",R.drawable.ic_code) { openSettingsSection("开源组件") })
             addView(divider())
             addView(settingRow("使用帮助","","›",R.drawable.ic_info,::showUsageHelp))
 
@@ -811,12 +820,12 @@ open class MainActivity : Activity() {
             }
         })
         spacer(12)
-        addCard(card().apply { addView(settingRow("权限与后台","","管理",R.drawable.ic_shield) { settingsSection="权限与后台";render() }) })
+        addCard(card().apply { addView(settingRow("权限与后台","","管理",R.drawable.ic_shield) { openSettingsSection("权限与后台") }) })
     }
     private fun renderOpenSourceComponents() {
         addCard(card().apply {
             addView(settingRow("Kotlin 标准库","JetBrains · Apache License 2.0","许可",R.drawable.ic_code) {
-                settingsSection="Kotlin 许可";render()
+                openSettingsSection("Kotlin 许可")
             })
             addView(divider())
             addView(textView("界面使用 Android 原生视图与系统 API。测试和构建工具不随安装包作为运行组件分发。",13f,false,colors.secondaryText))
@@ -1405,7 +1414,7 @@ open class MainActivity : Activity() {
         )
         wrapper.onSingleTap = {
             runCatching {
-                if(entry.kind=="image") ClipboardImages.preview(this,clipStore,entry)
+                if(entry.kind=="image") com.floatclip.app.clipboard.ClipViewerActivity.open(this, entry, source = sourceFilter)
                 else { ClipboardWrites.copyByUser(this,getSystemService(ClipboardManager::class.java),entry.text); Toast.makeText(this,"已复制",Toast.LENGTH_SHORT).show() }
             }.onFailure { Toast.makeText(this,it.message ?: "操作未完成",Toast.LENGTH_LONG).show() }
         }
@@ -1415,7 +1424,7 @@ open class MainActivity : Activity() {
                 listOf(if(entry.kind=="image") "查看图片" else "查看全文", "更改分类", if(entry.locked) "取消保护" else "保护", if (entry.pinned) "取消置顶" else "置顶", if(entry.kind=="image")"复制图片" else "复制", "删除"),
             ) { which ->
                 when (which) {
-                    0 -> if(entry.kind=="image") runCatching { ClipboardImages.preview(this,clipStore,entry) }.onFailure {
+                    0 -> if(entry.kind=="image") runCatching { com.floatclip.app.clipboard.ClipViewerActivity.open(this, entry, source = sourceFilter) }.onFailure {
                         Toast.makeText(this,it.message ?: "图片暂不可用",Toast.LENGTH_LONG).show()
                     } else FloatDialog.show(
                         this,
@@ -1475,30 +1484,35 @@ open class MainActivity : Activity() {
     private fun checkClientUpdate(silent:Boolean=false) {
         if(isFinishing || isDestroyed)return
         if(silent && (updateDialog?.dialog?.isShowing==true || updateAwaitingInstallPermission))return
-        val existing=updateCheck
-        if(existing?.state?.phase==com.floatclip.app.ui.ClientUpdateCheck.Phase.CHECKING)return
-        silentUpdateCheck=silent
-        updateSelectedChannel=UpdatePreferences(this).channel()
-        val wireChannel=when(updateSelectedChannel) {
-            UpdateChannel.PREVIEW -> com.floatclip.probe.ShareUpdates.Channel.PREVIEW
-            UpdateChannel.DEV -> com.floatclip.probe.ShareUpdates.Channel.DEV
+        val existing = updateCheck
+        if (existing?.state?.phase == com.floatclip.app.ui.ClientUpdateCheck.Phase.CHECKING) {
+            if (!silent && silentUpdateCheck) {
+                silentUpdateCheck = false
+                showUpdateProgress(existing.state.source)
+            }
+            return
         }
-        val build=packageManager.getPackageInfo(packageName,0).longVersionCode
+        silentUpdateCheck = silent
+        if (!silent) showUpdateProgress("正在连接更新源…")
+        if (existing == null) updateCheck = com.floatclip.app.ui.ClientUpdateCheck(listener = ::updateCheckChanged)
+        updateCheck?.start()
+    }
+
+    private fun showUpdateProgress(source: String) {
+        val build = packageManager.getPackageInfo(packageName, 0).longVersionCode
         val progress=LinearLayout(this).apply {
             orientation=LinearLayout.VERTICAL
             addView(android.widget.ProgressBar(this@MainActivity,null,android.R.attr.progressBarStyleHorizontal).apply {
                 isIndeterminate=true
             },LinearLayout.LayoutParams(-1,dp(4)))
-            addView(textView("正在连接更新源…",13f,false,colors.secondaryText).apply {
+            addView(textView(source,13f,false,colors.secondaryText).apply {
                 setPadding(0,dp(10),0,0);updateStatusText=this
             })
         }
-        if(!silent)updateDialog=FloatDialog.show(this,"检查更新",
-            versionName()+" · build "+build+" · "+updateSelectedChannel.label,
+        updateDialog=FloatDialog.show(this,"检查更新",
+            versionName()+" · build "+build,
             custom=progress,negative="取消",positive=null,
             onNegative={ updateCheck?.cancel() },onCancel={ updateCheck?.cancel() })
-        if(existing==null)updateCheck=com.floatclip.app.ui.ClientUpdateCheck(listener=::updateCheckChanged)
-        updateCheck?.start(wireChannel)
     }
 
     private fun updateCheckChanged(state:com.floatclip.app.ui.ClientUpdateCheck.State) {
@@ -1509,14 +1523,14 @@ open class MainActivity : Activity() {
                 updateDialog?.dialog?.dismiss()
                 updateStatusText=null
                 val release=state.release?:return
-                UpdatePreferences(this).saveLastCheck(updateSelectedChannel,release.version,release.build)
+                UpdatePreferences(this).saveLastCheck(release.version,release.build)
                 val build=packageManager.getPackageInfo(packageName,0).longVersionCode
                 val order=com.floatclip.probe.ShareUpdates.compareVersion(release.version,versionName())
                 val newer=release.build>build && order>=0
                 if(silentUpdateCheck) {
                     silentUpdateCheck=false
                     if(!newer)return
-                    val identity=updateSelectedChannel.name+":"+release.version+":"+release.build
+                    val identity=release.version+":"+release.build
                     val prefs=UpdatePreferences(this)
                     if(prefs.lastNotified()==identity)return
                     prefs.saveNotified(identity)
@@ -1525,15 +1539,15 @@ open class MainActivity : Activity() {
                 updateDialog=FloatDialog.show(this,
                     if(newer)"发现 "+release.version+" · build "+release.build else "当前 "+versionName()+" · build "+build,
                     if(newer)release.notes else if(order<0 || release.build<build)
-                        updateSelectedChannel.label+"通道已发布 "+release.version+" · build "+release.build
-                    else "已是"+updateSelectedChannel.label+"通道最新版本",
+                        "已发布 "+release.version+" · build "+release.build
+                    else "已是最新版本",
                     negative="关闭",positive=if(newer)"下载并安装" else null,
                     onPositive=if(newer) { { _ -> startClientUpdateDownload(release);true } } else null)
             }
             com.floatclip.app.ui.ClientUpdateCheck.Phase.FAILED -> {
                 if(silentUpdateCheck){silentUpdateCheck=false;return}
                 updateDialog?.dialog?.dismiss();updateStatusText=null
-                val last=UpdatePreferences(this).lastCheck(updateSelectedChannel)
+                val last=UpdatePreferences(this).lastCheck()
                 updateDialog=FloatDialog.show(this,"检查未完成",
                     state.message+(if(last.isNotEmpty())"\n\n"+last else ""),
                     negative="关闭",positive="重试",onPositive={ checkClientUpdate();true })

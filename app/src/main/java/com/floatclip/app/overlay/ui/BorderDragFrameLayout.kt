@@ -1,6 +1,7 @@
 package com.floatclip.app.overlay.ui
 
 import android.content.Context
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.widget.FrameLayout
@@ -12,6 +13,14 @@ class BorderDragFrameLayout(context: Context) : FrameLayout(context) {
         super.onWindowFocusChanged(hasWindowFocus)
         windowFocusChanged?.invoke(hasWindowFocus)
     }
+    var onPanelBack: (() -> Unit)? = null
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val back = onPanelBack
+        if (event.keyCode != KeyEvent.KEYCODE_BACK || back == null) return super.dispatchKeyEvent(event)
+        if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) back()
+        return true
+    }
+
     var interactionBlocked = false
     var dragEnabled = true
     override fun dispatchTouchEvent(event: MotionEvent): Boolean =

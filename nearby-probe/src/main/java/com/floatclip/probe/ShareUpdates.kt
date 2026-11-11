@@ -16,12 +16,9 @@ internal object ShareUpdates {
     const val VERSION = "0.7.9"
     const val FEED = "https://clip.wmy-cloud.cn/release.json"
     const val FALLBACK_FEED = "https://raw.githubusercontent.com/SteveBrilien/FloatClip/main/updates/native-updates.json"
-    const val DEV_FEED = FEED
+    private const val PUBLIC_FEED_ID = "share-preview"
     const val PACKAGE = "com.floatclip.probe"
     const val SIGNER = "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c"
-    enum class Channel(val feed:String,val wire:String,val label:String) {
-        PREVIEW(FEED,"share-preview","预览"), DEV(DEV_FEED,"share-dev","开发测试"),
-    }
     data class Release(val build:Int,val version:String,val notes:String,val url:String,val sha256:String,val bytes:Long,val packageName:String,val signerSha256:String)
     internal class SourceUnavailable(message:String,cause:Throwable?=null):IOException(message,cause)
     class CheckCancellation {
@@ -40,13 +37,12 @@ internal object ShareUpdates {
         }
     }
     fun check(
-        channel:Channel=Channel.PREVIEW,
         fetcher:((String)->ByteArray)?=null,
         cancellation:CheckCancellation=CheckCancellation(),
         onSource:(String)->Unit={},
     ):Release {
         val failures=mutableListOf<String>()
-        for(source in listOf(channel.feed,FALLBACK_FEED)) {
+        for(source in listOf(FEED,FALLBACK_FEED)) {
             cancellation.ensureActive()
             val label=if(source==FEED)"公网更新源" else "GitHub 备用源"
             onSource(label)
@@ -54,7 +50,7 @@ internal object ShareUpdates {
                 catch(error:SourceUnavailable) { failures+=label+"："+error.message;continue }
             cancellation.ensureActive()
             // A bad signature is a hard failure; it must never be hidden by another source.
-            return parse(verifySigned(content,channel),channel)
+            return parse(verifySigned(content))
         }
         throw IOException("更新源暂不可用：\n"+failures.joinToString("\n"))
     }
@@ -79,9 +75,9 @@ internal object ShareUpdates {
         catch(error:IOException) { cancellation.ensureActive();throw SourceUnavailable("网络连接失败，请稍后重试",error) }
         finally { cancellation.detach(connection);connection.disconnect() }
     }
-    internal fun verifySigned(data:ByteArray,channel:Channel,now:Long=System.currentTimeMillis()/1000,publicKey:String=UpdateTrust.PUBLIC_KEY):JSONObject {
+    internal fun verifySigned(data:ByteArray,now:Long=System.currentTimeMillis()/1000,publicKey:String=UpdateTrust.PUBLIC_KEY):JSONObject {
         require(data.size<=131072) { "更新信息过大" }
-        val token=JSONObject(String(data,Charsets.UTF_8)).getJSONObject("nativeUpdates").getString(channel.wire)
+        val token=JSONObject(String(data,Charsets.UTF_8)).getJSONObject("nativeUpdates").getString(PUBLIC_FEED_ID)
         val parts=token.split('.');require(parts.size==3) { "更新清单签名格式无效" }
         fun decode(value:String):ByteArray { require(value.length<=100000);return Base64.getUrlDecoder().decode(value) }
         val header=JSONObject(String(decode(parts[0]),Charsets.UTF_8))
@@ -92,10 +88,10 @@ internal object ShareUpdates {
         require(verifier.verify(decode(parts[2]))) { "更新清单签名校验失败" }
         val payload=JSONObject(String(decode(parts[1]),Charsets.UTF_8));val issued=payload.getLong("issuedAt");val expiry=payload.getLong("expiresAt")
         require(payload.getInt("schema")==1 && expiry>now && issued<=now+900 && expiry>issued) { "更新清单已过期或时间无效" }
-        return payload.getJSONObject("release").also { require(it.getString("channel")==channel.wire) { "更新通道不匹配" } }
+        return payload.getJSONObject("release").also { require(it.getString("channel")==PUBLIC_FEED_ID) { "更新来源不匹配" } }
     }
-    internal fun parse(json:JSONObject,channel:Channel):Release {
-        require(json.getInt("schema")==1 && json.getString("channel")==channel.wire) { "更新通道不匹配" }
+    internal fun parse(json:JSONObject):Release {
+        require(json.getInt("schema")==1 && json.getString("channel")==PUBLIC_FEED_ID) { "更新来源不匹配" }
         val platform=json.getJSONObject("android");val url=platform.getString("url");val target=URL(url)
         require(target.protocol=="https" && target.userInfo==null && target.port in listOf(-1,443) && target.host in listOf("mcp.wmy-cloud.cn","github.com")) { "下载地址不受支持" }
         require(platform.optString("status")=="available") { "Android 更新包尚未发布" }

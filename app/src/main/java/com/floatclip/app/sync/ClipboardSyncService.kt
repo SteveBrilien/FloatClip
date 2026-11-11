@@ -172,21 +172,7 @@ class ClipboardSyncService: Service() {
                 for(key in engine.peerKeys())if(!authorized(key)){engine.forget(key);dropImagePeer(key)}
                 configureEngine();setStatus("等待已授权设备 · Android 11 后台读取受系统限制")
                 refreshBluetooth()
-                actor.scheduleWithFixedDelay({
-                    if(!closing&&!paused&&::engine.isInitialized)runCatching {
-                        configureEngine()
-                        val now=System.currentTimeMillis()
-                        val outbox=engine.pendingPeers(now)
-                        val imagePeers=currentImagePeers(now)
-                        pendingOutgoingCount=(outbox+imagePeers).size
-                        if(!prefs.connectionsPaused()) {
-                            for(key in links.keys){engine.retry(key,now);trySendImage(key)}
-                            refreshHosts();refreshBluetooth()
-                            val pending=(outbox+imagePeers).filterNot{links.containsKey(it)}.toSet()
-                            if(pending.isNotEmpty())bluetooth?.nudge(pending)
-                        }
-                    }.onFailure{setStatus("待发送内容未保存，请检查本机存储")}
-                },5,5,TimeUnit.SECONDS)
+                scheduleMaintenance(RETRY_SECONDS)
                 refreshHosts()
             }.onFailure {setStatus("无法读取共享状态，请保留数据后检查存储");pauseImmediately()}
         }
@@ -208,6 +194,43 @@ class ClipboardSyncService: Service() {
         actor.execute {if(::engine.isInitialized&&!closing){runCatching{configureEngine();refreshHosts();refreshBluetooth();refreshBluetoothPairing()}.onFailure{setStatus("共享配置未保存，已暂停");pauseImmediately()}}}
         return if (prefs.keepAlive()) START_STICKY else START_NOT_STICKY
     }
+    private var maintenance: java.util.concurrent.ScheduledFuture<*>? = null
+
+    private fun scheduleMaintenance(seconds: Long) {
+        if (closing) return
+        maintenance?.cancel(false)
+        maintenance = actor.schedule(::maintainConnections, seconds, TimeUnit.SECONDS)
+    }
+
+    private fun retrySoon() {
+        if ((maintenance?.getDelay(TimeUnit.MILLISECONDS) ?: Long.MAX_VALUE) > TimeUnit.SECONDS.toMillis(RETRY_SECONDS)) {
+            scheduleMaintenance(RETRY_SECONDS)
+        }
+    }
+
+    private fun maintainConnections() {
+        maintenance = null
+        var pendingWork = false
+        if (!closing && !paused && prefs.enabled() && ::engine.isInitialized) runCatching {
+            configureEngine()
+            val now = System.currentTimeMillis()
+            val pending = engine.pendingPeers(now) + currentImagePeers(now)
+            pendingOutgoingCount = pending.size
+            if (!prefs.connectionsPaused()) {
+                pendingWork = pending.isNotEmpty()
+                for (key in links.keys) {
+                    engine.retry(key, now)
+                    trySendImage(key)
+                }
+                refreshHosts()
+                refreshBluetooth()
+                val disconnected = pending.filterNot(links::containsKey).toSet()
+                if (disconnected.isNotEmpty()) bluetooth?.nudge(disconnected)
+            }
+        }.onFailure { setStatus("待发送内容未保存，请检查本机存储") }
+        scheduleMaintenance(if (pendingWork) RETRY_SECONDS else IDLE_SECONDS)
+    }
+
     private fun configureEngine(){
         val applied=SyncPolicy.apply(prefs,engine)
         paused=!applied.enabled
@@ -233,7 +256,7 @@ class ClipboardSyncService: Service() {
                     pendingOutgoingCount=engine.pendingPeers(System.currentTimeMillis()).size
                     lastCapture=event
                     if(!excluded&&recordHistory)historyChanged()
-                    if(mayShare)bluetooth?.nudge()
+                    if(mayShare) { bluetooth?.nudge(); retrySoon() }
                 }.onFailure{setStatus("当前内容未同步，请检查存储或文字长度")}
             }
         }
@@ -267,6 +290,7 @@ class ClipboardSyncService: Service() {
                 for(key in peers)trySendImage(key)
                 if(prefs.reconnect())bluetooth?.nudge(peers)
                 SignalLocalReconnect()
+                retrySoon()
             }.onFailure{setStatus("图片已保存在本机，但跨设备同步尚未完成")}
         }
     }
@@ -376,7 +400,7 @@ class ClipboardSyncService: Service() {
     fun resumeConnections(){
         if(closing||!prefs.enabled())return
         prefs.saveConnectionsPaused(false)
-        actor.execute {if(!closing&&!paused&&::engine.isInitialized){refreshHosts();refreshBluetooth();refreshBluetoothPairing();setStatus("共享连接已恢复 · 正在连接已授权设备");refreshUi()}}
+        actor.execute {if(!closing&&!paused&&::engine.isInitialized){refreshHosts();refreshBluetooth();refreshBluetoothPairing();retrySoon();setStatus("共享连接已恢复 · 正在连接已授权设备");refreshUi()}}
     }
     fun pauseImmediately(){
         if(closing)return
@@ -580,6 +604,8 @@ class ClipboardSyncService: Service() {
         const val PAIR="com.floatclip.app.sync.PAIR"
         const val PAUSE="com.floatclip.app.sync.PAUSE"
         const val RESUME="com.floatclip.app.sync.RESUME"
+        private const val RETRY_SECONDS = 5L
+        private const val IDLE_SECONDS = 60L
         private const val CHANNEL="floatclip-device-sync"
         private const val NOTIFICATION=7080
     }

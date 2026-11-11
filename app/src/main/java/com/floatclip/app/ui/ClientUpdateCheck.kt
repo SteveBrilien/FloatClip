@@ -9,8 +9,8 @@ import java.util.concurrent.Future
 
 /** One cancellable request per screen owner, with a real UI deadline and stale-result rejection. */
 internal class ClientUpdateCheck(
-    private val read:(ShareUpdates.Channel,ShareUpdates.CheckCancellation,(String)->Unit)->ShareUpdates.Release=
-        { channel,cancellation,source -> ShareUpdates.check(channel,cancellation=cancellation,onSource=source) },
+    private val read:(ShareUpdates.CheckCancellation,(String)->Unit)->ShareUpdates.Release=
+        { cancellation,source -> ShareUpdates.check(cancellation=cancellation,onSource=source) },
     private val worker:ExecutorService=Executors.newSingleThreadExecutor { task ->
         Thread(task,"FloatClip updates").apply { isDaemon=true }
     },
@@ -28,7 +28,7 @@ internal class ClientUpdateCheck(
     private var future:Future<*>?=null
     private var timeout:Runnable?=null
 
-    fun start(channel:ShareUpdates.Channel):Boolean {
+    fun start():Boolean {
         if(closed || state.phase==Phase.CHECKING)return false
         val token=++generation
         val request=ShareUpdates.CheckCancellation()
@@ -44,7 +44,7 @@ internal class ClientUpdateCheck(
         timeout=deadline;main.postDelayed(deadline,timeoutMs)
         future=worker.submit {
             val result=runCatching {
-                read(channel,request) { source -> main.post {
+                read(request) { source -> main.post {
                     if(!closed && token==generation && state.phase==Phase.CHECKING)
                         publish(State(Phase.CHECKING,source="正在连接"+source+"…"))
                 } }

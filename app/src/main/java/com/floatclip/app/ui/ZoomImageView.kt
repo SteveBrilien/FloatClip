@@ -16,8 +16,9 @@ import kotlin.math.max
 import kotlin.math.min
 
 /** Shared by clipboard and file previews; all gestures use original-image coordinates. */
-class ZoomImageView(context: Context) : View(context) {
+class ZoomImageView(context: Context, private val fillHeight: Boolean = false) : View(context) {
     var onHorizontalPage: ((Int) -> Boolean)? = null
+    var onVerticalPage: ((Int) -> Boolean)? = null
     var onViewportChanged: ((Rect, Float) -> Unit)? = null
     private var bitmap: Bitmap? = null
     private var originalWidth = 0
@@ -30,6 +31,8 @@ class ZoomImageView(context: Context) : View(context) {
     private val detailDestination = RectF()
     private var zoom = 1f
     private var minimum = 1f
+    private var baseZoom = 1f
+    private var categoryEdgesAtDown = 0
     private var maximum = 8f
     private var offsetX = 0f
     private var offsetY = 0f
@@ -92,8 +95,13 @@ class ZoomImageView(context: Context) : View(context) {
         if (originalWidth <= 0 || originalHeight <= 0 || width <= 0 || height <= 0) return
         minimum = min(width.toFloat() / originalWidth, height.toFloat() / originalHeight)
         maximum = max(minimum * 8, 4f)
-        zoom = if (originalHeight > originalWidth * 2.2f) width.toFloat() / originalWidth else minimum
-        zoom = zoom.coerceIn(minimum, maximum)
+        baseZoom = when {
+            fillHeight -> height.toFloat() / originalHeight
+            originalHeight > originalWidth * 2.2f -> (width.toFloat() / originalWidth).coerceAtMost(maximum)
+            else -> minimum
+        }
+        if (fillHeight) maximum = max(maximum, baseZoom * 3f)
+        zoom = baseZoom
         offsetX = (width - originalWidth * zoom) / 2
         offsetY = if (originalHeight * zoom > height) 0f else (height - originalHeight * zoom) / 2
         constrain()
@@ -135,6 +143,11 @@ class ZoomImageView(context: Context) : View(context) {
                 hadMultiplePointers = false
                 pointer = event.getPointerId(0)
                 lastX = event.x; lastY = event.y; downX = event.x; downY = event.y
+                val edge = resources.displayMetrics.density * 4f
+                val bottom = (height - originalHeight * zoom).coerceAtMost(0f)
+                categoryEdgesAtDown = if (originalHeight > 0 && zoom <= baseZoom * 1.03f) {
+                    (if (offsetY >= -edge) 1 else 0) or (if (offsetY <= bottom + edge) 2 else 0)
+                } else 0
             }
             MotionEvent.ACTION_POINTER_DOWN -> hadMultiplePointers = true
             MotionEvent.ACTION_MOVE -> {
@@ -142,7 +155,8 @@ class ZoomImageView(context: Context) : View(context) {
                 if (index >= 0) {
                     val px = event.getX(index); val py = event.getY(index)
                     if (!scale.isInProgress && event.pointerCount == 1) {
-                        offsetX += px - lastX; offsetY += py - lastY; constrain(); invalidate()
+                        if (!fillHeight || zoom > baseZoom * 1.03f) offsetX += px - lastX
+                        offsetY += py - lastY; constrain(); invalidate()
                     }
                     lastX = px; lastY = py
                 }
@@ -155,9 +169,15 @@ class ZoomImageView(context: Context) : View(context) {
                 val dx = event.x - downX; val dy = event.y - downY
                 val threshold = max(56f * resources.displayMetrics.density, width * 0.12f)
                 val horizontalFits = originalWidth > 0 && originalWidth * zoom <= width + 4f * resources.displayMetrics.density
-                if (!hadMultiplePointers && !scale.isInProgress && horizontalFits && kotlin.math.abs(dx) >= threshold &&
-                    kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.35f) {
-                    onHorizontalPage?.invoke(if (dx < 0f) 1 else -1)
+                if (!hadMultiplePointers && !scale.isInProgress) {
+                    val x = kotlin.math.abs(dx)
+                    val y = kotlin.math.abs(dy)
+                    val verticalEdge = if (dy >= 0f) 1 else 2
+                    if ((fillHeight || horizontalFits) && zoom <= baseZoom * 1.03f && x >= threshold && x > y * 1.35f) {
+                        onHorizontalPage?.invoke(if (dx < 0f) 1 else -1)
+                    } else if (categoryEdgesAtDown and verticalEdge != 0 && y >= threshold && y > x * 1.35f) {
+                        onVerticalPage?.invoke(if (dy < 0f) 1 else -1)
+                    }
                 }
                 pointer = -1
                 parent?.requestDisallowInterceptTouchEvent(false)

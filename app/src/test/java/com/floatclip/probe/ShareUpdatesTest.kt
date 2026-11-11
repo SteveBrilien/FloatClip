@@ -24,18 +24,24 @@ class ShareUpdatesTest {
         token[2]=(if(token[2][0]=='A') "B" else "A")+token[2].substring(1);updates.put("share-preview",token.joinToString("."));return json.toString().toByteArray()
     }
     private fun rejected(action:()->Unit) {try { action();fail("Invalid update metadata accepted") } catch(error:Exception) {assertFalse(error is org.junit.internal.AssumptionViolatedException)} }
-    @Test fun signedPublicationAndChannels() {
-        for(channel in ShareUpdates.Channel.values()) {
-            val signed=ShareUpdates.verifySigned(fixture(),channel,issued(fixture())+1)
-            val release=ShareUpdates.parse(signed,channel)
-            assertEquals("0.7.1",release.version);assertEquals(14,release.build);assertEquals(ShareUpdates.PACKAGE,release.packageName);assertEquals(ShareUpdates.SIGNER,release.signerSha256);assertTrue(release.bytes>0)
-        }
+    @Test fun signedPublicRelease() {
+        val release = ShareUpdates.parse(ShareUpdates.verifySigned(fixture(), issued(fixture()) + 1))
+        assertEquals("0.7.1", release.version)
+        assertEquals(14, release.build)
+        assertEquals(ShareUpdates.PACKAGE, release.packageName)
+        assertEquals(ShareUpdates.SIGNER, release.signerSha256)
+        assertTrue(release.bytes > 0)
     }
-    @Test fun rejectsTamperedAndExpiredManifest() {
-        rejected { ShareUpdates.verifySigned(altered(),ShareUpdates.Channel.PREVIEW,issued(fixture())+1) }
-        rejected { ShareUpdates.verifySigned(fixture(),ShareUpdates.Channel.PREVIEW,issued(fixture())+366*86400) }
-        val json=JSONObject(String(fixture()));json.getJSONObject("nativeUpdates").remove("share-dev")
-        rejected { ShareUpdates.verifySigned(json.toString().toByteArray(),ShareUpdates.Channel.DEV,issued(fixture())+1) }
+    @Test fun rejectsTamperedExpiredAndDevelopmentOnlyManifests() {
+        rejected { ShareUpdates.verifySigned(altered(), issued(fixture()) + 1) }
+        rejected { ShareUpdates.verifySigned(fixture(), issued(fixture()) + 366 * 86400) }
+        val json = JSONObject(String(fixture()))
+        val updates = json.getJSONObject("nativeUpdates")
+        val development = updates.getString("share-dev")
+        updates.remove("share-preview")
+        rejected { ShareUpdates.verifySigned(json.toString().toByteArray(), issued(fixture()) + 1) }
+        updates.put("share-preview", development)
+        rejected { ShareUpdates.verifySigned(json.toString().toByteArray(), issued(fixture()) + 1) }
     }
     @Test fun primaryFailureUsesFallbackButSignatureFailureDoesNot() {
         var calls=0
@@ -45,12 +51,12 @@ class ShareUpdatesTest {
         calls=0;rejected { ShareUpdates.check(fetcher={calls++;throw ShareUpdates.SourceUnavailable("offline")}) };assertEquals(2,calls)
     }
     @Test fun validatesPackageIdentityUrlsAndPlatformVersion() {
-        val release=ShareUpdates.verifySigned(fixture(),ShareUpdates.Channel.PREVIEW,issued(fixture())+1)
-        release.put("version","9.9.9");assertEquals("0.7.1",ShareUpdates.parse(release,ShareUpdates.Channel.PREVIEW).version)
+        val release=ShareUpdates.verifySigned(fixture(),issued(fixture())+1)
+        release.put("version","9.9.9");assertEquals("0.7.1",ShareUpdates.parse(release).version)
         for(url in listOf("http://mcp.wmy-cloud.cn/x","https://mcp.wmy-cloud.cn@evil.test/x","https://evil.test/x","https://github.com:444/x")) {
-            val copy=JSONObject(release.toString());copy.getJSONObject("android").put("url",url);rejected { ShareUpdates.parse(copy,ShareUpdates.Channel.PREVIEW) }
+            val copy=JSONObject(release.toString());copy.getJSONObject("android").put("url",url);rejected { ShareUpdates.parse(copy) }
         }
-        for(field in listOf("package","signerSha256","sha256")) {val copy=JSONObject(release.toString());copy.getJSONObject("android").put(field,"wrong");rejected { ShareUpdates.parse(copy,ShareUpdates.Channel.PREVIEW) }}
+        for(field in listOf("package","signerSha256","sha256")) {val copy=JSONObject(release.toString());copy.getJSONObject("android").put(field,"wrong");rejected { ShareUpdates.parse(copy) }}
     }
     @Test fun comparesSemanticVersionsWithoutDowngrade() {assertTrue(ShareUpdates.compareVersion("0.7.1","0.7.7")<0);assertTrue(ShareUpdates.compareVersion("0.7.10","0.7.9")>0);assertEquals(0,ShareUpdates.compareVersion("0.7.7","0.7.7"))}
     @Test fun reportsBothSourceFailuresAndCancelledCheckDoesNotFetch() {

@@ -31,9 +31,9 @@ class ClientUpdateCheckTest {
     private fun release()=ShareUpdates.Release(29,"0.7.9","notes","https://github.com/example", "a".repeat(64),100,ShareUpdates.PACKAGE,ShareUpdates.SIGNER)
     @Test fun repeatedTapsShareOneRequestAndProgressThenSuccessArrive() {
         val worker=Queue();var reads=0;val states=mutableListOf<ClientUpdateCheck.State>()
-        val check=ClientUpdateCheck({ _,_,source -> reads++;source("备用源");release() },worker,Handler(Looper.getMainLooper()),1000L) { states+=it }
-        assertTrue(check.start(ShareUpdates.Channel.PREVIEW))
-        repeat(20) { assertFalse(check.start(ShareUpdates.Channel.PREVIEW)) }
+        val check=ClientUpdateCheck({ _,source -> reads++;source("备用源");release() },worker,Handler(Looper.getMainLooper()),1000L) { states+=it }
+        assertTrue(check.start())
+        repeat(20) { assertFalse(check.start()) }
         worker.drain();shadowOf(Looper.getMainLooper()).idle()
         assertEquals(1,reads)
         assertTrue(states.any { it.source.contains("备用源") })
@@ -42,33 +42,33 @@ class ClientUpdateCheckTest {
     }
     @Test fun deadlineFinishesVisibleStateAndRetryWorksAfterCancelledOldTask() {
         val worker=Queue();var reads=0
-        val check=ClientUpdateCheck({ _,_,_ -> reads++;release() },worker,Handler(Looper.getMainLooper()),50L) {}
-        check.start(ShareUpdates.Channel.PREVIEW)
+        val check=ClientUpdateCheck({ _,_ -> reads++;release() },worker,Handler(Looper.getMainLooper()),50L) {}
+        check.start()
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(60))
         assertEquals(ClientUpdateCheck.Phase.FAILED,check.state.phase)
         assertTrue(check.state.message.contains("超时"))
         worker.drain()
         assertEquals(0,reads)
-        assertTrue(check.start(ShareUpdates.Channel.PREVIEW))
+        assertTrue(check.start())
         worker.drain();shadowOf(Looper.getMainLooper()).idle()
         assertEquals(ClientUpdateCheck.Phase.SUCCESS,check.state.phase)
         check.close()
     }
     @Test fun closingScreenDiscardsQueuedResultAndAllLaterCallbacks() {
         val worker=Queue();val states=mutableListOf<ClientUpdateCheck.State>()
-        val check=ClientUpdateCheck({ _,_,_ -> release() },worker,Handler(Looper.getMainLooper()),50L) { states+=it }
-        check.start(ShareUpdates.Channel.PREVIEW);worker.drain()
+        val check=ClientUpdateCheck({ _,_ -> release() },worker,Handler(Looper.getMainLooper()),50L) { states+=it }
+        check.start();worker.drain()
         check.close()
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(60))
         assertEquals(1,states.size)
-        assertFalse(check.start(ShareUpdates.Channel.PREVIEW))
+        assertFalse(check.start())
     }
     @Test fun cancelledResultCannotReplaceNewRequestOrPublishFailure() {
         val worker=Queue();var reads=0;val states=mutableListOf<ClientUpdateCheck.State>()
-        val check=ClientUpdateCheck({ _,_,_ -> reads++;release() },worker,Handler(Looper.getMainLooper()),1000L) { states+=it }
-        check.start(ShareUpdates.Channel.PREVIEW);worker.drain()
+        val check=ClientUpdateCheck({ _,_ -> reads++;release() },worker,Handler(Looper.getMainLooper()),1000L) { states+=it }
+        check.start();worker.drain()
         check.cancel()
-        check.start(ShareUpdates.Channel.PREVIEW);worker.drain()
+        check.start();worker.drain()
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(2,reads)
         assertEquals(1,states.count { it.phase==ClientUpdateCheck.Phase.SUCCESS })

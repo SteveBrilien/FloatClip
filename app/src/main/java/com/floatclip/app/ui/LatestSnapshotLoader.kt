@@ -21,5 +21,6 @@ class LatestSnapshotLoader<T>(
             delivery.execute { if(!closed && token==generation.get())accept(result) }
         }
     }
-    override fun close() { closed=true;generation.incrementAndGet() }
+    fun invalidate() { generation.incrementAndGet() }
+    override fun close() { closed=true;invalidate() }
 }

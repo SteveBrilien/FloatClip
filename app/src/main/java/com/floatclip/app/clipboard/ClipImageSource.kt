@@ -24,6 +24,7 @@ internal class ClipImageSource(
     private val lock = Any()
     @Volatile private var closed = false
     private var latest: Request? = null
+    private var lastRequested: Pair<Rect, Int>? = null
     private var generation = 0L
     private var scheduled = false
     // Accessed only on the decoder executor, including recycle.
@@ -33,7 +34,10 @@ internal class ClipImageSource(
     fun request(rect: Rect, sample: Int, done: (Bitmap, Rect) -> Unit) {
         synchronized(lock) {
             if (closed) return
-            latest = Request(Rect(rect), sample, ++generation, done)
+            val request = Rect(rect) to sample
+            if (lastRequested == request) return
+            lastRequested = request
+            latest = Request(request.first, sample, ++generation, done)
             if (scheduled) return
             scheduled = true
         }

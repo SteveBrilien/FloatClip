@@ -1,0 +1,3 @@
+e3b05c08b5fc6c79c5ea8c95aba3049ad162b89939c4101eb0140645e6d81993  FloatClip-Android-0.7.9-build50.apk
+514e8596275524a039b94b6eecc6fbb01cae7bd45d9297a204aeee7fdc172777  FloatClip-Windows-0.7.9-build45.zip
+9381fcd15514ea594417f3b6819b283d0ebe6b3196e75b455daaf9dbbc968141  native-updates-v2.json

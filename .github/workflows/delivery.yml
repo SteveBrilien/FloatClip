@@ -1,0 +1,85 @@
+name: Publish FloatClip native v2 builds
+on:
+  push:
+    branches: [delivery/native-v2-build50]
+permissions:
+  contents: write
+concurrency:
+  group: floatclip-native-v2-build50
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify package bytes and signed manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          source=$(cat SOURCE_COMMIT.txt)
+          [[ "$source" =~ ^[a-f0-9]{40}$ ]]
+          git fetch origin refs/heads/release/native-refresh
+          [[ $(git rev-parse FETCH_HEAD) == "$source" ]]
+          git show "$source:updates/native-update-v2-public.pem" > "$RUNNER_TEMP/native-update-public.pem"
+          sha256sum --check SHA256SUMS.txt
+          python3 - <<'PY'
+          import base64,hashlib,json,os,pathlib,subprocess,zipfile
+          payload=json.loads(pathlib.Path('native-updates-v2.json').read_text())
+          b64=lambda s:base64.urlsafe_b64decode(s+'='*(-len(s)%4))
+          for channel in ('share-preview','share-dev'):
+              first,second,signature=payload['nativeUpdates'][channel].split('.')
+              assert json.loads(b64(first))=={'alg':'RS256','kid':'floatclip-updates-20261112-v2','typ':'JOSE'}
+              tmp=pathlib.Path(os.environ['RUNNER_TEMP']);(tmp/'manifest.input').write_bytes((first+'.'+second).encode());(tmp/'manifest.sig').write_bytes(b64(signature))
+              subprocess.run(['openssl','dgst','-sha256','-verify',tmp/'native-update-public.pem','-signature',tmp/'manifest.sig',tmp/'manifest.input'],check=True)
+              release=json.loads(b64(second))['release'];assert release['channel']==channel
+              for platform,build,suffix in [('android',50,'apk'),('windows',45,'zip')]:
+                  name=f'FloatClip-{platform.title()}-0.7.9-build{build}.{suffix}';file=pathlib.Path(name);row=release[platform]
+                  assert row['build']==build and row['status']=='available' and row['version']=='0.7.9'
+                  assert row['url']==f'https://github.com/{os.environ["GITHUB_REPOSITORY"]}/releases/download/v0.7.9-build50/{name}'
+                  assert row['bytes']==file.stat().st_size and row['sha256']==hashlib.sha256(file.read_bytes()).hexdigest()
+                  with zipfile.ZipFile(file) as z:
+                      assert z.testzip() is None
+                      names=[n.replace('\\','/') for n in z.namelist()]
+                      assert all(not n.startswith('/') and '..' not in pathlib.PurePosixPath(n).parts for n in names)
+                      if platform=='windows':
+                          assert 'FloatClip/FloatClip.exe' in names and sum(n.startswith('FloatClip/licenses/') and not n.endswith('/') for n in names)>=9
+                      else:
+                          assert 'AndroidManifest.xml' in names and 'classes.dex' in names
+          PY
+      - name: Publish packages and enable the new update feed
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag=v0.7.9-build50
+          source=$(cat SOURCE_COMMIT.txt)
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$source" --title 'FloatClip 0.7.9 · Android build50 / Windows build45' \
+              --notes-file RELEASE_NOTES.md --prerelease --draft \
+              FloatClip-Android-0.7.9-build50.apk FloatClip-Windows-0.7.9-build45.zip native-updates-v2.json SHA256SUMS.txt
+          fi
+          mkdir -p "$RUNNER_TEMP/release-check"
+          gh release download "$tag" --dir "$RUNNER_TEMP/release-check" --pattern 'FloatClip-*' --pattern native-updates-v2.json
+          (cd "$RUNNER_TEMP/release-check" && sha256sum --check "$GITHUB_WORKSPACE/SHA256SUMS.txt")
+          gh release edit "$tag" --draft=false
+          git worktree add --detach "$RUNNER_TEMP/update-feed" "$source"
+          cd "$RUNNER_TEMP/update-feed"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if git ls-remote --exit-code origin refs/heads/native-updates-v2; then
+            git fetch origin refs/heads/native-updates-v2
+            git checkout --detach FETCH_HEAD
+          else
+            git switch --orphan native-updates-v2
+          fi
+          mkdir -p updates
+          cp "$GITHUB_WORKSPACE/native-updates-v2.json" updates/native-updates-v2.json
+          git add updates/native-updates-v2.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publish signed native updates for Android 50 and Windows 45'
+            git push origin HEAD:refs/heads/native-updates-v2
+          fi

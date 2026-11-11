@@ -36,7 +36,7 @@ public sealed partial class LocalClipboardWindow
             for(var p=e.OriginalSource as DependencyObject;p!=null&&p!=titleBar;p=p is Visual?VisualTreeHelper.GetParent(p):LogicalTreeHelper.GetParent(p))if(p is System.Windows.Controls.Primitives.ButtonBase)return;
             if(e.ClickCount==1){DragMove();host.RememberPlacement();e.Handled=true;}
         };
-        var close=IconButton("\uE711","收起 FloatClip",Hide);
+        var close=IconButton("\uE711","收起 FloatClip",HideWithMotion);
         close.ClearValue(Control.BackgroundProperty);close.ClearValue(Control.ForegroundProperty);
         close.SetResourceReference(FrameworkElement.StyleProperty,"FloatClip.Button.CaptionClose");
         System.Windows.Automation.AutomationProperties.SetAutomationId(close,"WindowClose");
@@ -72,7 +72,7 @@ public sealed partial class LocalClipboardWindow
     void BuildShellTitle()
     {
         var title=(DockPanel)shell.Children[0];var pin=(System.Windows.Controls.Button)title.Children[1];
-        pin.Content=Glyph(host.Pinned?"\uE77A":"\uE718",(int)DesignTokens.Number("Icon.Small"));pin.ToolTip=host.Pinned?"取消固定面板":"固定面板";
+        pin.Content=new SymbolIcon(SymbolRegular.Pin24){Filled=host.Pinned,FontSize=DesignTokens.Number("Icon.Small")};pin.ToolTip=host.Pinned?"取消固定面板":"固定面板";
         System.Windows.Automation.AutomationProperties.SetName(pin,host.Pinned?"取消固定面板":"固定面板");
     }
     void UpdateNavigation(){navigation.PaneDisplayMode=NavigationViewPaneDisplayMode.Left;navigation.IsPaneOpen=expandedNavigation&&ActualWidth>=500;}

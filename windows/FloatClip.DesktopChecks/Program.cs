@@ -160,6 +160,8 @@ static class Program
             var second=vault.AddText("beta protected");var beta=second["entries"]!.AsArray().OfType<JsonObject>().Single(c=>c["text"]!.GetValue<string>()=="beta protected");beta["locked"]=true;vault.Commit(second["revision"]!.GetValue<string>(),second["entries"]!.AsArray());
             vault.AddText("gamma ordinary");var image=vault.AddImage(png,2,2)["entries"]!.AsArray().OfType<JsonObject>().Single(c=>ClipboardVault.Kind(c)=="image");
             host.ShowPopup();Pump();var window=app.Windows.OfType<LocalClipboardWindow>().Single();window.Title="FloatClip · 隔离界面验收";
+            var navigationSeparators=Descendants(window).OfType<Border>().Where(b=>b.Name is "PART_TopSeparator" or "PART_FooterSeparator").ToArray();
+            Check(navigationSeparators.Length==2&&navigationSeparators.All(b=>b.Background is SolidColorBrush),"navigation dividers use the solid FloatClip theme stroke");
             string shelfSample=Path.Combine(dataRoot,"shelf-sample.pdf");byte[] shelfBytes=System.Text.Encoding.UTF8.GetBytes("metadata-only test fixture");File.WriteAllBytes(shelfSample,shelfBytes);
             var shelfStore=new FileShelfStore(Path.Combine(dataRoot,"file-shelf.json"));string shelfHash=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(shelfSample)));shelfStore.Add(shelfSample);
             Check(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(shelfSample)))==shelfHash,"file shelf persists metadata without changing file content");
@@ -169,10 +171,10 @@ static class Program
             Check(Descendants(fileView).OfType<TextBlock>().Any(t=>t.Text=="共享文件"),"native file page uses the approved shared-files heading");
             Check(fileRows.Count==1&&fileRows[0].HasLocalFile&&fileRows[0].Name=="shelf-sample.pdf","native file page renders persistent local shelf row");
             Check(System.Windows.Automation.AutomationProperties.GetAutomationId(Field<ListView>(fileView,"localList"))=="FileShelfList"&&System.Windows.Automation.AutomationProperties.GetAutomationId(Field<ListView>(fileView,"transferList"))=="TransferActivityList","file and transfer lists expose accessible automation identifiers");
-            Check(Descendants(fileView).OfType<ToolBar>().Count()==1,"file commands use one standard overflow toolbar");
+            Check(!Descendants(fileView).OfType<ToolBar>().Any()&&Descendants(fileView).OfType<Button>().Any(b=>b.Content as string=="更多"),"compact file commands use one explicit More button");
             Check(Field<Border>(fileView,"activity").Height==126&&!Descendants(fileView).OfType<Expander>().Any(),"transfer activity uses a fixed dock without animated expansion");
             Check(Field<Border>(fileView,"activity").Visibility==Visibility.Collapsed,"empty activity does not leave a blank annotated panel");
-            var commands=new[]{"downloadCommand","previewCommand","saveCommand","forwardCommand","propertiesCommand"}.Select(name=>Field<Button>(fileView,name)).ToArray();Check(commands.Length==5&&Descendants(fileView).OfType<Separator>().Any(),"approved file toolbar has bounded command group and distinct actions");
+            var commands=new[]{"downloadCommand","previewCommand","saveCommand","forwardCommand","propertiesCommand"}.Select(name=>Field<Button>(fileView,name)).ToArray();Check(commands.Length==5,"file command band exposes distinct actions");
             Check(((Wpf.Ui.Controls.Button)commands[0]).Appearance==Wpf.Ui.Controls.ControlAppearance.Primary,"download remains the primary command");
             // Presentation fixtures cover solid/local and dashed/remote type icons.
             foreach(var sample in new[]{("会议纪要与下一步安排.docx","DOCX","Word",true,"本机文件"),("项目进度与预算.xlsx","XLSX","Excel",true,"已下载"),("界面参考.png","PNG","图片",false,"未下载"),("结构草图.dwg","DWG","文件",false,"来源离线"),("UI 资源.zip","ZIP","压缩包",true,"本机文件")})
@@ -186,6 +188,18 @@ static class Program
             Check(Descendants(selectedRow).OfType<System.Windows.Controls.Primitives.GridViewRowPresenterBase>().Any()&&!Descendants(selectedRow).OfType<Border>().Any(b=>b.Background is GradientBrush),"selected file row uses shared flat presenter without Aero gradients");
             Check(((SolidColorBrush)selectedRow.Background).Color.A==255,"selected file background is fully opaque");
             window.Width=760;Pump();Check(((GridView)nativeFileList.View).Columns.Sum(c=>c.Width)<=nativeFileList.ActualWidth,"normal desktop width fits all file metadata columns without forcing window resize");Snapshot(window,"files-page-approved-light");
+            Check(commands[1].IsVisible,"wide file page displays preview directly");
+            window.Width=440;Pump();
+            Check(!commands[1].IsVisible&&Descendants(fileView).OfType<Button>().Any(b=>b.Content as string=="更多"&&b.IsVisible),"narrow file page places secondary commands under More");
+            window.Width=760;Pump();
+            Call(fileView,"ShowProperties");Pump();
+            var details=Field<Border>(fileView,"details");
+            Check(details.IsVisible&&Grid.GetColumn(details)==1&&window.OwnedWindows.Count==0,"selected file properties open in the right-side pane");
+            Call(fileView,"SetDetails",false,false);Pump();
+            Call(fileView,"SetFileLayout",true);Pump();
+            Check(nativeFileList.View==null&&nativeFileList.SelectedIndex==0,"tile layout preserves file selection");
+            Call(fileView,"SetFileLayout",false);Pump();
+            Check(nativeFileList.View is GridView&&nativeFileList.SelectedIndex==0,"row layout restores Explorer columns and selection");
             Check(!FilePreviewWindow.CanOpenDocument("example.exe")&&!FilePreviewWindow.CanOpenDocument("example.bat")&&FilePreviewWindow.CanOpenDocument("example.pdf"),"preview cannot launch executable files");
             double fileWidth=window.Width;Call(window,"Navigate",typeof(ClipboardPage));Pump();Check(window.Width==fileWidth,"page navigation preserves user window width");
             updates.CheckAsync().GetAwaiter().GetResult();Pump();Check(Field<Border>(window,"updateBanner").Visibility==Visibility.Visible,"startup new-version banner visible without modal window");
@@ -194,7 +208,11 @@ static class Program
             host.ShowLibrary();Check(app.Windows.OfType<LocalClipboardWindow>().Count()==1,"legacy library reuses one clipboard window");
             var search=Field<TextBox>(window,"search");var list=Field<StackPanel>(window,"list");
             var dragRegion=Descendants(window).OfType<DockPanel>().Single(p=>System.Windows.Automation.AutomationProperties.GetAutomationId(p)=="WindowDragRegion");Check(dragRegion.Background!=null&&dragRegion.ActualWidth>=window.ActualWidth-12,"entire blank title region is hit-testable for dragging");
-            var pinButton=Descendants(dragRegion).OfType<Button>().Single(b=>System.Windows.Automation.AutomationProperties.GetAutomationId(b)=="WindowPin");Check(((TextBlock)pinButton.Content).Text=="\uE77A","pinned window uses the native Windows unpin glyph");host.SetPinned(false);Call(window,"BuildShellTitle");Check(((TextBlock)pinButton.Content).Text=="\uE718","unpinned window uses the native Windows pin glyph");host.SetPinned(false);
+            var pinButton=Descendants(dragRegion).OfType<Button>().Single(b=>System.Windows.Automation.AutomationProperties.GetAutomationId(b)=="WindowPin");
+            Check(pinButton.Content is Wpf.Ui.Controls.SymbolIcon { Filled:true },"pinned window uses the filled pin");
+            host.SetPinned(false);Call(window,"BuildShellTitle");
+            Check(pinButton.Content is Wpf.Ui.Controls.SymbolIcon { Filled:false },"unpinned window uses the outline pin");
+            Check(!search.IsKeyboardFocusWithin,"opening the clipboard does not focus search");
             var occluder=new Window{Title="FloatClip isolated occlusion check",Width=240,Height=180,AllowsTransparency=false};occluder.Show();occluder.Activate();Pump(100);
             Check(window.IsVisible&&!window.Topmost&&window.ShowInTaskbar,"unpinned window stays visible and can be covered like an ordinary window");
             occluder.Close();host.SetPinned(true);window.Activate();Call(window,"BuildShellTitle");
@@ -204,6 +222,13 @@ static class Program
             Call(window,"CopyEntry",row["text"]!.GetValue<string>(),textId);Pump(180);
             Check(Field<ClipboardPanelViewModel>(window,"viewModel").CopiedId==textId&&Descendants(list).OfType<TextBlock>().Any(t=>t.Text=="已复制"&&t.Visibility==Visibility.Visible),"successful copy keeps an inline confirmation visible through the release animation");Snapshot(window,"clipboard-copy-confirmation");Pump(700);
             Check(Field<ClipboardPanelViewModel>(window,"viewModel").CopiedId==""&&window.IsVisible,"copy feedback expires without hiding a pinned window");
+            var imageCopy=Descendants(list).OfType<Button>().Single(b=>b.Content as string=="复制图片");
+            var imageButtonWidth=imageCopy.ActualWidth;
+            imageCopy.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump(140);
+            Check(imageCopy.Content as string=="已复制"&&Math.Abs(imageCopy.ActualWidth-imageButtonWidth)<1&&
+                  !Descendants(list).Except(Descendants(imageCopy)).OfType<TextBlock>().Any(t=>t.Text=="已复制"&&t.Visibility==Visibility.Visible),
+                  "image copy replaces its button label without adding an overlapping badge");
+            Pump(700);
             Call(window,"ChangeCategory",row);Call(window,"ChangeCategory",row);Pump();var categoryWindow=window.OwnedWindows.Cast<Window>().Single(w=>w.Title=="分类");
             var categoryControl=Descendants(categoryWindow).OfType<ComboBox>().Single();Check(categoryControl.IsEditable&&categoryControl.Items.Cast<string>().Contains("自定义 😀"),"nonmodal category picker exposes saved categories and editable new names");Snapshot(categoryWindow,"category-picker");categoryWindow.Close();
             window.OpenSettings();window.OpenSettings();Pump();var settings=Field<System.Collections.Generic.Dictionary<Type,FrameworkElement>>(window,"pages")[typeof(SettingsPage)];

@@ -35,6 +35,7 @@ public sealed class ClipboardHost:IDisposable
     readonly string preferencesPath;
     readonly System.Windows.Forms.NotifyIcon? tray;
     LocalClipboardWindow? popup;
+    ClipboardPasteTarget? pasteTarget;
     uint initialSequence,lastSequence;
     int hotkeyId=703;
     bool registered,disposed;
@@ -67,6 +68,19 @@ public sealed class ClipboardHost:IDisposable
     [DllImport("user32.dll")]static extern uint GetClipboardSequenceNumber();
     [DllImport("user32.dll")]static extern bool GetWindowRect(IntPtr hwnd,out RectNative rect);
     [DllImport("user32.dll")]static extern bool SetWindowPos(IntPtr hwnd,IntPtr after,int x,int y,int width,int height,uint flags);
+    [DllImport("user32.dll")]static extern bool GetWindowPlacement(IntPtr hwnd,ref NativePlacement placement);
+    [DllImport("user32.dll")]static extern bool SetWindowPlacement(IntPtr hwnd,in NativePlacement placement);
+    [StructLayout(LayoutKind.Sequential)]struct NativePlacement
+    {
+        public uint Length,Flags,ShowCommand;
+        public int MinX,MinY,MaxX,MaxY;
+        public RectNative Normal;
+    }
+    static bool TryGetWindowPlacement(IntPtr window,out NativePlacement value)
+    {
+        value=new(){Length=(uint)Marshal.SizeOf<NativePlacement>()};
+        return GetWindowPlacement(window,ref value);
+    }
     [StructLayout(LayoutKind.Sequential)]struct RectNative{public int Left,Top,Right,Bottom;}
 
     // An isolated data root and disabled integration let desktop checks exercise the real
@@ -141,7 +155,7 @@ public sealed class ClipboardHost:IDisposable
         if(message==ClipboardMessage)ReadClipboard();
         else if(message==HotkeyMessage&&w.ToInt32()==hotkeyId)
         {
-            if(popup?.IsVisible==true&&popup.IsActive&&WindowMode=="popup")popup.HideWithMotion();else ShowPopup();
+            if(popup?.IsPanelPresented==true&&popup.IsActive&&WindowMode=="popup")popup.HideWithMotion();else ShowPopup();
             handled=true;
         }
         return IntPtr.Zero;
@@ -230,10 +244,46 @@ public sealed class ClipboardHost:IDisposable
     public void ShowPopup(bool activate=true)
     {
         if(disposed)return;
+        var target=activate&&systemIntegration?ClipboardPasteTarget.Capture():null;
         popup??=new LocalClipboardWindow(this,true);
-        popup.Topmost=Pinned;popup.ShowActivated=activate;
-        bool fresh=!popup.IsVisible;popup.Show();PlacePopup();if(fresh)popup.AnimateWindowOpen();
-        if(activate){popup.Activate();popup.FocusSearch();}
+        popup.Topmost=Pinned;
+        if(!popup.IsPanelPresented)
+        {
+            pasteTarget=target;
+            if(!popup.IsVisible)
+            {
+                popup.WindowStartupLocation=WindowStartupLocation.Manual;
+                var helper=new WindowInteropHelper(popup);
+                helper.EnsureHandle();
+                PlacePopup();
+            }
+            else if(popup.WindowState==WindowState.Minimized)
+            {
+                var helper=new WindowInteropHelper(popup);
+                if(TryGetWindowPlacement(helper.Handle,out var placement))
+                {
+                    var position=PopupPosition(placement.Normal.Right-placement.Normal.Left,placement.Normal.Bottom-placement.Normal.Top);
+                    // WINDOWPLACEMENT uses workspace coordinates for taskbar windows.
+                    var area=System.Windows.Forms.Screen.FromPoint(position);
+                    int x=position.X-(area.WorkingArea.Left-area.Bounds.Left);
+                    int y=position.Y-(area.WorkingArea.Top-area.Bounds.Top);
+                    placement.Normal=new(){Left=x,Top=y,Right=x+placement.Normal.Right-placement.Normal.Left,
+                        Bottom=y+placement.Normal.Bottom-placement.Normal.Top};
+                    SetWindowPlacement(helper.Handle,in placement);
+                }
+            }
+        }
+        else if(!popup.IsActive)pasteTarget=target;
+        popup.ShowWithMotion(activate);
+    }
+
+    internal void PasteIntoPreviousEditor(Action<bool> done)
+    {
+        var target=pasteTarget;
+        if(!systemIntegration||target==null||!target.RestoreFocus()){done(false);return;}
+        uint sequence=lastSequence;
+        dispatcher.BeginInvoke(DispatcherPriority.Input,new Action(()=>
+            done(!disposed&&GetClipboardSequenceNumber()==sequence&&target.PasteIfStillFocused())));
     }
     internal void RecreatePopup(LocalClipboardWindow requested)
     {
@@ -260,20 +310,26 @@ public sealed class ClipboardHost:IDisposable
         if(popup==null)return;
         var handle=new WindowInteropHelper(popup).Handle;
         if(!GetWindowRect(handle,out var rect))return;
+        var position=PopupPosition(rect.Right-rect.Left,rect.Bottom-rect.Top);
+        SetWindowPos(handle,IntPtr.Zero,position.X,position.Y,0,0,0x0015);
+    }
+
+    System.Drawing.Point PopupPosition(int width,int height)
+    {
         var cursor=System.Windows.Forms.Cursor.Position;
         bool persistent=Pinned||DesktopResident;
-        var anchor=persistent&&preferences.Left is int x&&preferences.Top is int y?new System.Drawing.Point(x,y):cursor;
+        var anchor=persistent&&preferences.Left is int x&&preferences.Top is int y?new System.Drawing.Point(x,y):pasteTarget?.CaretBottom??cursor;
         var area=System.Windows.Forms.Screen.FromPoint(anchor).WorkingArea;
-        int width=rect.Right-rect.Left,height=rect.Bottom-rect.Top;
-        int left=persistent&&preferences.Left!=null?preferences.Left.Value:cursor.X+12;
-        int top=persistent&&preferences.Top!=null?preferences.Top.Value:cursor.Y+12;
-        left=Math.Clamp(left,area.Left,Math.Max(area.Left,area.Right-width));
-        top=Math.Clamp(top,area.Top,Math.Max(area.Top,area.Bottom-height));
-        SetWindowPos(handle,IntPtr.Zero,left,top,0,0,0x0015);
+        int left=persistent&&preferences.Left!=null?preferences.Left.Value:anchor.X+(pasteTarget==null?12:0);
+        int top=persistent&&preferences.Top!=null?preferences.Top.Value:anchor.Y+12;
+        if(!persistent&&pasteTarget!=null&&top+height>area.Bottom&&pasteTarget.CaretTop.Y-height-12>=area.Top)
+            top=pasteTarget.CaretTop.Y-height-12;
+        return new(Math.Clamp(left,area.Left,Math.Max(area.Left,area.Right-width)),
+            Math.Clamp(top,area.Top,Math.Max(area.Top,area.Bottom-height)));
     }
     public void RememberPlacement()
     {
-        if(popup==null||(!Pinned&&!DesktopResident))return;
+        if(popup==null||popup.WindowState!=WindowState.Normal||(!Pinned&&!DesktopResident))return;
         if(GetWindowRect(new WindowInteropHelper(popup).Handle,out var r))
         {preferences.Left=r.Left;preferences.Top=r.Top;preferences.Save(preferencesPath);}
     }

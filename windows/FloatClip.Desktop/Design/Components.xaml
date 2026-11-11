@@ -21,7 +21,6 @@
       <ControlTemplate.Triggers>
         <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CaptionSurface" Property="Background" Value="{DynamicResource FloatClip.Hover}"/></Trigger>
         <Trigger Property="IsPressed" Value="True"><Setter TargetName="CaptionSurface" Property="Background" Value="{DynamicResource FloatClip.Pressed}"/></Trigger>
-        <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="CaptionSurface" Property="BorderBrush" Value="{DynamicResource FloatClip.Accent}"/><Setter TargetName="CaptionSurface" Property="BorderThickness" Value="1"/></Trigger>
         <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource FloatClip.DisabledText}"/></Trigger>
       </ControlTemplate.Triggers>
     </ControlTemplate></Setter.Value></Setter>
@@ -97,6 +96,15 @@
       <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource FloatClip.Accent}"/></Trigger>
       <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource FloatClip.DisabledText}"/></Trigger>
     </Style.Triggers>
+  </Style>
+  <Style x:Key="FloatClip.File.Tile" TargetType="ListViewItem" BasedOn="{StaticResource FloatClip.File.Row}">
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListViewItem">
+      <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+              BorderThickness="1" CornerRadius="{DynamicResource FloatClip.Radius.Card}">
+        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+      </Border>
+    </ControlTemplate></Setter.Value></Setter>
   </Style>
   <Style x:Key="FloatClip.File.Header" TargetType="GridViewColumnHeader">
     <Setter Property="Background" Value="{DynamicResource FloatClip.Surface}"/><Setter Property="Foreground" Value="{DynamicResource FloatClip.TextSecondary}"/>

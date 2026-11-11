@@ -67,12 +67,18 @@ public sealed class FileShelfView:UserControl,IDisposable
     readonly ComboBox peers=new();
     readonly TextBlock status=new(),selectedInfo=new();
     readonly Button removeLocal,sendFile,accept,decline,cancel,saveAs,openFile,forget;
-    readonly Button downloadCommand,previewCommand,saveCommand,forwardCommand,propertiesCommand;
+    readonly Button downloadCommand,previewCommand,saveCommand,forwardCommand,propertiesCommand,rowLayout,tileLayout;
     readonly ComboBox dateRange=new();
     readonly ProgressBar batchProgress=new(){Height=4,Maximum=100,Visibility=Visibility.Collapsed};
     readonly Border activity=new(){Height=126,Padding=new Thickness(0,8,0,0),BorderThickness=new Thickness(0,1,0,0)};
     readonly TextBlock activitySummary=new(){Text="暂无传输活动",FontSize=12,VerticalAlignment=VerticalAlignment.Center};
     CancellationTokenSource? batch;
+    readonly ColumnDefinition detailsColumn=new(){Width=GridLength.Auto};
+    readonly Border details=new(){Visibility=Visibility.Collapsed,BorderThickness=new Thickness(1,0,0,0)};
+    GridView? rowView;
+    FilePreviewPane? detailPreview;
+    string? detailKey;
+    bool showDetails,showPreview,tiles,detailRenderQueued;
     bool closed;
     readonly DispatcherTimer statusTimer=new(){Interval=TimeSpan.FromSeconds(5)};
 
@@ -92,30 +98,73 @@ public sealed class FileShelfView:UserControl,IDisposable
         heading.Children.Add(batchProgress);
         root.Children.Add(heading);
 
-        var actions=new ToolBar{Padding=new Thickness(0),Background=Brushes.Transparent,BorderThickness=new Thickness(0)};
-        ToolBarTray.SetIsLocked(actions,true);
-        var add=Button("添加文件",AddFiles);CommandIcon(add,"\uE8E5");System.Windows.Automation.AutomationProperties.SetAutomationId(add,"AddShelfFiles");actions.Items.Add(add);
-        actions.Items.Add(new Separator{Margin=new Thickness(5,4,5,4)});
+        var actions=new StackPanel{Orientation=Orientation.Horizontal};
+        var add=Button("添加文件",AddFiles);CommandIcon(add,"\uE8E5");System.Windows.Automation.AutomationProperties.SetAutomationId(add,"AddShelfFiles");actions.Children.Add(add);
         downloadCommand=Button("下载",()=>_=DownloadSelected());CommandIcon(downloadCommand,"\uE896");((Wpf.Ui.Controls.Button)downloadCommand).Appearance=Wpf.Ui.Controls.ControlAppearance.Primary;
-        DesignTokens.Button(downloadCommand,"Accent");actions.Items.Add(downloadCommand);
-        previewCommand=Button("预览",OpenSelectedLocal);CommandIcon(previewCommand,"\uE8A7");actions.Items.Add(previewCommand);
-        saveCommand=Button("另存为",()=>_=SaveLocalAs());CommandIcon(saveCommand,"\uE74E");actions.Items.Add(saveCommand);
-        forwardCommand=Button("转发",ForwardSelected);CommandIcon(forwardCommand,"\uE72A");actions.Items.Add(forwardCommand);
-        var more=Button("更多",()=>{});var moreMenu=new ContextMenu();moreMenu.SetResourceReference(Control.BackgroundProperty,"FloatClip.Surface");moreMenu.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");
-        void More(string label,Action action){var item=new MenuItem{Header=label};item.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");item.Click+=(_,_)=>Run(action);moreMenu.Items.Add(item);}
-        More("下载 / 另存为",()=>_=DownloadSelected());More("保留 / 取消保留",KeepSelected);More("清理所选下载缓存",()=>ClearFiles(false));More("移除所选记录",RemoveLocal);More("取消下载",()=>batch?.Cancel());more.Click+=(_,_)=>{moreMenu.PlacementTarget=more;moreMenu.IsOpen=true;};actions.Items.Add(more);
+        DesignTokens.Button(downloadCommand,"Accent");actions.Children.Add(downloadCommand);
+        var expandedActions=new StackPanel{Orientation=Orientation.Horizontal};
+        previewCommand=Button("预览",OpenSelectedLocal);CommandIcon(previewCommand,"\uE8A7");expandedActions.Children.Add(previewCommand);
+        saveCommand=Button("另存为",()=>_=SaveLocalAs());CommandIcon(saveCommand,"\uE74E");expandedActions.Children.Add(saveCommand);
+        forwardCommand=Button("转发",()=>ForwardSelected(forwardCommand!));CommandIcon(forwardCommand,"\uE72A");expandedActions.Children.Add(forwardCommand);
+        propertiesCommand=Button("属性",ShowProperties);CommandIcon(propertiesCommand,"\uE946");expandedActions.Children.Add(propertiesCommand);
+        actions.Children.Add(expandedActions);
+        var more=Button("更多",()=>{});var moreMenu=new ContextMenu{Placement=System.Windows.Controls.Primitives.PlacementMode.Bottom};
+        MenuItem More(string label,Action action){var item=new MenuItem{Header=label};item.Click+=(_,_)=>Run(action);moreMenu.Items.Add(item);return item;}
+        var compactPreview=More("预览",OpenSelectedLocal);
+        var compactSave=More("另存为",()=>_=SaveLocalAs());
+        var compactForward=More("转发",()=>ForwardSelected(more));
+        var compactProperties=More("属性",ShowProperties);
+        var compactItems=new[]{compactPreview,compactSave,compactForward,compactProperties};
+        More("保留 / 取消保留",KeepSelected);More("清理所选下载缓存",()=>ClearFiles(false));More("移除所选记录",RemoveLocal);More("取消下载",()=>batch?.Cancel());
+        more.Click+=(_,_)=>{
+            var buttons=new[]{previewCommand,saveCommand,forwardCommand,propertiesCommand};
+            for(int i=0;i<compactItems.Length;i++)
+            {
+                compactItems[i].Visibility=expandedActions.Visibility==Visibility.Collapsed?Visibility.Visible:Visibility.Collapsed;
+                compactItems[i].IsEnabled=buttons[i].IsEnabled;
+            }
+            moreMenu.PlacementTarget=more;moreMenu.IsOpen=true;
+        };
+        actions.Children.Add(more);
         dateRange.ItemsSource=new[]{"全部时间","最近24小时","最近7天","最近30天"};dateRange.SelectedIndex=0;dateRange.SelectionChanged+=(_,_)=>RefreshLocal();
         var dates=new MenuItem{Header="按时间筛选"};moreMenu.Items.Add(dates);for(int index=0;index<4;index++){int chosen=index;var item=new MenuItem{Header=dateRange.Items[index]};item.Click+=(_,_)=>dateRange.SelectedIndex=chosen;dates.Items.Add(item);}
         removeLocal=Button("移除所选",RemoveLocal);System.Windows.Automation.AutomationProperties.SetAutomationId(removeLocal,"RemoveShelfFile");
         peers.MinWidth=150;peers.MinHeight=32;peers.Margin=new Thickness(4,0,8,0);peers.SetResourceReference(Control.BackgroundProperty,"FloatClip.Surface");peers.SetResourceReference(Control.ForegroundProperty,"FloatClip.Text");System.Windows.Automation.AutomationProperties.SetName(peers,"发送到局域网设备");System.Windows.Automation.AutomationProperties.SetAutomationId(peers,"FileTransferPeer");peers.SelectionChanged+=(_,_)=>RefreshActions();
         sendFile=Button("直接发送",SendSelected);System.Windows.Automation.AutomationProperties.SetAutomationId(sendFile,"SendShelfFile");
-        var commands=new DockPanel{LastChildFill=true};propertiesCommand=Button("属性",ShowProperties);CommandIcon(propertiesCommand,"\uE946");DockPanel.SetDock(propertiesCommand,Dock.Right);commands.Children.Add(propertiesCommand);commands.Children.Add(actions);
+        var commands=new DockPanel{LastChildFill=true};commands.Children.Add(actions);
+        actions.Measure(new Size(double.PositiveInfinity,double.PositiveInfinity));
+        var expandedWidth=actions.DesiredSize.Width;
+        commands.SizeChanged+=(_,_)=>expandedActions.Visibility=commands.ActualWidth<expandedWidth?Visibility.Collapsed:Visibility.Visible;
         var commandBand=new Border{Child=commands,Padding=new Thickness(12,6,12,6),BorderThickness=new Thickness(0,1,0,1)};commandBand.SetResourceReference(Border.BorderBrushProperty,"FloatClip.Line");commandBand.Background=Brushes.Transparent;Grid.SetRow(commandBand,1);root.Children.Add(commandBand);
 
-        var body=new Grid{Margin=new Thickness(12,0,12,0)};body.RowDefinitions.Add(new RowDefinition{Height=new GridLength(1,GridUnitType.Star)});body.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
+        var body=new Grid{Margin=new Thickness(12,0,12,0)};body.RowDefinitions.Add(new RowDefinition{Height=new GridLength(1,GridUnitType.Star)});body.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});body.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
         var localPanel=new DockPanel{LastChildFill=true};
-        selectedInfo.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Muted");selectedInfo.TextWrapping=TextWrapping.NoWrap;selectedInfo.TextTrimming=TextTrimming.CharacterEllipsis;selectedInfo.Height=28;selectedInfo.FontSize=12;selectedInfo.VerticalAlignment=VerticalAlignment.Center;selectedInfo.Margin=new Thickness(2,0,2,0);DockPanel.SetDock(selectedInfo,Dock.Bottom);localPanel.Children.Add(selectedInfo);
-        ConfigureList(localList,localRows);System.Windows.Automation.AutomationProperties.SetAutomationId(localList,"FileShelfList");localList.SelectionChanged+=(_,_)=>{UpdateSelectedInfo();RefreshActions();};
+        body.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(1,GridUnitType.Star)});
+        body.ColumnDefinitions.Add(detailsColumn);
+        details.SetResourceReference(Border.BorderBrushProperty,"FloatClip.Line");
+        details.SetResourceReference(Border.BackgroundProperty,"FloatClip.Surface");
+        Grid.SetColumn(details,1);body.Children.Add(details);
+        var footer=new DockPanel{LastChildFill=true};
+        var layoutButtons=new StackPanel{Orientation=Orientation.Horizontal};
+        Button LayoutButton(string label,Wpf.Ui.Controls.SymbolRegular symbol,bool tiled)
+        {
+            var button=Button(label,()=>SetFileLayout(tiled));
+            button.Content=new Wpf.Ui.Controls.SymbolIcon(symbol){FontSize=DesignTokens.Number("Icon.Small")};
+            button.ToolTip=label;
+            button.MinWidth=DesignTokens.Number("Hit.Control");
+            button.Margin=new Thickness(0);
+            DesignTokens.Button(button,"Toolbar");
+            System.Windows.Automation.AutomationProperties.SetName(button,label);
+            return button;
+        }
+        rowLayout=LayoutButton("按行显示",Wpf.Ui.Controls.SymbolRegular.TextBulletListLtr24,false);
+        tileLayout=LayoutButton("按块显示",Wpf.Ui.Controls.SymbolRegular.Grid24,true);
+        layoutButtons.Children.Add(rowLayout);layoutButtons.Children.Add(tileLayout);DesignStates.SetIsSelected(rowLayout,true);
+        DockPanel.SetDock(layoutButtons,Dock.Right);footer.Children.Add(layoutButtons);
+        selectedInfo.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Muted");selectedInfo.TextWrapping=TextWrapping.NoWrap;selectedInfo.TextTrimming=TextTrimming.CharacterEllipsis;selectedInfo.Height=28;selectedInfo.FontSize=12;selectedInfo.VerticalAlignment=VerticalAlignment.Center;selectedInfo.Margin=new Thickness(2,0,2,0);footer.Children.Add(selectedInfo);Grid.SetRow(footer,2);Grid.SetColumnSpan(footer,2);body.Children.Add(footer);
+        ConfigureList(localList,localRows);rowView=localList.View as GridView;
+        System.Windows.Automation.AutomationProperties.SetAutomationId(localList,"FileShelfList");
+        localList.SelectionChanged+=(_,_)=>{UpdateSelectedInfo();RefreshActions();QueueDetailsRefresh();};
         localList.MouseDoubleClick+=(_,_)=>OpenSelectedLocal();
         localList.AddHandler(ScrollViewer.ScrollChangedEvent,new ScrollChangedEventHandler((_,_)=>QueueVisibleThumbnails()));
         localList.PreviewMouseRightButtonDown+=(_,e)=>{if(e.OriginalSource is DependencyObject target){var item=ItemsControl.ContainerFromElement(localList,target) as ListViewItem;if(item!=null){item.IsSelected=true;item.Focus();}}};
@@ -136,7 +185,7 @@ public sealed class FileShelfView:UserControl,IDisposable
         More("直接发送到设备",()=>{var menu=new ContextMenu();if(sync!=null)foreach(var peer in sync.Transfers.Peers()){var item=new MenuItem{Header=peer.Name};item.Click+=(_,_)=>Run(()=>{peers.SelectedItem=peer;SendSelected();});menu.Items.Add(item);}if(menu.Items.Count==0)menu.Items.Add(new MenuItem{Header="暂无文件连接",IsEnabled=false});menu.PlacementTarget=more;menu.IsOpen=true;});
         DockPanel.SetDock(transferActions,Dock.Bottom);transferPanel.Children.Add(transferActions);
         ConfigureList(transferList,transferRows);System.Windows.Automation.AutomationProperties.SetAutomationId(transferList,"TransferActivityList");transferList.SelectionChanged+=(_,_)=>RefreshActions();transferList.MouseDoubleClick+=(_,_)=>OpenSelectedTransfer();transferPanel.Children.Add(transferList);
-        transferList.MinHeight=0;activity.Child=transferPanel;activity.Margin=new Thickness(0,8,0,0);activity.SetResourceReference(Border.BorderBrushProperty,"FloatClip.Line");Grid.SetRow(activity,1);body.Children.Add(activity);
+        transferList.MinHeight=0;Grid.SetColumnSpan(activity,2);activity.Child=transferPanel;activity.Margin=new Thickness(0,8,0,0);activity.SetResourceReference(Border.BorderBrushProperty,"FloatClip.Line");Grid.SetRow(activity,1);body.Children.Add(activity);
         Grid.SetRow(body,2);root.Children.Add(body);
 
         status.TextWrapping=TextWrapping.NoWrap;status.TextTrimming=TextTrimming.CharacterEllipsis;status.FontSize=12;status.Margin=new Thickness(14,0,14,6);status.Visibility=Visibility.Collapsed;status.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Text");Grid.SetRow(status,3);root.Children.Add(status);
@@ -147,7 +196,7 @@ public sealed class FileShelfView:UserControl,IDisposable
         if(sync!=null){sync.Transfers.Changed+=TransferChanged;sync.Files.Changed+=CatalogChanged;sync.RequestFileConnection();}
     }
 
-    public void Dispose(){if(closed)return;closed=true;statusTimer.Stop();batch?.Cancel();thumbnailLifetime.Cancel();thumbnailLifetime.Dispose();previewThumbnails.Dispose();if(sync!=null){sync.Transfers.Changed-=TransferChanged;sync.Files.Changed-=CatalogChanged;}}
+    public void Dispose(){if(closed)return;closed=true;detailPreview?.Dispose();statusTimer.Stop();batch?.Cancel();thumbnailLifetime.Cancel();thumbnailLifetime.Dispose();previewThumbnails.Dispose();if(sync!=null){sync.Transfers.Changed-=TransferChanged;sync.Files.Changed-=CatalogChanged;}}
     bool catalogQueued;
     void CatalogChanged(){if(closed||Dispatcher.HasShutdownStarted||catalogQueued)return;catalogQueued=true;Dispatcher.BeginInvoke(new Action(()=>{catalogQueued=false;if(!closed&&batch==null)RefreshLocal();}),DispatcherPriority.Background);}
     bool transferQueued;
@@ -194,7 +243,8 @@ public sealed class FileShelfView:UserControl,IDisposable
     }
     void FitColumns()
     {
-        double available=Math.Max(320,ActualWidth-36);
+        if(showDetails)details.Width=Math.Clamp(ActualWidth/3,156,320);
+        double available=Math.Max(320,ActualWidth-36-(showDetails?details.Width:0));
         foreach(var list in new[]{localList,transferList})
         {
             if(list.View is not GridView view||view.Columns.Count<6)continue;
@@ -370,7 +420,7 @@ public sealed class FileShelfView:UserControl,IDisposable
     {
         if(localList.SelectedItem is not FileShelfRow row)return;if(!row.IsAvailable){status.Text="文件尚未下载，请先点击下载 / 另存为。";return;}
         if(!FilePreviewWindow.CanPreview(row.Path)){status.Text="此类型暂不支持内嵌预览，可在资源管理器中打开。";return;}
-        var preview=new FilePreviewWindow(row.Path){Owner=Window.GetWindow(this)};preview.Show();
+        SetDetails(true,preview:true);
     }
     async Task SaveLocalAs()
     {
@@ -383,19 +433,101 @@ public sealed class FileShelfView:UserControl,IDisposable
         catch(OperationCanceledException){status.Text="已取消另存为";}catch(Exception e){status.Text=e is IOException?"保存失败："+e.Message:"另存为未完成，请检查连接";}
         finally{batch=null;token.Dispose();if(!closed)RefreshLocal();}
     }
-    void ForwardSelected()
+    void ForwardSelected(FrameworkElement anchor)
     {
         if(localList.SelectedItem is not FileShelfRow row||!row.IsAvailable)return;
         var menu=new ContextMenu();foreach(var peer in sync?.Transfers.Peers()??Array.Empty<FilePeer>()){var item=new MenuItem{Header="发送到 "+peer.Name};item.Click+=(_,_)=>Run(()=>sync!.Transfers.Send(peer.Key,row.Path));menu.Items.Add(item);}
-        if(menu.Items.Count==0)menu.Items.Add(new MenuItem{Header="连接局域网设备后可转发",IsEnabled=false});menu.PlacementTarget=forwardCommand;menu.IsOpen=true;
+        if(menu.Items.Count==0)menu.Items.Add(new MenuItem{Header="连接局域网设备后可转发",IsEnabled=false});menu.PlacementTarget=anchor;menu.IsOpen=true;
     }
-    void ShowProperties()
+    void ShowProperties()=>SetDetails(true,preview:false);
+
+    void SetDetails(bool visible,bool preview=false)
     {
-        if(localList.SelectedItem is not FileShelfRow row)return;
-        var window=new Window{Title="属性",Width=460,Height=360,MinWidth=340,MinHeight=280,Owner=Window.GetWindow(this),WindowStartupLocation=WindowStartupLocation.CenterOwner};window.SetResourceReference(Window.BackgroundProperty,"FloatClip.Background");window.SetResourceReference(Window.ForegroundProperty,"FloatClip.Text");
-        var panel=new Grid{Margin=new Thickness(20)};panel.ColumnDefinitions.Add(new(){Width=new GridLength(86)});panel.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
-        var values=new[]{("名称",row.Name),("类型",row.Type),("大小",FileSizeFormatter.Format(row.SizeBytes)),("修改时间",row.Modified),("来源",row.Source),("本机状态",row.Status),("位置",row.Path)};
-        for(int index=0;index<values.Length;index++){panel.RowDefinitions.Add(new(){Height=GridLength.Auto});var label=new TextBlock{Text=values[index].Item1,Margin=new Thickness(0,0,10,14)};var value=new TextBlock{Text=values[index].Item2,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,14)};Grid.SetRow(label,index);Grid.SetRow(value,index);Grid.SetColumn(value,1);panel.Children.Add(label);panel.Children.Add(value);}window.Content=new ScrollViewer{Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};FloatClip.Desktop.Services.ClipboardBackgroundService.Configure(window,FloatClip.Desktop.Design.DesignPreferences.Load(preferencesRoot),caption:true);window.Show();
+        showDetails=visible;
+        showPreview=preview;
+        detailKey=null;
+        details.Visibility=visible?Visibility.Visible:Visibility.Collapsed;
+        FitColumns();
+        RefreshDetails();
+    }
+
+    void QueueDetailsRefresh()
+    {
+        if(!showDetails||detailRenderQueued)return;
+        detailRenderQueued=true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
+            detailRenderQueued=false;
+            if(!closed)RefreshDetails();
+        }));
+    }
+
+    void RefreshDetails()
+    {
+        var row=localList.SelectedItems.Count==1?localList.SelectedItem as FileShelfRow:null;
+        string key=showDetails&&row!=null?$"{row.Key}|{row.Path}|{row.ModifiedTicks}|{row.Status}|{showPreview}":"";
+        if(detailKey==key)return;
+        detailKey=key;
+        detailPreview?.Dispose();detailPreview=null;details.Child=null;
+        if(!showDetails)return;
+        var panel=new DockPanel();
+        var header=new DockPanel{Margin=(Thickness)Application.Current.FindResource("FloatClip.Padding.Card")};
+        var close=Button("关闭",()=>SetDetails(false));
+        close.Content=new Wpf.Ui.Controls.SymbolIcon(Wpf.Ui.Controls.SymbolRegular.Dismiss24){FontSize=DesignTokens.Number("Icon.Small")};
+        close.ToolTip="关闭侧栏";System.Windows.Automation.AutomationProperties.SetName(close,"关闭侧栏");
+        DockPanel.SetDock(close,Dock.Right);header.Children.Add(close);
+        header.Children.Add(new TextBlock{Text=showPreview?"预览":"属性",VerticalAlignment=VerticalAlignment.Center,FontWeight=FontWeights.SemiBold});
+        DockPanel.SetDock(header,Dock.Top);panel.Children.Add(header);details.Child=panel;
+        if(row==null){panel.Children.Add(new TextBlock{Text="选择一个文件",Margin=(Thickness)Application.Current.FindResource("FloatClip.Padding.Card")});return;}
+        if(showPreview&&row.IsAvailable&&FilePreviewWindow.CanPreview(row.Path))
+        {
+            detailPreview=new FilePreviewPane(row.Path);
+            panel.Children.Add(detailPreview);
+            return;
+        }
+        var fields=new StackPanel{Margin=(Thickness)Application.Current.FindResource("FloatClip.Padding.Card")};
+        var values=new[]{("名称",row.Name),("类型",row.Type),("大小",row.SizeLabel),("修改时间",row.Modified),("来源",row.Source),("本机状态",row.Status),("位置",row.Path)};
+        foreach(var (label,value) in values)
+        {
+            if(value.Length==0)continue;
+            var caption=new TextBlock{Text=label,FontSize=DesignTokens.Number("Font.Caption")};
+            caption.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.TextSecondary");
+            fields.Children.Add(caption);
+            fields.Children.Add(new TextBlock{Text=value,TextWrapping=TextWrapping.Wrap,Margin=new(0,0,0,DesignTokens.Number("Space.12"))});
+        }
+        panel.Children.Add(new ScrollViewer{Content=fields,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
+    }
+
+    void SetFileLayout(bool tiled)
+    {
+        if(tiles==tiled)return;
+        tiles=tiled;
+        DesignStates.SetIsSelected(rowLayout,!tiled);
+        DesignStates.SetIsSelected(tileLayout,tiled);
+        localList.View=tiled?null:rowView;
+        if(tiled)
+        {
+            localList.ItemsPanel=new ItemsPanelTemplate(new FrameworkElementFactory(typeof(WrapPanel)));
+            localList.ItemContainerStyle=(Style)Application.Current.FindResource("FloatClip.File.Tile");
+            localList.ItemTemplate=(DataTemplate)XamlReader.Parse("""
+<DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+  <StackPanel Width="116" Margin="{DynamicResource FloatClip.Padding.Card}">
+    <Image Source="{Binding ShellIcon}" Width="48" Height="48" Stretch="Uniform"/>
+    <TextBlock Text="{Binding Name}" TextAlignment="Center" TextTrimming="CharacterEllipsis"
+               Margin="{DynamicResource FloatClip.Margin.Top8}" ToolTip="{Binding Subtext}"/>
+  </StackPanel>
+</DataTemplate>
+""");
+            ScrollViewer.SetHorizontalScrollBarVisibility(localList,ScrollBarVisibility.Disabled);
+        }
+        else
+        {
+            localList.ClearValue(ItemsControl.ItemsPanelProperty);
+            localList.ClearValue(ItemsControl.ItemTemplateProperty);
+            localList.ItemContainerStyle=(Style)Application.Current.FindResource("FloatClip.File.Row");
+            localList.ClearValue(ScrollViewer.HorizontalScrollBarVisibilityProperty);
+            FitColumns();
+        }
+        QueueVisibleThumbnails();
     }
     void RevealSelectedLocal()
     {

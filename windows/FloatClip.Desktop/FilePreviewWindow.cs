@@ -22,6 +22,25 @@ namespace FloatClip.Desktop;
 /** Read-only contents preview. Unsupported files never masquerade as a large icon. */
 public sealed class FilePreviewWindow:Window
 {
+    public FilePreviewWindow(string path)
+    {
+        Title=Path.GetFileName(path);
+        Width=760;Height=620;MinWidth=420;MinHeight=340;
+        WindowStartupLocation=WindowStartupLocation.CenterOwner;
+        SetResourceReference(BackgroundProperty,"FloatClip.Background");
+        var pane=new FilePreviewPane(path);
+        Content=pane;
+        ClipboardBackgroundService.Configure(this,DesignPreferences.Load(ClipboardHost.Current?.PreferencesRoot??""),caption:true);
+        SourceInitialized+=(_,_)=>{WindowAppearance.Apply(this);WindowAppearance.Theme(this,Wpf.Ui.Appearance.ApplicationThemeManager.GetAppTheme()==Wpf.Ui.Appearance.ApplicationTheme.Dark);};
+        Closed+=(_,_)=>pane.Dispose();
+    }
+
+    internal static bool CanPreview(string path)=>DocumentPreviewService.CanPreview(path);
+    internal static bool CanOpenDocument(string path)=>FilePreviewPane.CanOpenDocument(path);
+}
+
+internal sealed class FilePreviewPane:UserControl,IDisposable
+{
     readonly string path;
     readonly ContentControl preview=new();
     readonly TextBlock hint=new(){Text="正在准备预览…",TextWrapping=TextWrapping.Wrap};
@@ -34,9 +53,10 @@ public sealed class FilePreviewWindow:Window
     readonly Image imageView=new(){Stretch=Stretch.Uniform,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(12)};
     readonly Dictionary<uint,BitmapSource> pdfPages=new();
     PdfDocument? pdf;uint pageIndex;bool rendering;double imageZoom;
-    public FilePreviewWindow(string path)
+    bool started;
+    public FilePreviewPane(string path)
     {
-        this.path=Path.GetFullPath(path);Title=Path.GetFileName(path);Width=760;Height=620;MinWidth=420;MinHeight=340;WindowStartupLocation=WindowStartupLocation.CenterOwner;
+        this.path=Path.GetFullPath(path);
         UseLayoutRounding=true;SnapsToDevicePixels=true;TextOptions.SetTextFormattingMode(this,TextFormattingMode.Display);
         SetResourceReference(BackgroundProperty,"FloatClip.Background");SetResourceReference(ForegroundProperty,"FloatClip.TextPrimary");SetResourceReference(FontFamilyProperty,"FloatClip.FontFamily");SetResourceReference(FontSizeProperty,"FloatClip.Font.Body");
         var root=new DockPanel{Margin=(Thickness)Application.Current.FindResource("FloatClip.Padding.Page")};Content=root;
@@ -51,7 +71,7 @@ public sealed class FilePreviewWindow:Window
         foreach(var button in new[]{fit,one,minus,plus}){tools.Children.Remove(button);zoomControls.Children.Add(button);}
         tools.Children.Add(zoomControls);
         var header=new StackPanel{Margin=new(0,0,0,DesignTokens.Number("Space.12"))};DockPanel.SetDock(header,Dock.Top);root.Children.Add(header);
-        header.Children.Add(new TextBlock{Text=Title,FontSize=DesignTokens.Number("Font.Section"),FontWeight=FontWeights.SemiBold,TextTrimming=TextTrimming.CharacterEllipsis});
+        header.Children.Add(new TextBlock{Text=Path.GetFileName(path),FontSize=DesignTokens.Number("Font.Section"),FontWeight=FontWeights.SemiBold,TextTrimming=TextTrimming.CharacterEllipsis});
         hint.FontSize=DesignTokens.Number("Font.Caption");hint.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.TextSecondary");header.Children.Add(hint);
         previous=new Wpf.Ui.Controls.Button{Content="上一页"};next=new Wpf.Ui.Controls.Button{Content="下一页"};foreach(var button in new[]{previous,next}){DesignTokens.Button(button,"Toolbar");button.Margin=new(0,0,DesignTokens.Number("Space.8"),0);}
         previous.Click+=async(_,_)=>{if(pageIndex>0){pageIndex--;await RenderPdf();}};next.Click+=async(_,_)=>{if(pdf!=null&&pageIndex+1<pdf.PageCount){pageIndex++;await RenderPdf();}};
@@ -59,10 +79,13 @@ public sealed class FilePreviewWindow:Window
         imageScroll.Content=imageView;imageScroll.SizeChanged+=(_,_)=>ApplyImageZoom();
         imageScroll.PreviewMouseWheel+=(_,e)=>{if(Keyboard.Modifiers.HasFlag(ModifierKeys.Control)){Zoom(e.Delta>0?Math.Min(8,(imageZoom==0?1:imageZoom)*1.12):Math.Max(.1,(imageZoom==0?1:imageZoom)/1.12));e.Handled=true;}};
         PreviewKeyDown+=async(_,e)=>{if(pdf!=null&&e.Key==Key.Left&&pageIndex>0){pageIndex--;await RenderPdf();e.Handled=true;}else if(pdf!=null&&e.Key==Key.Right&&pageIndex+1<pdf.PageCount){pageIndex++;await RenderPdf();e.Handled=true;}};
-        FloatClip.Desktop.Services.ClipboardBackgroundService.Configure(this,FloatClip.Desktop.Design.DesignPreferences.Load(ClipboardHost.Current?.PreferencesRoot??""),caption:true);
-        SourceInitialized+=(_,_)=>{WindowAppearance.Apply(this);WindowAppearance.Theme(this,Wpf.Ui.Appearance.ApplicationThemeManager.GetAppTheme()==Wpf.Ui.Appearance.ApplicationTheme.Dark);};
-        Loaded+=async(_,_)=>await LoadPreview();Closed+=(_,_)=>lifetime.Cancel();
+        Loaded+=async(_,_)=>{
+            if(started||lifetime.IsCancellationRequested)return;
+            started=true;
+            await LoadPreview();
+        };
     }
+    public void Dispose()=>lifetime.Cancel();
     async Task LoadPreview()
     {
         try

@@ -22,21 +22,16 @@ class PasteAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener { captureClipboard() }
     private var overlayBindingRegistered = false
-    private var overlayConnected = false
 
     private val overlayConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            overlayConnected = true
             (service as? ClipboardOverlayService.LocalBinder)?.useAccessibilityHost()
         }
 
-        override fun onServiceDisconnected(name: ComponentName?) {
-            overlayConnected = false
-        }
+        override fun onServiceDisconnected(name: ComponentName?) = Unit
 
         override fun onBindingDied(name: ComponentName?) {
-            overlayConnected = false
-            overlayBindingRegistered = false
+            releaseOverlayBinding()
             if (shouldHostOverlay()) handler.postDelayed({ ensureOverlayBinding() }, 900L)
         }
     }
@@ -84,7 +79,6 @@ class PasteAccessibilityService : AccessibilityService() {
         if (!overlayBindingRegistered) return
         runCatching { unbindService(overlayConnection) }
         overlayBindingRegistered = false
-        overlayConnected = false
     }
 
     private fun captureClipboard() {

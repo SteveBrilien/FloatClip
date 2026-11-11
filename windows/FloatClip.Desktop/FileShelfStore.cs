@@ -17,7 +17,7 @@ public sealed record LocalShelfEntry(string Path,string Name,long Size,long Last
             try
             {
                 var info=new FileInfo(Path);
-                return info.Exists&&(info.Attributes&FileAttributes.ReparsePoint)==0&&info.Length<=Wire.MaxFile;
+                return info.Exists&&(info.Attributes&FileAttributes.ReparsePoint)==0;
             }
             catch{return false;}
         }
@@ -45,7 +45,7 @@ public sealed class FileShelfStore
     }
     static bool ValidMetadata(LocalShelfEntry row)
     {
-        if(row is null||string.IsNullOrWhiteSpace(row.Path)||!System.IO.Path.IsPathFullyQualified(row.Path)||string.IsNullOrWhiteSpace(row.Name)||row.Name.Length is <1 or >240||row.Size<0||row.Size>Wire.MaxFile||row.LastWriteUtcTicks<0||row.AddedUtcTicks<0||row.CreationUtcTicks<0)return false;
+        if(row is null||string.IsNullOrWhiteSpace(row.Path)||!System.IO.Path.IsPathFullyQualified(row.Path)||string.IsNullOrWhiteSpace(row.Name)||row.Name.Length is <1 or >240||row.Size<0||row.LastWriteUtcTicks<0||row.AddedUtcTicks<0||row.CreationUtcTicks<0)return false;
         try{_ = System.IO.Path.GetFullPath(row.Path);return Wire.SafeName(row.Name)==row.Name;}catch{return false;}
     }
     static LocalShelfEntry RefreshMetadata(LocalShelfEntry row)
@@ -53,7 +53,7 @@ public sealed class FileShelfStore
         try
         {
             var info=new FileInfo(row.Path);
-            if(info.Exists&&(info.Attributes&FileAttributes.ReparsePoint)==0&&info.Length<=Wire.MaxFile)
+            if(info.Exists&&(info.Attributes&FileAttributes.ReparsePoint)==0)
                 return row with{Name=Wire.SafeName(info.Name),Size=info.Length,LastWriteUtcTicks=info.LastWriteTimeUtc.Ticks,CreationUtcTicks=info.CreationTimeUtc.Ticks};
         }
         catch{}
@@ -63,7 +63,6 @@ public sealed class FileShelfStore
     {
         string full=System.IO.Path.GetFullPath(filePath);var info=new FileInfo(full);
         if(!info.Exists||(info.Attributes&FileAttributes.ReparsePoint)!=0)throw new IOException("请选择本机存在的普通文件");
-        if(info.Length>Wire.MaxFile)throw new IOException("单个文件最大 64 MiB");
         Wire.SafeName(info.Name);
         lock(gate)
         {

@@ -40,7 +40,11 @@ class ClipboardScreenTest {
             click("关于")
             val labels=views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().map{it.text.toString()}
             assertTrue(labels.contains("FloatClip"));assertTrue(labels.any {it.contains(" · build ")})
-            assertTrue(labels.contains("检查更新"))
+            assertEquals("检查更新",labels.last())
+            assertFalse(labels.contains("启动时检查更新"))
+            click("使用帮助")
+            assertTrue(views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().any { it.text.toString()=="共享文件" })
+            activity.onBackPressed()
             click("权限声明")
             assertTrue(views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().any {it.text.toString().contains("你主动选择的文字粘贴")})
             activity.findViewById<View>(R.id.clipboard_back).performClick()

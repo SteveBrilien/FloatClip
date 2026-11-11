@@ -230,7 +230,6 @@ class ClipboardOverlayService : Service() {
         val viewerFilter=IntentFilter(com.floatclip.app.clipboard.ClipViewerActivity.RETURN_ACTION)
         if(android.os.Build.VERSION.SDK_INT>=33)registerReceiver(viewerReturn,viewerFilter,"$packageName.permission.INTERNAL",null,Context.RECEIVER_NOT_EXPORTED)
         else registerReceiver(viewerReturn,viewerFilter,"$packageName.permission.INTERNAL",null)
-        overlayPreferences.saveOverlayEnabled(true)
         if (canPresentOverlay()) showBubble()
     }
 

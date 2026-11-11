@@ -5,7 +5,6 @@ import android.content.*
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -21,6 +20,7 @@ import com.floatclip.app.overlay.ui.EntryGestureRow
 import com.floatclip.app.prefs.OverlayPreferences
 import com.floatclip.app.sync.*
 import com.floatclip.app.ui.FloatDialog
+import com.floatclip.app.ui.FileDetailsSheet
 import com.floatclip.app.ui.FileUi
 import com.floatclip.app.clipboard.ImageImportActivity
 import com.floatclip.share.ShareWire
@@ -48,7 +48,7 @@ class FileActivity:Activity(),SyncRuntime.Observer {
     private var resumed=false
     private var pendingHandoff:(()->Unit)?=null
     private var batchDialog:FloatDialog.Handle?=null
-    private var detailDialog:FloatDialog.Handle?=null
+    private var detailSheet:FileDetailsSheet?=null
     private var page=Color.WHITE;private var card=Color.WHITE;private var text=Color.BLACK
     private var muted=Color.GRAY;private var line=Color.LTGRAY;private var accent=Color.BLUE;private var tint=Color.LTGRAY
     private lateinit var colors:FileUi.Palette
@@ -65,7 +65,7 @@ class FileActivity:Activity(),SyncRuntime.Observer {
     override fun onSaveInstanceState(out:Bundle){out.putInt("range",range);out.putBoolean("selecting",selecting);out.putStringArrayList("selected",ArrayList(selected));super.onSaveInstanceState(out)}
     override fun onResume(){super.onResume();resumed=true;SyncRuntime.setObserver(this);worker.execute{repo.publish();SyncRuntime.current()?.requestFileConnection()};render();pendingHandoff?.let{pendingHandoff=null;it()}}
     override fun onPause(){menu?.dismiss();resumed=false;SyncRuntime.clearObserver(this);super.onPause()}
-    override fun onDestroy(){menu?.dismiss();canceled=true;active?.cancel(true);batchDialog?.dialog?.dismiss();detailDialog?.dialog?.dismiss();main.removeCallbacksAndMessages(null);unregisterReceiver(receiver);worker.shutdownNow();super.onDestroy()}
+    override fun onDestroy(){menu?.dismiss();canceled=true;active?.cancel(true);batchDialog?.dialog?.dismiss();detailSheet?.dismiss();main.removeCallbacksAndMessages(null);unregisterReceiver(receiver);worker.shutdownNow();super.onDestroy()}
     override fun onConfigurationChanged(config:Configuration){super.onConfigurationChanged(config);if(!busy)render()}
     override fun dispatchTouchEvent(event:android.view.MotionEvent):Boolean{if(event.actionMasked==android.view.MotionEvent.ACTION_DOWN)EntryGestureRow.closeOutside(event.rawX,event.rawY);return super.dispatchTouchEvent(event)}
     private fun palette(){
@@ -80,7 +80,7 @@ class FileActivity:Activity(),SyncRuntime.Observer {
     private fun column()=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
     private fun row()=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
     private fun button(value:String,action:()->Unit)=label(value,14f,accent).apply{gravity=Gravity.CENTER;minHeight=dp(FileUi.HIT);setPadding(dp(12),0,dp(12),0);isClickable=true;isFocusable=true;background=FileUi.action(this@FileActivity,colors);setOnClickListener{action()}}
-    private fun icon(resource:Int,name:String,action:()->Unit)=ImageView(this).apply{setImageResource(resource);imageTintList=android.content.res.ColorStateList.valueOf(accent);contentDescription=name;setPadding(dp(12),dp(12),dp(12),dp(12));isFocusable=true;background=FileUi.action(this@FileActivity,colors);setOnClickListener{action()}}
+    private fun icon(resource:Int,name:String,action:()->Unit)=ImageView(this).apply{setImageResource(resource);imageTintList=android.content.res.ColorStateList.valueOf(accent);contentDescription=name;setPadding(dp(14),dp(14),dp(14),dp(14));isFocusable=true;background=FileUi.action(this@FileActivity,colors);setOnClickListener{action()}}
     private fun time(value:Long)=if(value<=0)"未知" else DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(value))
     private fun size(value:Long)=FileUi.size(value)
     private fun peer(value:String)=if(value=="local")"本机分享" else SyncRuntime.current()?.peers()?.firstOrNull{it.key==value}?.device?.name?:"已配对设备"
@@ -90,18 +90,19 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         if(busy)return;palette();val oldY=if(::scroll.isInitialized)scroll.scrollY else 0
         selected.retainAll(repo.snapshot().map{it.key}.toSet())
         val shell=column().apply{setPadding(dp(16),dp(8),dp(16),dp(12));setBackgroundColor(page)}
-        val title=row();title.addView(icon(R.drawable.ic_chevron_left,"返回"){finish()},LinearLayout.LayoutParams(dp(48),dp(48)))
+        val title=row()
+        title.addView(icon(R.drawable.ic_chevron_left,"返回"){finish()},LinearLayout.LayoutParams(dp(48),dp(48)).apply{marginStart=-dp(14)})
         title.addView(label("文件",24f).apply{typeface=Typeface.DEFAULT_BOLD},LinearLayout.LayoutParams(0,dp(52),1f))
         title.addView(icon(R.drawable.ic_add,"添加文件"){pickFiles()},LinearLayout.LayoutParams(dp(48),dp(48)))
         val manageButton=button("管理"){}
         manageButton.setOnClickListener{manage(manageButton)}
         title.addView(manageButton);shell.addView(title)
         val peers=repo.connectedFilePeers()
-        val connection=if(peers>0)"$peers 台设备已连接 · 可浏览与下载" else "设备暂未连接 · 查看连接方式"
+        val connection=if(peers>0)"$peers 台设备已连接" else "设备未连接"
         val connectionRow=row().apply{background=shape(tint,tint);setPadding(dp(12),dp(4),dp(4),dp(4))}
         connectionRow.addView(ImageView(this).apply{setImageResource(R.drawable.ic_device_computer);imageTintList=android.content.res.ColorStateList.valueOf(if(peers>0)colors.success else muted)},LinearLayout.LayoutParams(dp(20),dp(20)).apply{marginEnd=dp(10)})
         connectionRow.addView(label(connection,12f,muted).apply{maxLines=2},LinearLayout.LayoutParams(0,-2,1f))
-        connectionRow.addView(button("连接"){devices()});shell.addView(connectionRow,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(8);bottomMargin=dp(8)})
+        connectionRow.addView(button("设备"){devices()});shell.addView(connectionRow,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(10);bottomMargin=dp(4)})
         if(repo.warning.isNotEmpty())shell.addView(label(repo.warning,12f,muted).apply{setPadding(0,0,0,dp(8))})
         val filter=row()
         val timeFilter=button(arrayOf("全部时间⌄","最近24小时⌄","最近7天⌄","最近30天⌄")[range]){}
@@ -109,34 +110,107 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         filter.addView(timeFilter)
         filter.addView(View(this),LinearLayout.LayoutParams(0,1,1f));filter.addView(button(if(selecting)"完成" else "选择"){selecting=!selecting;selected.clear();render()});shell.addView(filter)
         if(selecting){val actions=row();actions.addView(button(if(selected.size==visible().size&&selected.isNotEmpty())"取消全选" else "全选"){if(selected.size==visible().size)selected.clear() else selected.addAll(visible().map{it.key});render()});actions.addView(label("已选 ${selected.size}",12f,muted).apply{setPadding(dp(8),0,dp(8),0)});actions.addView(button("下载"){chooseFolder(picked())}.apply{isEnabled=selected.isNotEmpty();alpha=if(isEnabled)1f else .45f});actions.addView(button("分享"){prepare(picked(),"share",null)}.apply{isEnabled=selected.isNotEmpty();alpha=if(isEnabled)1f else .45f});shell.addView(HorizontalScrollView(this).apply{isHorizontalScrollBarEnabled=false;addView(actions)},LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(4)})}
-        list=column();val files=visible();if(files.isEmpty())list.addView(label("暂无文件",15f,muted).apply{gravity=Gravity.CENTER;setPadding(dp(8),dp(48),dp(8),dp(32))}) else files.forEach{list.addView(card(it),LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(12)})}
+        list=column();val files=visible();if(files.isEmpty())list.addView(label("暂无文件",15f,muted).apply{gravity=Gravity.CENTER;setPadding(dp(8),dp(48),dp(8),dp(32))}) else files.forEach{list.addView(card(it),LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(8)})}
         scroll=ScrollView(this).apply{isFillViewport=true;addView(list)};shell.addView(scroll,LinearLayout.LayoutParams(-1,0,1f));setContentView(shell);scroll.post{scroll.scrollTo(0,oldY)}
     }
-    private fun card(file:SharedFile):View {
-        val local=repo.local(file)!=null;val front=column().apply{background=shape(if(file.key in selected)tint else card,if(file.key in selected)accent else line);setPadding(dp(12),dp(14),dp(12),dp(10))}
-        val top=row().apply{gravity=Gravity.TOP};val left=column();val nameRow=row().apply{gravity=Gravity.TOP}
-        val status=ImageView(this).apply{setPadding(dp(2),dp(2),dp(2),dp(2));setImageResource(if(file.key in selected)R.drawable.ic_file_downloaded else if(file.kept)R.drawable.ic_pin else if(local)R.drawable.ic_file_downloaded else if(file.online)R.drawable.ic_file_remote else R.drawable.ic_file_offline);imageTintList=android.content.res.ColorStateList.valueOf(if(local&&!file.kept)if(page==Color.parseColor("#1A1B26"))Color.parseColor("#7EDDB7") else Color.parseColor("#237858") else accent);background=shape(tint,tint,6);contentDescription=if(file.kept)"已保留" else if(local)"本机已有" else if(file.online)"待下载" else "来源离线"}
-        val filename=label(file.name,17f).apply{gravity=Gravity.TOP;maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END;minHeight=dp(24)}
-        nameRow.addView(status,LinearLayout.LayoutParams(dp(22),dp(24)).apply{marginEnd=dp(8);topMargin=((filename.lineHeight-dp(24))/2).coerceAtLeast(0)})
-        nameRow.addView(filename,LinearLayout.LayoutParams(0,-2,1f));left.addView(nameRow)
-        left.addView(label(size(file.size),12f,muted).apply{setPadding(dp(30),dp(12),0,0)})
-        top.addView(left,LinearLayout.LayoutParams(0,-2,1f));val ext=file.name.substringAfterLast('.',"FILE").uppercase();val iconColor=Color.parseColor(when(ext){"PDF"->"#BC354C";"DOC","DOCX"->"#2863B9";"XLS","XLSX","CSV"->"#247653";"PNG","JPG","JPEG","WEBP"->"#7952A9";else->"#956025"})
-        val badge=label(if(ext.length>5)ext.take(5) else ext,12f,if(local)Color.WHITE else iconColor).apply{gravity=Gravity.CENTER;typeface=Typeface.DEFAULT_BOLD;contentDescription="$ext 文件，"+if(local)"本机已有" else "尚未下载";background=GradientDrawable().apply{setColor(if(local)iconColor else Color.TRANSPARENT);cornerRadius=dp(5).toFloat();setStroke(dp(1),iconColor,if(local)0f else dp(4).toFloat(),if(local)0f else dp(3).toFloat())}}
-        top.addView(badge,LinearLayout.LayoutParams(dp(44),dp(54)).apply{marginStart=dp(12)});front.addView(top)
-        front.addView(View(this).apply{setBackgroundColor(line)},LinearLayout.LayoutParams(-1,dp(1)).apply{topMargin=dp(16);bottomMargin=dp(10)})
-        val footer=row();footer.addView(label(peer(file.peer),11f,muted).apply{maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END},LinearLayout.LayoutParams(0,-2,1f));footer.addView(label(time(file.shared),11f,muted));front.addView(footer)
-        val actions=row();actions.addView(button("下载"){chooseFolder(listOf(file))},LinearLayout.LayoutParams(dp(72),-1));actions.addView(button("分享"){prepare(listOf(file),"share",null)},LinearLayout.LayoutParams(dp(72),-1))
-        return EntryGestureRow(this).apply{bind(front,if(selecting)null else actions,dp(144));contentDescription="${file.name}，${size(file.size)}，${status.contentDescription}，${time(file.shared)}";onSingleTap={if(selecting){if(!selected.add(file.key))selected.remove(file.key);render()}else details(file)};onLongPress={selecting=true;selected.add(file.key);render()}}
+    private fun fileIcon(resource:Int,color:Int,size:Int): ImageView = ImageView(this).apply {
+        setImageResource(resource)
+        imageTintList=android.content.res.ColorStateList.valueOf(color)
+        importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        layoutParams=LinearLayout.LayoutParams(dp(size),dp(size))
     }
+
+    private fun card(file:SharedFile):View {
+        val local=repo.local(file)!=null
+        val checked=file.key in selected
+        val status=when {
+            file.kept -> "已保留"
+            local -> "本机已有"
+            file.online -> "可下载"
+            else -> "来源离线"
+        }
+        val glyph=if(SharedFileProvider.mime(file.name).startsWith("image/"))R.drawable.ic_image else R.drawable.ic_document
+        val front=row().apply {
+            background=shape(if(checked)tint else card,if(checked)accent else line)
+            minimumHeight=dp(80)
+            setPadding(dp(12),dp(12),dp(12),dp(12))
+        }
+        front.addView(android.widget.FrameLayout(this).apply {
+            background=shape(tint,tint,FileUi.CONTROL_RADIUS)
+            addView(fileIcon(glyph,accent,22),android.widget.FrameLayout.LayoutParams(dp(22),dp(22),Gravity.CENTER))
+        },LinearLayout.LayoutParams(dp(40),dp(40)).apply { marginEnd=dp(12) })
+        front.addView(column().apply {
+            addView(label(file.name,15f).apply {
+                typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+                maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END
+            })
+            addView(label("${size(file.size)} · ${peer(file.peer)}",12f,muted).apply {
+                maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END
+            },LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(5) })
+        },LinearLayout.LayoutParams(0,-2,1f))
+        val endIcon=when {
+            selecting -> if(checked)R.drawable.ic_file_downloaded else R.drawable.ic_file_remote
+            file.kept -> R.drawable.ic_pin
+            else -> R.drawable.ic_chevron_right
+        }
+        front.addView(fileIcon(endIcon,if(checked||file.kept)accent else muted,20),
+            LinearLayout.LayoutParams(dp(20),dp(20)).apply { marginStart=dp(8) })
+        val actions=row()
+        actions.addView(button("下载"){chooseFolder(listOf(file))},LinearLayout.LayoutParams(dp(64),-1))
+        actions.addView(button("分享"){prepare(listOf(file),"share",null)},LinearLayout.LayoutParams(dp(64),-1))
+        return EntryGestureRow(this).apply {
+            bind(front,if(selecting)null else actions,dp(128))
+            isSelected=checked
+            contentDescription="${file.name}，${size(file.size)}，$status"
+            onSingleTap={
+                performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                if(selecting){if(!selected.add(file.key))selected.remove(file.key);render()}else details(file)
+            }
+            onLongPress={selecting=true;selected.add(file.key);render()}
+        }
+    }
+
     private fun details(file:SharedFile){
-        detailDialog?.dialog?.dismiss();val body=column()
-        fun property(name:String,value:String){val r=row();r.addView(label(name,13f,muted),LinearLayout.LayoutParams(dp(56),dp(32)));r.addView(label(value,13f).apply{maxLines=2},LinearLayout.LayoutParams(0,-2,1f));body.addView(r)}
-        property("大小",size(file.size));property("来源",peer(file.peer));property("修改",time(file.modified));property("状态",if(repo.local(file)!=null)"本机已有" else if(file.online)"等待下载" else "来源离线")
-        fun action(name:String,run:()->Unit){body.addView(View(this).apply{setBackgroundColor(line)},LinearLayout.LayoutParams(-1,dp(1)).apply{topMargin=dp(4)});body.addView(button(name){detailDialog?.dialog?.dismiss();run()}.apply{gravity=Gravity.CENTER_VERTICAL},LinearLayout.LayoutParams(-1,dp(48)))}
-        action("应用内预览"){prepare(listOf(file),"open",null)};action("下载到文件夹"){chooseFolder(listOf(file))};action("分享 / 转发"){prepare(listOf(file),"share",null)}
-        if(SharedFileProvider.mime(file.name).startsWith("image/")&&repo.local(file)!=null)action("加入剪贴板"){startActivity(Intent(this,ImageImportActivity::class.java).setAction(Intent.ACTION_SEND).setType("image/*").putExtra(Intent.EXTRA_STREAM,SharedFileProvider.uri(packageName,file.key)))}
-        action(if(file.kept)"取消保留" else "保留此文件"){repo.keep(file,!file.kept);render()}
-        detailDialog=FloatDialog.show(this,file.name,custom=ScrollView(this).apply{addView(body);isFillViewport=false},negative="关闭",positive=null,bottomSheet=true)
+        detailSheet?.dismiss()
+        val body=column().apply { setPadding(dp(18),dp(2),dp(18),dp(18)) }
+        val local=repo.local(file)!=null
+        val status=if(local)"本机已有" else if(file.online)"可下载" else "来源离线"
+        val properties=column().apply {
+            background=shape(page,line)
+            setPadding(dp(12),dp(6),dp(12),dp(6))
+            listOf("大小" to size(file.size),"来源" to peer(file.peer),"修改时间" to time(file.modified),"状态" to status).forEach { (name,value) ->
+                addView(row().apply {
+                    minimumHeight=dp(29)
+                    addView(label(name,13f,muted),LinearLayout.LayoutParams(dp(68),-2))
+                    addView(label(value,13f),LinearLayout.LayoutParams(0,-2,1f))
+                })
+            }
+        }
+        body.addView(properties,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(10)})
+        lateinit var sheet:FileDetailsSheet
+        fun action(name:String,icon:Int,run:()->Unit){
+            body.addView(row().apply {
+                minimumHeight=dp(FileUi.HIT)
+                setPadding(dp(8),0,dp(8),0)
+                background=FileUi.action(this@FileActivity,colors)
+                isFocusable=true
+                addView(fileIcon(icon,accent,20),LinearLayout.LayoutParams(dp(20),dp(20)).apply { marginEnd=dp(12) })
+                addView(label(name,14f),LinearLayout.LayoutParams(0,-2,1f))
+                setOnClickListener{sheet.close(run)}
+            },LinearLayout.LayoutParams(-1,-2))
+        }
+        action("应用内预览",R.drawable.ic_document){prepare(listOf(file),"open",null)}
+        action("下载到文件夹",R.drawable.ic_update){chooseFolder(listOf(file))}
+        action("分享 / 转发",R.drawable.ic_share){prepare(listOf(file),"share",null)}
+        if(SharedFileProvider.mime(file.name).startsWith("image/")&&local)action("加入剪贴板",R.drawable.ic_copy_paste){
+            startActivity(Intent(this,ImageImportActivity::class.java).setAction(Intent.ACTION_SEND).setType("image/*")
+                .putExtra(Intent.EXTRA_STREAM,SharedFileProvider.uri(packageName,file.key)))
+        }
+        action(if(file.kept)"取消保留" else "保留此文件",if(file.kept)R.drawable.ic_pin_filled else R.drawable.ic_pin){repo.keep(file,!file.kept);render()}
+        sheet=FileDetailsSheet(this,file.name,body,colors)
+        sheet.setOnDismissListener { if(detailSheet===sheet)detailSheet=null }
+        detailSheet=sheet
+        sheet.show()
     }
     private fun devices(){startActivity(Intent(this,DeviceActivity::class.java).putExtra("devicesOnly",true))}
     private fun pickFiles(){if(busy)return;startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE);putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true)},100)}

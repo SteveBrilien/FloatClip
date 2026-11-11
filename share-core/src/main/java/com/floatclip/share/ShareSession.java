@@ -32,6 +32,7 @@ public final class ShareSession implements AutoCloseable {
     private final AtomicBoolean closed=new AtomicBoolean();
     private final boolean persistent;
     public final boolean catalogEnabled;
+    private volatile boolean largeFiles;
     private volatile long lastRead=System.nanoTime();
     private final ExecutorService fileWorker=Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService timer=Executors.newSingleThreadScheduledExecutor();
@@ -40,7 +41,7 @@ public final class ShareSession implements AutoCloseable {
     private final Map<UUID,String> texts=new HashMap<>();
     private Job outgoing; private Offer incoming; private File part;
     private FileOutputStream sink; private MessageDigest fileHash;
-    private long count, lastProgress, nextFileByte; private int sequence;
+    private long count, lastProgress; private int sequence;
     private static final class Job {
         final File source; final String name; Offer offer; boolean accepted, endSent;
         Job(File source,String name) { this.source=source; this.name=name; }
@@ -75,6 +76,8 @@ public final class ShareSession implements AutoCloseable {
         Thread reader=new Thread(this::readLoop,"floatclip-share-reader"); reader.start();
     }
     public boolean isClosed(){return closed.get();}
+    public boolean supportsLargeFiles(){return largeFiles;}
+    public void enableLargeFiles(){if(catalogEnabled)largeFiles=true;}
     public boolean hasActiveFile(){synchronized(state){return incoming!=null || outgoing!=null;}}
     public void closeWhenIdle(java.util.concurrent.ScheduledExecutorService scheduler,long delaySeconds){
         scheduler.schedule(()->{if(isClosed())return;if(hasActiveFile())closeWhenIdle(scheduler,15);else close();},delaySeconds,TimeUnit.SECONDS);
@@ -106,7 +109,8 @@ public final class ShareSession implements AutoCloseable {
     }
     public void sendFile(File source,String name,UUID requestId) throws IOException {
         safeName(name);
-        if(!source.isFile() || source.length()>MAX_FILE) throw new IOException("Choose a regular file up to 64 MiB");
+        if(!source.isFile()) throw new IOException("请选择普通文件");
+        if(!largeFiles && source.length()>LEGACY_MAX_FILE) throw new IOException("对方版本的单文件上限为 64 MiB");
         final Job job=new Job(source,name);
         synchronized(state) {
             if(outgoing!=null || incoming!=null) throw new IOException("One file at a time");
@@ -119,7 +123,8 @@ public final class ShareSession implements AutoCloseable {
                     byte[] buffer=new byte[CHUNK_SIZE]; int n;
                     while((n=input.read(buffer))!=-1) {
                         if(closed.get()) return;
-                        size+=n; if(size>MAX_FILE) throw new IOException("File limit exceeded"); hash.update(buffer,0,n);
+                        size+=n; if(!largeFiles && size>LEGACY_MAX_FILE) throw new IOException("Peer file limit exceeded");
+                        hash.update(buffer,0,n);
                     }
                 }
                 Offer offer=new Offer(requestId==null?UUID.randomUUID():requestId,name,size,hash.digest());
@@ -132,9 +137,9 @@ public final class ShareSession implements AutoCloseable {
     public void accept(UUID id) throws IOException {
         synchronized(state) {
             if(incoming==null || !incoming.id.equals(id) || sink!=null) throw new IOException("Offer expired");
-            long cached=0; File[] files=cache.listFiles(); if(files!=null) for(File file:files) cached+=file.length();
-            if(cached+incoming.size>128L*1024*1024) throw new IOException("Cache full");
-            if(cache.getUsableSpace()<incoming.size+1024*1024) throw new IOException("Insufficient free space");
+            long available=cache.getUsableSpace();
+            if(available<FREE_SPACE_RESERVE || incoming.size>available-FREE_SPACE_RESERVE)
+                throw new IOException("接收设备存储空间不足");
             part=new File(cache,id+".part");
             if(!part.createNewFile()) throw new IOException("Temporary file already exists");
             sink=new FileOutputStream(part); fileHash=sha(); count=0; sequence=0;
@@ -155,8 +160,9 @@ public final class ShareSession implements AutoCloseable {
                 byte[] buffer=new byte[CHUNK_SIZE]; int n;
                 while((n=input.read(buffer))!=-1) {
                     synchronized(state) { if(outgoing!=job || closed.get()) return; }
-                    done+=n; if(done>offer.size) throw new IOException("Source file changed");
-                    hash.update(buffer,0,n); pace(n);
+                    if(n>offer.size-done) throw new IOException("Source file changed");
+                    done+=n;
+                    hash.update(buffer,0,n);
                     byte[] data=new byte[n+4]; ByteBuffer.wrap(data).putInt(index++).put(buffer,0,n);
                     write(CHUNK,offer.id,data);
                     long now=System.nanoTime();
@@ -167,14 +173,6 @@ public final class ShareSession implements AutoCloseable {
             synchronized(state) { if(outgoing!=job) return; job.endSent=true; }
             write(END,offer.id,offer.hash);
         } catch(Exception e) { events.fileFailed("文件传输中断，请重新发送");events.notice("文件传输中断，请重新发送"); close(); }
-    }
-    private void pace(int bytes) throws InterruptedException {
-        long delay;
-        synchronized(state) {
-            long now=System.nanoTime(); nextFileByte=Math.max(now,nextFileByte)+bytes*1000000000L/(2*1024*1024);
-            delay=nextFileByte-now;
-        }
-        if(delay>0) TimeUnit.NANOSECONDS.sleep(delay);
     }
     private void readLoop() {
         try {
@@ -215,7 +213,7 @@ public final class ShareSession implements AutoCloseable {
             if(completed!=null) events.file(completed.offer,completed.source,true);
         } else if(f.type==OFFER) {
             Offer offer=Offer.decode(f); boolean busy;
-            synchronized(state) { busy=incoming!=null || outgoing!=null; if(!busy) incoming=offer; }
+            synchronized(state) { busy=incoming!=null || outgoing!=null || (!largeFiles && offer.size>LEGACY_MAX_FILE); if(!busy) incoming=offer; }
             if(busy) write(REJECT,f.id,new byte[0]); else events.offered(offer);
         } else if(f.type==ACCEPT || f.type==REJECT) {
             Job job;
@@ -226,11 +224,10 @@ public final class ShareSession implements AutoCloseable {
             }
             if(f.type==ACCEPT) fileWorker.execute(() -> sendBody(job)); else { events.rejected(job.offer);events.notice("对方未接收文件"); events.fileFailed("对方未接收文件"); }
         } else if(f.type==CHUNK) {
-            pace(f.data.length-4);
             synchronized(state) {
                 if(incoming==null || !incoming.id.equals(f.id) || sink==null) throw new IOException("Unaccepted file body");
                 ByteBuffer chunk=ByteBuffer.wrap(f.data);
-                if(chunk.getInt()!=sequence++ || count+f.data.length-4>incoming.size) throw new IOException("Invalid file sequence");
+                if(chunk.getInt()!=sequence++ || f.data.length-4>incoming.size-count) throw new IOException("Invalid file sequence");
                 sink.write(f.data,4,f.data.length-4); fileHash.update(f.data,4,f.data.length-4); count+=f.data.length-4;
                 long now=System.nanoTime();
                 if(now-lastProgress>100000000L || count==incoming.size) {

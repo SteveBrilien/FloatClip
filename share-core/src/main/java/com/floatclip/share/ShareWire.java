@@ -11,7 +11,8 @@ public final class ShareWire {
     private ShareWire() { }
     public static final int TEXT=1, ACK=2, OFFER=3, ACCEPT=4, REJECT=5, CHUNK=6, END=7, CATALOG=13;
     public static final int MAX_TEXT=65536, CHUNK_SIZE=32768;
-    public static final long MAX_FILE=64L*1024*1024;
+    public static final long LEGACY_MAX_FILE=64L*1024*1024;
+    public static final long FREE_SPACE_RESERVE=64L*1024*1024;
     public static final class Frame {
         public final int type; public final UUID id; public final byte[] data;
         public Frame(int type, UUID id, byte[] data) { this.type=type; this.id=id; this.data=data.clone(); }
@@ -71,7 +72,7 @@ public final class ShareWire {
         public final UUID id; public final String name; public final long size; public final byte[] hash;
         public Offer(UUID id,String name,long size,byte[] hash) throws IOException {
             this.id=id; this.name=safeName(name); this.size=size; this.hash=hash.clone();
-            if(size<0 || size>MAX_FILE || hash.length!=32) throw new IOException("File limit is 64 MiB");
+            if(size<0 || hash.length!=32) throw new IOException("Invalid file metadata");
         }
         public byte[] encode() throws IOException {
             ByteArrayOutputStream bytes=new ByteArrayOutputStream(); DataOutputStream out=new DataOutputStream(bytes);

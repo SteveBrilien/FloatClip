@@ -17,7 +17,7 @@ public sealed record Offer(Guid Id, string Name, long Size, byte[] Hash);
 public static class Wire
 {
     public const int Text=1,Ack=2,FileOffer=3,Accept=4,Reject=5,Chunk=6,End=7,Catalog=13,MaxText=65536,ChunkSize=32768;
-    public const long MaxFile=64L*1024*1024;
+    public const long LegacyMaxFile=64L*1024*1024, FreeSpaceReserve=64L*1024*1024;
     static readonly UTF8Encoding Utf8=new(false,true);
     public static byte[] Digest(byte[] data)=>SHA256.HashData(data);
     public static string Decode(byte[] data)=>Utf8.GetString(data);
@@ -58,14 +58,14 @@ public static class Wire
     }
     public static byte[] EncodeOffer(Offer offer)
     {
-        SafeName(offer.Name); if(offer.Size<0 || offer.Size>MaxFile || offer.Hash.Length!=32) throw new IOException("文件最大 64 MiB");
+        SafeName(offer.Name); if(offer.Size<0 || offer.Hash.Length!=32) throw new IOException("文件信息无效");
         using var m=new MemoryStream(); byte[] name=Utf8.GetBytes(offer.Name);
         WriteInt(m,offer.Size,8); WriteInt(m,name.Length,2); m.Write(name); m.Write(offer.Hash); return m.ToArray();
     }
     public static Offer DecodeOffer(Frame frame)
     {
         using var m=new MemoryStream(frame.Data); long size=ReadInt(m,8); int n=(int)ReadInt(m,2);
-        if(n<1 || n>240 || frame.Data.Length!=42+n || size<0 || size>MaxFile) throw new IOException("文件清单无效");
+        if(n<1 || n>240 || frame.Data.Length!=42+n || size<0) throw new IOException("文件清单无效");
         return new(frame.Id,SafeName(Decode(ReadBytes(m,n))),size,ReadBytes(m,32));
     }
 }
@@ -75,11 +75,12 @@ public sealed class Session : IDisposable
     readonly Stream stream; readonly Action closeSocket; readonly string cache;
     readonly object writing=new(),state=new(); readonly Timer expiry;
     readonly bool persistent;
+    volatile bool largeFiles;
     long lastRead=Environment.TickCount64;
     readonly Dictionary<Guid,(byte[] Hash,string Text)> pending=new();
     readonly Dictionary<Guid,byte[]> received=new(); readonly Queue<Guid> receivedOrder=new();
     Job? outgoing; Offer? incoming; FileStream? sink; IncrementalHash? fileHash; string? part;
-    long count,lastProgress,nextByte; int sequence,closed;
+    long count,lastProgress; int sequence,closed;
     sealed class Job { public required string Path,Name; public Offer? Offer; public bool Accepted,EndSent; }
     public Action<string,bool>? Text;
     public Action<Offer>? Offered;
@@ -93,6 +94,8 @@ public sealed class Session : IDisposable
     public Action<Frame>? Sync;
     public Action<byte[]>? Catalog;
     public bool CatalogEnabled{get;}
+    public bool SupportsLargeFiles=>largeFiles;
+    public void EnableLargeFiles(){if(CatalogEnabled)largeFiles=true;}
     public bool IsClosed=>Volatile.Read(ref closed)!=0;
     public bool HasActiveFile{get{lock(state)return incoming!=null||outgoing!=null;}}
     public Session(Stream stream,Action closeSocket,string cache,bool persistent=false,bool catalog=false)
@@ -120,12 +123,13 @@ public sealed class Session : IDisposable
     void SendFile(string path,string name,Guid? requestId)
     {
         name=Wire.SafeName(name); var info=new FileInfo(path);
-        if(!info.Exists || info.Length>Wire.MaxFile || (info.Attributes&FileAttributes.ReparsePoint)!=0) throw new IOException("请选择 64 MiB 内的普通文件");
+        if(!info.Exists || (info.Attributes&FileAttributes.ReparsePoint)!=0) throw new IOException("请选择普通文件");
+        if(!largeFiles&&info.Length>Wire.LegacyMaxFile)throw new IOException("对方版本的单文件上限为 64 MiB");
         var job=new Job{Path=path,Name=name}; lock(state) { if(outgoing!=null || incoming!=null) throw new IOException("请等待当前文件完成"); outgoing=job; }
         Task.Run(()=>{
             try {
                 using var source=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read);
-                if(source.Length>Wire.MaxFile) throw new IOException();
+                if(!largeFiles&&source.Length>Wire.LegacyMaxFile)throw new IOException("对方版本的单文件上限为 64 MiB");
                 var offer=new Offer(requestId??Guid.NewGuid(),name,source.Length,SHA256.HashData(source));
                 lock(state) { if(outgoing!=job || closed!=0) return; job.Offer=offer; }
                 Progress?.Invoke(name,0,offer.Size,true); Notice?.Invoke("等待对方接收文件"); Write(Wire.FileOffer,offer.Id,Wire.EncodeOffer(offer));
@@ -136,9 +140,8 @@ public sealed class Session : IDisposable
     {
         lock(state) {
             if(incoming?.Id!=id || sink!=null) throw new IOException("邀请已失效");
-            long cached=0; foreach(var f in Directory.GetFiles(cache)) cached+=new FileInfo(f).Length;
-            if(cached+incoming.Size>128L*1024*1024) throw new IOException("接收缓存已满，请断开后清理");
-            if(new DriveInfo(Path.GetPathRoot(cache)!).AvailableFreeSpace<incoming.Size+1048576) throw new IOException("磁盘空间不足");
+            long available=new DriveInfo(Path.GetPathRoot(cache)!).AvailableFreeSpace;
+            if(available<Wire.FreeSpaceReserve||incoming.Size>available-Wire.FreeSpaceReserve)throw new IOException("接收设备存储空间不足");
             part=Path.Combine(cache,id+".part"); sink=new(part,FileMode.CreateNew,FileAccess.Write,FileShare.None);
             fileHash=IncrementalHash.CreateHash(HashAlgorithmName.SHA256); count=0; sequence=0;
         }
@@ -149,12 +152,6 @@ public sealed class Session : IDisposable
         lock(state) { if(incoming?.Id!=id || sink!=null) throw new IOException("请求已失效"); incoming=null; }
         Write(Wire.Reject,id,Array.Empty<byte>());
     }
-    void Pace(int bytes)
-    {
-        long ticks; lock(state) { long now=System.Diagnostics.Stopwatch.GetTimestamp(); nextByte=Math.Max(now,nextByte)+(long)bytes*System.Diagnostics.Stopwatch.Frequency/(2*1024*1024); ticks=nextByte-now; }
-        if(ticks>0) Thread.Sleep(TimeSpan.FromSeconds((double)ticks/System.Diagnostics.Stopwatch.Frequency));
-        if(closed!=0) throw new IOException("连接已结束");
-    }
     void SendBody(Job job)
     {
         try {
@@ -162,7 +159,8 @@ public sealed class Session : IDisposable
             using var hash=IncrementalHash.CreateHash(HashAlgorithmName.SHA256); byte[] buffer=new byte[Wire.ChunkSize]; long done=0,last=0; int index=0,n;
             while((n=source.Read(buffer))!=0) {
                 lock(state) if(outgoing!=job || closed!=0) return;
-                done+=n; if(done>offer.Size) throw new IOException("文件已变化"); hash.AppendData(buffer,0,n); Pace(n);
+                if(n>offer.Size-done)throw new IOException("文件已变化");
+                done+=n;hash.AppendData(buffer,0,n);
                 using var m=new MemoryStream(); Wire.WriteInt(m,index++,4); m.Write(buffer,0,n); Write(Wire.Chunk,offer.Id,m.ToArray());
                 long now=Environment.TickCount64; if(now-last>100 || done==offer.Size) { last=now; Progress?.Invoke(offer.Name,done,offer.Size,true); }
             }
@@ -207,7 +205,7 @@ public sealed class Session : IDisposable
                 if(text!=null) Text?.Invoke(text,true); if(done!=null) File?.Invoke(done.Offer!,done.Path,true); break;
             }
             case Wire.FileOffer: {
-                Offer offer=Wire.DecodeOffer(f); bool busy; lock(state) { busy=incoming!=null || outgoing!=null; if(!busy) incoming=offer; }
+                Offer offer=Wire.DecodeOffer(f); bool busy; lock(state) { busy=incoming!=null || outgoing!=null || (!largeFiles&&offer.Size>Wire.LegacyMaxFile); if(!busy) incoming=offer; }
                 if(busy) Write(Wire.Reject,f.Id,Array.Empty<byte>()); else Offered?.Invoke(offer); break;
             }
             case Wire.Accept: case Wire.Reject: {
@@ -219,10 +217,9 @@ public sealed class Session : IDisposable
                 if(f.Type==Wire.Accept) Task.Run(()=>SendBody(job)); else {Rejected?.Invoke(job.Offer!);FileFailed?.Invoke("对方未接收文件");Notice?.Invoke("对方未接收文件");} break;
             }
             case Wire.Chunk: {
-                Pace(f.Data.Length-4);
                 lock(state) {
-                    if(incoming?.Id!=f.Id || sink==null || count+f.Data.Length-4>incoming.Size) throw new IOException("未接收的文件正文");
-                    using var m=new MemoryStream(f.Data); if(Wire.ReadInt(m,4)!=sequence++) throw new IOException("文件分块顺序错误");
+                    if(incoming?.Id!=f.Id || sink==null || f.Data.Length-4>incoming.Size-count) throw new IOException("未接收的文件正文");
+                    using var m=new MemoryStream(f.Data); if(unchecked((int)Wire.ReadInt(m,4))!=sequence++) throw new IOException("文件分块顺序错误");
                     sink.Write(f.Data,4,f.Data.Length-4); fileHash!.AppendData(f.Data,4,f.Data.Length-4); count+=f.Data.Length-4;
                     long now=Environment.TickCount64; if(now-lastProgress>100 || count==incoming.Size) { lastProgress=now; Progress?.Invoke(incoming.Name,count,incoming.Size,false); }
                 }

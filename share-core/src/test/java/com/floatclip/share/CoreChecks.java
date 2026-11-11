@@ -37,7 +37,7 @@ public final class CoreChecks {
         Offer offer=new Offer(id,"生成文件.bin",text.length,digest(text));
         Files.write(vectors.resolve("share-offer.bin"),frame(new Frame(OFFER,id,offer.encode())));
         yes(Offer.decode(new Frame(OFFER,id,offer.encode())).name.equals(offer.name));
-        rejected(()->new Offer(id,"file",MAX_FILE+1,new byte[32]));
+        yes(new Offer(id,"file",LEGACY_MAX_FILE+1,new byte[32]).size==LEGACY_MAX_FILE+1);
         Path temp=Files.createTempDirectory("floatclip-core-check-");
         byte[] data=new byte[131073]; for(int i=0;i<data.length;i++) data[i]=(byte)(i*31+7);
         File source=Files.write(temp.resolve("source.bin"),data).toFile();

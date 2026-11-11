@@ -4,8 +4,15 @@ import android.content.Context
 
 class UpdatePreferences(context:Context) {
     private val prefs=context.getSharedPreferences("floatclip_update",Context.MODE_PRIVATE)
-    fun checkOnLaunch()=prefs.getBoolean("check_on_launch",false)
-    fun saveCheckOnLaunch(value:Boolean) { prefs.edit().putBoolean("check_on_launch",value).apply() }
+    fun claimLaunchCheck(now:Long=System.currentTimeMillis()):Boolean {
+        val last=prefs.getLong("last_update_attempt",0L)
+        if(last>0 && now>=last && now-last<12L*60*60*1000)return false
+        recordCheckAttempt(now)
+        return true
+    }
+    fun recordCheckAttempt(now:Long=System.currentTimeMillis()) {
+        prefs.edit().putLong("last_update_attempt",now).apply()
+    }
     fun lastNotified()=prefs.getString("last_notified","").orEmpty().removePrefix("PREVIEW:")
     fun saveNotified(value:String) { prefs.edit().putString("last_notified",value).apply() }
     fun lastCheck(): String = prefs.getString("last_PREVIEW", "").orEmpty()

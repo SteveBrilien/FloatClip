@@ -655,14 +655,14 @@ open class ShareActivity : Activity() {
             progress="正在准备 $name"; render()
             io.execute {
                 try {
-                    ShareWire.safeName(name); var count=0L; val cached=cache.listFiles()?.sumOf { it.length() } ?: 0L
+                    ShareWire.safeName(name); var count=0L; val budget=(cache.usableSpace-ShareWire.FREE_SPACE_RESERVE).coerceAtLeast(0L)
                     contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { output ->
                         val buffer=ByteArray(32768); var n=input.read(buffer)
-                        while(n>=0) { if(session!==active || Thread.currentThread().isInterrupted) error("Session changed"); count+=n; if(count>ShareWire.MAX_FILE || cached+count>128L*1024*1024) error("File too large or cache full"); output.write(buffer,0,n); n=input.read(buffer) }
+                        while(n>=0) { if(session!==active || Thread.currentThread().isInterrupted) error("Session changed"); count+=n; if(count>budget || (!active.supportsLargeFiles() && count>ShareWire.LEGACY_MAX_FILE)) error("File too large or cache full"); output.write(buffer,0,n); n=input.read(buffer) }
                     } } ?: error("File unavailable")
                     if(session!==active) error("Session changed")
                     active.sendFile(target,name)
-                } catch(e:Exception) { target.delete(); ui { if(taskEpoch==epoch) { progress="文件不可用、超过 64 MiB，或缓存已满"; render() } } }
+                } catch(e:Exception) { target.delete(); ui { if(taskEpoch==epoch) { progress="文件不可用、空间不足或超出对方版本的上限"; render() } } }
             }
         } else if(requestCode==42) {
             val item=saving ?: return; saving=null

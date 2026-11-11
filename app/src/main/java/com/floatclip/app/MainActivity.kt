@@ -81,6 +81,7 @@ open class MainActivity : Activity() {
     private val updateInstaller by lazy(LazyThreadSafetyMode.NONE){ClientUpdateInstaller(this)}
     private var silentUpdateCheck=false
     private var firstResume=true
+    private var awaitingOverlayGrant=false
     private var categoryManagement = false
     private val settingsPath = mutableListOf<String>()
     private val settingsSection get() = settingsPath.lastOrNull().orEmpty()
@@ -134,9 +135,7 @@ open class MainActivity : Activity() {
         getSystemService(ClipboardManager::class.java).addPrimaryClipChangedListener(clipboardChanged)
         if (savedInstanceState == null && intent?.getBooleanExtra("floatclip_update", false) == true) {
             window.decorView.post { checkClientUpdate() }
-        } else if(savedInstanceState==null && UpdatePreferences(this).checkOnLaunch())window.decorView.postDelayed({
-            if(!isFinishing && !isDestroyed)checkClientUpdate(silent=true)
-        },1200)
+        } else if(savedInstanceState==null)window.decorView.postDelayed(::checkOnLaunch,1200)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -154,17 +153,14 @@ open class MainActivity : Activity() {
             currentPage == PAGE_SETTINGS && settingsSection.isNotEmpty() -> { settingsPath.removeAt(settingsPath.lastIndex); render() }
             currentPage == PAGE_CLIPBOARD && categoryManagement -> { categoryManagement = false; render() }
             currentPage != PAGE_CLIPBOARD -> { currentPage=PAGE_CLIPBOARD; settingsPath.clear(); render() }
-            isTaskRoot && overlayPreferences.keepAliveEnabled() && overlayPreferences.overlayEnabled() && Settings.canDrawOverlays(this) -> {
-                startOverlayRuntime()
-                finishAndRemoveTask()
-            }
+            isTaskRoot && canCloseTaskWithBubble() -> closeTaskWithBubble()
             else -> super.onBackPressed()
         }
     }
 
     override fun onNewIntent(intent:Intent) {
         super.onNewIntent(intent);setIntent(intent)
-        if(intent.action==Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER) && UpdatePreferences(this).checkOnLaunch())checkClientUpdate(silent=true)
+        if(intent.action==Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER))checkOnLaunch()
         if (applySettingsIntent(intent) && ::content.isInitialized) render()
         if (intent.getBooleanExtra("floatclip_update", false)) checkClientUpdate()
     }
@@ -197,7 +193,14 @@ open class MainActivity : Activity() {
                 else -> Unit
             }
         }
-        if(firstResume) { firstResume=false;return }
+        val grantedOverlay=awaitingOverlayGrant && Settings.canDrawOverlays(this)
+        awaitingOverlayGrant=false
+        if(grantedOverlay)startOverlay()
+        if(firstResume) {
+            firstResume=false
+            if(!grantedOverlay && overlayPreferences.overlayEnabled() && Settings.canDrawOverlays(this))startOverlayRuntime()
+            return
+        }
         if (::content.isInitialized) {
             if(currentPage==PAGE_CLIPBOARD && currentFocus is EditText && historyList?.isAttachedToWindow==true) refreshHistory() else render()
         }
@@ -404,14 +407,16 @@ open class MainActivity : Activity() {
         spacer(8)
     }
 
-    private fun showUsageHelp() {
-        FloatDialog.show(
-            this,
-            "使用帮助",
-            "单击复制，长按更多；左滑置顶/删除，右滑保护。\n拖动标题移动面板，拖动边缘调整大小，点击外侧收回。\n右上角图钉用于保持面板展开。",
-            negative=null,
-            positive="知道了",
-        )
+    private fun renderUsageHelp() {
+        addCard(card().apply {
+            addInformation("剪贴板", "轻触条目复制，长按查看更多操作。左滑置顶或删除，右滑保护。")
+            addView(divider())
+            addInformation("悬浮面板", "拖动标题移动，拖动边缘调整大小。点按图钉保持面板展开，点按面板外收回。")
+            addView(divider())
+            addInformation("保留悬浮球", "开启悬浮窗和任务清理后恢复。在剪贴板主页按返回，或到权限与后台选择退出主界面。")
+            addView(divider())
+            addInformation("共享文件", "轻触文件查看详情，长按进入多选。可预览、下载、分享或保留文件。")
+        })
     }
 
     private fun renderCategoryManager() {
@@ -672,7 +677,7 @@ open class MainActivity : Activity() {
         val overlay = Settings.canDrawOverlays(this)
         val battery = getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
         addCard(card().apply {
-            addView(settingRow("悬浮窗", "", if (overlay) "已授权" else "去授权", ::openOverlayPermission))
+            addView(settingRow("悬浮窗", "系统单独授权", if (overlay) "已授权" else "去授权") { openOverlayPermission() })
             addView(divider())
             addView(settingRow("无障碍", "可选，用于直接粘贴", if (PasteAccessibilityService.isConnected()) "已连接" else "设置", ::openAccessibilitySettings))
             addView(divider())
@@ -710,6 +715,7 @@ open class MainActivity : Activity() {
                 "关于", "关于与更新" -> renderAboutUpdates()
                 "权限声明" -> renderPermissionStatement()
                 "开源组件" -> renderOpenSourceComponents()
+                "使用帮助" -> renderUsageHelp()
                 "Kotlin 许可" -> renderKotlinLicense()
                 else -> {
                     renderPermissionGuide()
@@ -731,6 +737,10 @@ open class MainActivity : Activity() {
                         })
                         addView(divider())
                         addView(settingRow("系统通知设置", "", "›", ::openNotificationSettings))
+                        if(canCloseTaskWithBubble()) {
+                            addView(divider())
+                            addView(settingRow("退出主界面", "从最近任务移除并保留悬浮球", "›", ::closeTaskWithBubble))
+                        }
                     })
                 }
             }
@@ -781,56 +791,58 @@ open class MainActivity : Activity() {
         })
         spacer(12)
         addCard(card().apply {
-            val prefs = UpdatePreferences(this@MainActivity)
-            addView(settingRow("检查更新", prefs.lastCheck(), "›", R.drawable.ic_update) { checkClientUpdate() })
+            addView(settingRow("权限声明", "悬浮窗、无障碍与文件访问", "›", R.drawable.ic_shield) { openSettingsSection("权限声明") })
             addView(divider())
-            addView(settingRow("启动时检查更新", "", if (prefs.checkOnLaunch()) "已开启" else "已关闭") {
-                val enabled = !prefs.checkOnLaunch()
-                prefs.saveCheckOnLaunch(enabled)
-                if (enabled && android.os.Build.VERSION.SDK_INT >= 33 &&
-                    checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
-                ) requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 638)
-                render()
-            })
+            addView(settingRow("开源组件", "Kotlin 及离线许可", "›", R.drawable.ic_code) { openSettingsSection("开源组件") })
+            addView(divider())
+            addView(settingRow("使用帮助", "剪贴板、悬浮面板与共享文件", "›", R.drawable.ic_info) { openSettingsSection("使用帮助") })
         })
         spacer(12)
         addCard(card().apply {
-            addView(settingRow("权限声明","","›",R.drawable.ic_shield) { openSettingsSection("权限声明") })
-            addView(divider())
-            addView(settingRow("开源组件","","›",R.drawable.ic_code) { openSettingsSection("开源组件") })
-            addView(divider())
-            addView(settingRow("使用帮助","","›",R.drawable.ic_info,::showUsageHelp))
-
+            addView(settingRow("检查更新", UpdatePreferences(this@MainActivity).lastCheck(), "›", R.drawable.ic_update) { checkClientUpdate() })
         })
     }
+
+    private fun LinearLayout.addInformation(title:String, description:String) {
+        addView(LinearLayout(this@MainActivity).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(0,dp(10),0,dp(10))
+            addView(textView(title,15f,true).apply { includeFontPadding=false })
+            addView(textView(description,13f,false,colors.secondaryText).apply {
+                includeFontPadding=false
+                setLineSpacing(dp(3).toFloat(),1f)
+                setPadding(0,dp(5),0,0)
+            })
+        },LinearLayout.LayoutParams(-1,-2))
+    }
+
     private fun renderPermissionStatement() {
         addCard(card().apply {
             listOf(
-                "悬浮窗" to "在其他应用上方显示悬浮球与剪贴板。",
-                "网络与蓝牙" to "发现、配对并连接设备，传输你启用的共享内容；联网检查与下载更新。",
-                "前台服务与通知" to "在后台保持共享和悬浮窗运行，显示必要的服务状态。",
+                "悬浮窗" to "在系统的特殊应用权限中单独开启。允许后，FloatClip 可以在其他应用上方显示悬浮球和剪贴板。",
+                "无障碍（可选）" to "在系统无障碍设置中单独开启，用于执行你主动选择的文字粘贴，不用于识别屏幕内容。",
+                "网络与蓝牙" to "用于设备连接、共享和更新。Android 11 的已配对蓝牙通信无需弹窗；较新系统可能需要授予附近设备权限。",
+                "前台服务与通知" to "在后台保持共享和悬浮窗运行，显示服务状态。通知可在系统设置中管理。",
                 "开机广播" to "按已开启的服务开关，在系统允许时恢复运行。",
-                "无障碍（可选）" to "执行你主动选择的文字粘贴，不用于识别屏幕内容。",
-                "照片与文件" to "只读取你选择、分享或复制的项目；迁移包通过系统文件选择器保存和导入。",
-                "安装应用（可选）" to "下载并验证更新包后，交由系统确认安装。"
-            ).forEachIndexed { index,pair ->
+                "照片与文件" to "只读取你主动选择、分享或复制的项目。系统文件选择器仅授权所选文件或文件夹。",
+                "安装应用（可选）" to "更新包下载并验证后，由系统确认安装。初次安装时可单独允许 FloatClip 安装应用。"
+            ).forEachIndexed { index,(title,description) ->
                 if(index>0)addView(divider())
-                addView(textView(pair.first,14.5f,true))
-                addView(textView(pair.second,13f,false,colors.secondaryText).apply { setPadding(0,dp(4),0,dp(10)) })
+                addInformation(title,description)
             }
         })
         spacer(12)
-        addCard(card().apply { addView(settingRow("权限与后台","","管理",R.drawable.ic_shield) { openSettingsSection("权限与后台") }) })
+        addCard(card().apply { addView(settingRow("权限与后台", "查看授权状态", "›", R.drawable.ic_shield) { openSettingsSection("权限与后台") }) })
     }
+
     private fun renderOpenSourceComponents() {
         addCard(card().apply {
             addView(settingRow("Kotlin 标准库","JetBrains · Apache License 2.0","许可",R.drawable.ic_code) {
                 openSettingsSection("Kotlin 许可")
             })
-            addView(divider())
-            addView(textView("界面使用 Android 原生视图与系统 API。测试和构建工具不随安装包作为运行组件分发。",13f,false,colors.secondaryText))
         })
     }
+
     private fun renderKotlinLicense() {
         val license=assets.open("licenses/KOTLIN-LICENSE.txt").bufferedReader().use { it.readText() }
         val notice=assets.open("licenses/KOTLIN-NOTICE.txt").bufferedReader().use { it.readText() }
@@ -1481,6 +1493,11 @@ open class MainActivity : Activity() {
     private fun notifyHistoryChanged() {
         sendBroadcast(Intent(ClipboardSyncService.HISTORY_CHANGED).setPackage(packageName),"$packageName.permission.INTERNAL")
     }
+    private fun checkOnLaunch() {
+        if(isFinishing || isDestroyed || updateDialog?.dialog?.isShowing==true || updateAwaitingInstallPermission)return
+        if(UpdatePreferences(this).claimLaunchCheck())checkClientUpdate(silent=true)
+    }
+
     private fun checkClientUpdate(silent:Boolean=false) {
         if(isFinishing || isDestroyed)return
         if(silent && (updateDialog?.dialog?.isShowing==true || updateAwaitingInstallPermission))return
@@ -1492,6 +1509,7 @@ open class MainActivity : Activity() {
             }
             return
         }
+        UpdatePreferences(this).recordCheckAttempt()
         silentUpdateCheck = silent
         if (!silent) showUpdateProgress("正在连接更新源…")
         if (existing == null) updateCheck = com.floatclip.app.ui.ClientUpdateCheck(listener = ::updateCheckChanged)
@@ -1534,7 +1552,6 @@ open class MainActivity : Activity() {
                     val prefs=UpdatePreferences(this)
                     if(prefs.lastNotified()==identity)return
                     prefs.saveNotified(identity)
-                    notifyAvailableUpdate(release)
                 }
                 updateDialog=FloatDialog.show(this,
                     if(newer)"发现 "+release.version+" · build "+release.build else "当前 "+versionName()+" · build "+build,
@@ -1554,17 +1571,6 @@ open class MainActivity : Activity() {
             }
             else -> Unit
         }
-    }
-
-    private fun notifyAvailableUpdate(release:com.floatclip.probe.ShareUpdates.Release) {
-        val manager=getSystemService(android.app.NotificationManager::class.java)
-        manager.createNotificationChannel(android.app.NotificationChannel("floatclip_updates","应用更新",android.app.NotificationManager.IMPORTANCE_DEFAULT))
-        val open=Intent(this,UnifiedActivity::class.java).putExtra("floatclip_update",true)
-        val pending=android.app.PendingIntent.getActivity(this,638,open,android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
-        if(android.os.Build.VERSION.SDK_INT>=33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)return
-        runCatching { manager.notify(638,android.app.Notification.Builder(this,"floatclip_updates")
-            .setSmallIcon(R.drawable.ic_notification).setContentTitle("FloatClip 有新版本")
-            .setContentText(release.version+" · build "+release.build).setContentIntent(pending).setAutoCancel(true).build()) }
     }
 
     private fun startClientUpdateDownload(release:com.floatclip.probe.ShareUpdates.Release) {
@@ -1887,7 +1893,7 @@ open class MainActivity : Activity() {
         parent.addView(View(this), LinearLayout.LayoutParams(1, dp(heightDp)))
     }
 
-    private fun openOverlayPermission() {
+    private fun openOverlayPermission(enableAfterGrant:Boolean=false) {
         FloatDialog.show(
             this,
             "允许显示悬浮窗",
@@ -1895,6 +1901,7 @@ open class MainActivity : Activity() {
             negative="暂不",
             positive="去授权",
         ) {
+            awaitingOverlayGrant=enableAfterGrant
             openSystemSettings(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             true
         }
@@ -1906,11 +1913,20 @@ open class MainActivity : Activity() {
 
     private fun startOverlay() {
         if (!Settings.canDrawOverlays(this)) {
-            openOverlayPermission()
+            openOverlayPermission(enableAfterGrant=true)
             return
         }
         overlayPreferences.saveOverlayEnabled(true)
         startOverlayRuntime()
+        if(::content.isInitialized)render()
+    }
+
+    private fun canCloseTaskWithBubble()=overlayPreferences.keepAliveEnabled() &&
+        overlayPreferences.overlayEnabled() && Settings.canDrawOverlays(this)
+
+    private fun closeTaskWithBubble() {
+        startOverlayRuntime()
+        finishAndRemoveTask()
     }
 
     private fun startOverlayRuntime() {

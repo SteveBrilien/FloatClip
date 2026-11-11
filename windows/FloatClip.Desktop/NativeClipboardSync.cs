@@ -297,7 +297,7 @@ public sealed class NativeClipboardSync: IDisposable
         var snapshot=engine.Snapshot();
         return enabled&&ImageSharing&&snapshot.Enabled&&snapshot.Receive&&snapshot.Peers.TryGetValue(key,out var peer)&&peer.Enabled&&peer.Send&&peer.Device!=null&&pairs.GetByKey(key).Length==32;
     }
-    Task<bool> PrepareDirectTransfer(string key,CancellationToken cancellation)=BeginDirectTransfer(key,null).WaitAsync(cancellation);
+    Task<bool> PrepareDirectTransfer(string key,CancellationToken cancellation)=>BeginDirectTransfer(key,null).WaitAsync(cancellation);
 
     Task<bool> BeginDirectTransfer(string key,Guid? requested)
     {
@@ -495,7 +495,7 @@ public sealed class NativeClipboardSync: IDisposable
         try
         {
             // An active text-only Bluetooth burst must not prevent a trusted LAN upgrade.
-            if(key!=null&&links.TryGetValue(key,out var current)&&current.Kind is "lan" or "wifi-direct")return;
+            if(key!=null&&links.TryGetValue(key,out var current)&&(current.Kind is "lan" or "wifi-direct"))return;
             using var cancel=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token,cancellation);
             var session=await Task.Run(()=>Nearby.Connect(device,cache,pairs,verify,cancel.Token,persistent:true),cancel.Token);
             key=pairs.KeyForPin(pin)??throw new IOException("设备授权未保存");

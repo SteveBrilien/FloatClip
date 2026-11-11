@@ -3,6 +3,7 @@ package com.floatclip.app.sync
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import com.floatclip.app.ui.FloatDialog
@@ -21,7 +22,7 @@ class WifiDirectConsentActivity:Activity() {
         if(!WifiDirectTransferClient.wifiOn(this)) {
             FloatDialog.show(this,"打开 Wi-Fi","开启本机 Wi-Fi 后即可继续直连。",negative="暂不",positive="去开启",
                 onNegative=::finish,onCancel=::finish,onPositive={
-                    runCatching{startActivityForResult(Intent(Settings.Panel.ACTION_WIFI),1)}.onFailure{finish()};true
+                    runCatching{startActivityForResult(Intent(if(Build.VERSION.SDK_INT>=29)Settings.Panel.ACTION_WIFI else Settings.ACTION_WIFI_SETTINGS),1)}.onFailure{finish()};true
                 })
         } else if(!WifiDirectTransferClient.hasPermission(this)) {
             FloatDialog.show(this,"授权发现直连网络","Android 需要位置权限来选择对方的 Wi-Fi 直连网络。FloatClip 不读取定位结果。",

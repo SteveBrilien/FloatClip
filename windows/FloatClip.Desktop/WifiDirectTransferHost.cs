@@ -70,22 +70,24 @@ internal sealed class WifiDirectTransferHost
             announce(new(ssid,password,((IPEndPoint)listener.LocalEndpoint).Port,address?.ToString()??""));
             while(true)
             {
-                socket=await listener.AcceptTcpClientAsync(cancellation);
-                socket.ReceiveTimeout=5000;socket.SendTimeout=5000;socket.NoDelay=true;
-                using var abort=cancellation.Register(socket.Dispose);
+                var accepted=await listener.AcceptTcpClientAsync(cancellation);
+                socket=accepted;
+                accepted.ReceiveTimeout=5000;accepted.SendTimeout=5000;accepted.NoDelay=true;
+                using var abort=cancellation.Register(accepted.Dispose);
                 try
                 {
-                    var secure=await Task.Run(()=>TransportCrypto.Accept(socket.GetStream(),key=>key==peer?credential():null),cancellation);
+                    var secure=await Task.Run(()=>TransportCrypto.Accept(accepted.GetStream(),key=>key==peer?credential():null),cancellation);
                     cancellation.ThrowIfCancellationRequested();
-                    socket.ReceiveTimeout=180000;socket.SendTimeout=30000;
-                    listener.Stop();listener=null;
+                    accepted.ReceiveTimeout=180000;accepted.SendTimeout=30000;
                     var session=new Session(secure.Stream,Release,cache,true,true);
-                    session.EnableLargeFiles();ownedBySession=true;
+                    session.EnableLargeFiles();
+                    listener.Stop();
+                    ownedBySession=true;
                     return session;
                 }
                 catch(Exception e)when(e is IOException or SocketException or CryptographicException)
                 {
-                    socket.Dispose();socket=null;
+                    accepted.Dispose();socket=null;
                 }
             }
         }

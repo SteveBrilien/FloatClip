@@ -104,10 +104,12 @@ class PhotoImportViewerTest {
             val content=activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
             assertTrue(content is android.widget.FrameLayout)
             assertTrue(activity.window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_FULLSCREEN!=0)
-            assertEquals(1,views(content).filterIsInstance<CopyFeedbackButton>().size)
+            val actions = views(content).filterIsInstance<android.widget.ImageButton>()
+            assertEquals(listOf("返回", "图片备注", "锁定图片", "置顶图片", "复制图片"), actions.map { it.contentDescription.toString() })
+            assertTrue(actions.all { it.background is android.graphics.drawable.RippleDrawable })
         } finally {owner.pause().stop().destroy()}
     }
-    @Test fun sharedImageLightboxPagesWithinImageSequenceAndKeepsTopRightClose() {
+    @Test fun sharedImageGalleryPagesWithinCategoryAndKeepsBackAction() {
         val store=store()
         val first=store.addImage(png())!!
         val alternate=Bitmap.createBitmap(12,8,Bitmap.Config.ARGB_8888).let { bitmap ->
@@ -124,7 +126,7 @@ class PhotoImportViewerTest {
             assertFalse(viewer.page(1))
             assertTrue(viewer.page(-1))
             assertEquals(second.id,viewer.currentEntryId())
-            assertEquals(1,views(viewer).filterIsInstance<ImageView>().count { it.contentDescription=="关闭图片查看" })
+            assertEquals(1,views(viewer).filterIsInstance<ImageView>().count { it.contentDescription=="返回" })
         } finally { viewer.close() }
     }
 

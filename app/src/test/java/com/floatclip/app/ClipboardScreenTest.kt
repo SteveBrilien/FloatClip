@@ -47,6 +47,10 @@ class ClipboardScreenTest {
             click("开源组件")
             click("Kotlin 标准库")
             assertTrue(views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().any {it.text.toString().contains("Apache License")&&it.isTextSelectable})
+            activity.onBackPressed()
+            assertTrue(views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().any {it.text.toString() == "Kotlin 标准库"})
+            activity.findViewById<View>(R.id.clipboard_back).performClick()
+            assertTrue(views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().any {it.text.toString() == "检查更新"})
         } finally {controller.pause().stop().destroy()}
     }
 

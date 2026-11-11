@@ -31,6 +31,7 @@ class RecoveryLifecycleTest {
         context.getSharedPreferences("floatclip_overlay",Context.MODE_PRIVATE).edit().clear().commit()
         val prefs=OverlayPreferences(context)
         prefs.saveKeepAliveEnabled(false)
+        org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true)
         java.io.File(context.filesDir,"floatclip_vault.bin").delete()
         return Robolectric.buildService(ClipboardOverlayService::class.java).create()
     }

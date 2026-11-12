@@ -23,7 +23,14 @@ import com.floatclip.probe.FloatClipAccent
 
 /** FloatClip-owned modal surface. Avoids OEM AlertDialog geometry/colors on Android 11. */
 object FloatDialog {
-    data class Handle(val dialog:Dialog,val primary:TextView?,val body:LinearLayout)
+    data class Handle(
+        val dialog: Dialog,
+        val primary: TextView?,
+        val body: LinearLayout,
+        val title: TextView,
+        val message: TextView?,
+        val secondary: TextView?,
+    )
 
     private data class P(
         val card:Int,val text:Int,val muted:Int,val line:Int,val field:Int,val accent:Int,val tint:Int,val dark:Boolean
@@ -77,6 +84,7 @@ object FloatDialog {
         positive:String?="确定",
         onNegative:(()->Unit)?=null,
         onCancel:(()->Unit)?=null,
+        positiveInitiallyVisible: Boolean = true,
         onPositive:((Handle)->Boolean)?=null,
     ):Handle {
         val p=palette(context)
@@ -89,17 +97,20 @@ object FloatDialog {
             orientation=LinearLayout.VERTICAL
             setPadding(dp(22),dp(20),dp(22),dp(18))
             background=GradientDrawable().apply {
-                setColor(p.card);cornerRadius=dp(20).toFloat();setStroke(dp(1),p.line)
+                setColor(p.card);cornerRadius=dp(20).toFloat()
             }
         }
-        shell.addView(TextView(context).apply {
+        val titleView = TextView(context).apply {
             text=title;textSize=20f;setTextColor(p.text);typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
             includeFontPadding=false
-        },LinearLayout.LayoutParams(-1,-2))
-        if(!message.isNullOrBlank()) shell.addView(TextView(context).apply {
-            text=message;textSize=13f;setTextColor(p.muted);includeFontPadding=false
-            setLineSpacing(dp(3).toFloat(),1.08f);setPadding(0,dp(12),0,0)
-        },LinearLayout.LayoutParams(-1,-2))
+        }
+        shell.addView(titleView, LinearLayout.LayoutParams(-1, -2))
+        val messageView = message?.takeUnless { it.isBlank() }?.let { value ->
+            TextView(context).apply {
+                text=value;textSize=13f;setTextColor(p.muted);includeFontPadding=false
+                setLineSpacing(dp(3).toFloat(),1.08f);setPadding(0,dp(12),0,0)
+            }.also { shell.addView(it, LinearLayout.LayoutParams(-1, -2)) }
+        }
         if(custom!=null) shell.addView(custom,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(16) })
 
         val actions=LinearLayout(context).apply {
@@ -116,24 +127,28 @@ object FloatDialog {
         }
         val negativeView=negative?.let { button(it,false).also { actions.addView(it,LinearLayout.LayoutParams(-2,dp(44))) } }
         val positiveView=positive?.let { button(it,true).also { actions.addView(it,LinearLayout.LayoutParams(-2,dp(44)).apply { marginStart=dp(8) }) } }
+        if (!positiveInitiallyVisible) positiveView?.visibility = View.GONE
         if(actions.childCount>0)shell.addView(actions)
         dialog.setContentView(shell)
         dialog.setCanceledOnTouchOutside(true)
         dialog.setOnCancelListener { onCancel?.invoke() }
 
         lateinit var handle:Handle
-        handle=Handle(dialog,positiveView,shell)
+        handle=Handle(dialog,positiveView,shell,titleView,messageView,negativeView)
         negativeView?.setOnClickListener { onNegative?.invoke();dialog.dismiss() }
         positiveView?.setOnClickListener {
             val dismiss=onPositive?.invoke(handle) ?: true
             if(dismiss)dialog.dismiss()
         }
-        dialog.setOnShowListener {
-            dialog.window?.apply {
-                setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-                addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                attributes=attributes.apply { dimAmount=0.35f;windowAnimations=0 }
-                setLayout((context.resources.displayMetrics.widthPixels-dp(40)).coerceAtMost(dp(420)),WindowManager.LayoutParams.WRAP_CONTENT)
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            attributes = attributes.apply {
+                dimAmount = 0.35f
+                windowAnimations = 0
+                gravity = Gravity.CENTER
+                width = (context.resources.displayMetrics.widthPixels - dp(40)).coerceIn(1, dp(420))
+                height = WindowManager.LayoutParams.WRAP_CONTENT
             }
         }
         var applied=p
@@ -141,13 +156,10 @@ object FloatDialog {
             val next=palette(context)
             if(next!=applied) {
                 repaint(shell,applied,next)
-                (shell.background as GradientDrawable).setStroke(dp(1),next.line)
                 applied=next
             }
         }
         dialog.show()
-        // setLayout must be repeated after show on several Android 11 OEM Window implementations.
-        dialog.window?.setLayout((context.resources.displayMetrics.widthPixels-dp(40)).coerceAtMost(dp(420)),WindowManager.LayoutParams.WRAP_CONTENT)
         return handle
     }
 
@@ -162,9 +174,7 @@ object FloatDialog {
         val density=context.resources.displayMetrics.density
         fun dp(v:Int)=(v*density).toInt()
         val list=LinearLayout(context).apply { orientation=LinearLayout.VERTICAL }
-        val handle=show(context,title,custom=ScrollView(context).apply {
-            addView(list,ViewGroup.LayoutParams(-1,-2))
-        },negative="取消",positive=null)
+        lateinit var handle: Handle
         items.forEachIndexed { index,label ->
             list.addView(TextView(context).apply {
                 text=(if(index==selected)"✓  " else "    ")+label
@@ -174,9 +184,15 @@ object FloatDialog {
                 background=GradientDrawable().apply {
                     setColor(if(index==selected)p.tint else Color.TRANSPARENT);cornerRadius=dp(12).toFloat()
                 }
-                setOnClickListener { onSelect(index);handle.dialog.dismiss() }
+                setOnClickListener {
+                    handle.dialog.dismiss()
+                    onSelect(index)
+                }
             })
         }
+        handle = show(context, title, custom = ScrollView(context).apply {
+            addView(list, ViewGroup.LayoutParams(-1, -2))
+        }, negative = "取消", positive = null)
         return handle
     }
 

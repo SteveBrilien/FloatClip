@@ -127,4 +127,37 @@ class OverlayHistoryTest {
         prefs.resetAppearance();assertFalse(prefs.panelFollowsBubble())
     }
 
+    @Test fun taskRemovalUsesStickyOverlayEvenWithTheOldRecoveryToggleOff() {
+        val context = RuntimeEnvironment.getApplication()
+        val prefs = OverlayPreferences(context)
+        context.getSharedPreferences("floatclip_overlay", android.content.Context.MODE_PRIVATE)
+            .edit().putBoolean("keep_alive_enabled", false).commit()
+        org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true)
+        org.robolectric.Shadows.shadowOf(context.getSystemService(android.os.PowerManager::class.java)).setIsInteractive(true)
+        prefs.saveOverlayEnabled(true)
+        val controller = org.robolectric.Robolectric.buildService(
+            com.floatclip.app.overlay.ClipboardOverlayService::class.java,
+        ).create()
+        val service = controller.get()
+        val scheduler = com.floatclip.app.overlay.OverlayKeepAliveScheduler
+        try {
+            val bubbleField = service.javaClass.getDeclaredField("bubbleView").apply { isAccessible = true }
+            val originalBubble = bubbleField.get(service)
+            assertNotNull(originalBubble)
+            assertTrue(scheduler.shouldRun(context))
+            assertEquals(android.app.Service.START_STICKY, service.onStartCommand(null, 0, 1))
+            service.onTaskRemoved(android.content.Intent(context, UnifiedActivity::class.java))
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(400))
+            assertSame(originalBubble, bubbleField.get(service))
+            assertNotNull(org.robolectric.Shadows.shadowOf(service).lastForegroundNotification)
+            prefs.saveOverlayEnabled(false)
+            assertFalse(scheduler.shouldRun(context))
+        } finally {
+            prefs.saveOverlayEnabled(false)
+            scheduler.cancel(context)
+            controller.destroy()
+            org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(false)
+        }
+    }
+
 }

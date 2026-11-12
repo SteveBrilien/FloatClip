@@ -106,9 +106,8 @@ class ClipboardOverlayService : Service() {
     private var panelPinnedMode = false
     private var bubbleMotionAnimator: ValueAnimator? = null
     private var foregroundStarted = false
-    private var accessibilityHosted = false
     private val sharedHistoryChanged=object: BroadcastReceiver(){override fun onReceive(context: Context?,intent: Intent?){if(panelOpen&&!panelCollapsing){renderSourceBar();renderCategoryBar();renderEntries()}}}
-    private val localBinder = LocalBinder()
+    private val localBinder = Binder()
     private var panelOpen = false
     private var panelCollapsing = false
     private var clipboardCaptureGeneration = 0
@@ -122,7 +121,6 @@ class ClipboardOverlayService : Service() {
 
     private val edgeHideRunnable = Runnable { hideBubbleAtEdge() }
     private var canRepairDetachedWindow = true
-    private var restoreAfterTaskRemoval = false
     private val restoreOverlayRunnable = Runnable(::restoreOverlayWindow)
     private val releaseIdlePanel = Runnable { if (!panelOpen && !panelCollapsing) releasePanelWindows() }
     private val clipboardPollRunnable = object : Runnable {
@@ -152,6 +150,7 @@ class ClipboardOverlayService : Service() {
         }
     }
     private var lastSystemNight = false
+    private var lastScreenSize: Point? = null
     private val systemAppearanceReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
@@ -201,6 +200,7 @@ class ClipboardOverlayService : Service() {
         IntegrationRegistry.initialize(this)
         themeProvider = AdaptiveOverlayThemeProvider(this, IntegrationRegistry.originOsSystemBridge)
         lastSystemNight = isSystemNight()
+        lastScreenSize = screenSize()
         bubbleMotion = BubbleMotionController(
             this,
             windowManager,
@@ -243,13 +243,9 @@ class ClipboardOverlayService : Service() {
                 handler.removeCallbacks(refreshAppearanceRunnable)
                 handler.postDelayed(refreshAppearanceRunnable, 60L)
             }
-            ACTION_RESTORE_OVERLAY -> {
-                restoreAfterTaskRemoval = true
-                restoreOverlayWindow()
-            }
             else -> restoreOverlayWindow()
         }
-        return if (overlayPreferences.keepAliveEnabled()) START_STICKY else START_NOT_STICKY
+        return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder {
@@ -261,23 +257,6 @@ class ClipboardOverlayService : Service() {
         return localBinder
     }
 
-    override fun onUnbind(intent: Intent?): Boolean {
-        accessibilityHosted = false
-        return super.onUnbind(intent)
-    }
-
-    inner class LocalBinder : Binder() {
-        fun useAccessibilityHost() {
-            accessibilityHosted = true
-            if (foregroundStarted) {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                foregroundStarted = false
-                // Keep the service alive through the accessibility binding, but clear the started state.
-                stopSelf()
-            }
-        }
-    }
-
     private fun ensureForeground() {
         if (foregroundStarted) return
         startForeground(NOTIFICATION_ID, createNotification())
@@ -286,7 +265,12 @@ class ClipboardOverlayService : Service() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        refreshSystemThemeIfNeeded(force = true)
+        val size = screenSize()
+        if (size != lastScreenSize) {
+            lastScreenSize = size
+            handler.removeCallbacks(refreshAppearanceRunnable)
+            handler.postDelayed(refreshAppearanceRunnable, 32L)
+        } else refreshSystemThemeIfNeeded()
     }
 
     override fun onDestroy() {
@@ -324,7 +308,7 @@ class ClipboardOverlayService : Service() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         if (OverlayKeepAliveScheduler.shouldRun(this)) {
             canRepairDetachedWindow = true
-            restoreAfterTaskRemoval = true
+            // Keep the current window attached. Only recover it if the system actually removed it.
             queueOverlayRecovery()
             OverlayKeepAliveScheduler.schedule(this)
         }
@@ -334,12 +318,12 @@ class ClipboardOverlayService : Service() {
     private fun isSystemNight(): Boolean =
         resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
 
-    private fun refreshSystemThemeIfNeeded(force: Boolean = false) {
+    private fun refreshSystemThemeIfNeeded() {
         if (overlayPreferences.themeMode() != OverlayThemeMode.SYSTEM &&
             overlayPreferences.bubbleThemeMode() != OverlayThemeMode.SYSTEM
         ) return
         val current = isSystemNight()
-        if (!force && current == lastSystemNight) return
+        if (current == lastSystemNight) return
         lastSystemNight = current
         handler.removeCallbacks(refreshAppearanceRunnable)
         handler.postDelayed(refreshAppearanceRunnable, 32L)
@@ -360,8 +344,7 @@ class ClipboardOverlayService : Service() {
     private fun restoreOverlayWindow() {
         if (stopping || !canPresentOverlay() || pendingViewerToken != null) return
         val visible = if (panelOpen) panelView else bubbleView
-        if (!restoreAfterTaskRemoval && overlayWindows.isVisible(visible)) return
-        restoreAfterTaskRemoval = false
+        if (overlayWindows.isVisible(visible)) return
         rebuildVisibleOverlay(reopenPanel = false)
     }
 
@@ -659,13 +642,13 @@ class ClipboardOverlayService : Service() {
         val frost = if (overlayPreferences.backgroundMode() == "frost") overlayPreferences.frostStrengthPercent() / 100f else 0f
         val frostedPanel = blendColor(palette.panelBackground, Color.WHITE, (if (palette.isDark) 0.07f else 0.22f) * frost)
         val borderAlpha = percentAlpha(overlayPreferences.borderAlphaPercent())
-        val borderColor = if (palette.isDark) Color.argb(borderAlpha, 255, 255, 255) else Color.argb(borderAlpha, 25, 40, 63)
+        val borderColor = Color.argb(borderAlpha, 25, 40, 63)
         val panel = BorderDragFrameLayout(this).apply {
             isClickable = true
             background = roundedBackground(
                 withAlpha(frostedPanel, panelAlpha),
                 palette.panelCornerRadiusDp,
-                borderColor.takeIf { overlayPreferences.overlayBorderEnabled() },
+                borderColor.takeIf { !palette.isDark && overlayPreferences.overlayBorderEnabled() },
             )
             elevation = dp(palette.elevationDp).toFloat()
             windowFocusChanged={focused->
@@ -1522,7 +1505,7 @@ class ClipboardOverlayService : Service() {
     private fun circleBackground(color: Int, palette: OverlayPalette): GradientDrawable = GradientDrawable().apply {
         shape = GradientDrawable.OVAL
         setColor(color)
-        setStroke(dp(1), if (palette.isDark) Color.argb(74, 255, 255, 255) else Color.argb(38, 0, 0, 0))
+        if (!palette.isDark) setStroke(dp(1), Color.argb(38, 0, 0, 0))
     }
 
     private fun roundedBackground(color: Int, radiusDp: Float, borderColor: Int? = null): GradientDrawable = GradientDrawable().apply {

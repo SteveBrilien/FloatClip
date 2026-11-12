@@ -13,6 +13,7 @@ import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.floatclip.app.overlay.ClipboardOverlayService
+import com.floatclip.app.overlay.OverlayKeepAliveScheduler
 import com.floatclip.app.prefs.OverlayPreferences
 import com.floatclip.app.clipboard.ClipboardWrites
 import java.lang.ref.WeakReference
@@ -24,9 +25,7 @@ class PasteAccessibilityService : AccessibilityService() {
     private var overlayBindingRegistered = false
 
     private val overlayConnection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            (service as? ClipboardOverlayService.LocalBinder)?.useAccessibilityHost()
-        }
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) = Unit
 
         override fun onServiceDisconnected(name: ComponentName?) = Unit
 
@@ -41,7 +40,7 @@ class PasteAccessibilityService : AccessibilityService() {
         clipboard = getSystemService(ClipboardManager::class.java)
         clipboard?.addPrimaryClipChangedListener(clipboardListener)
         captureClipboard()
-        ensureOverlayBinding()
+        OverlayKeepAliveScheduler.startIfNeeded(this)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {

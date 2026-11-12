@@ -38,7 +38,11 @@ class FloatDialogThemeTest {
         var saves=0
         val handle=FloatDialog.show(activity,"分类",custom=input,onPositive={ saves++;true })
         val title=handle.body.getChildAt(0) as TextView
+        val initialWidth = handle.dialog.window!!.attributes.width
         try {
+            assertTrue(initialWidth > 0)
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(initialWidth, handle.dialog.window!!.attributes.width)
             prefs.saveThemeMode(OverlayThemeMode.DARK)
             shadowOf(Looper.getMainLooper()).idle()
             assertTrue(handle.dialog.isShowing)

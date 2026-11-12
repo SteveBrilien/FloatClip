@@ -12,11 +12,15 @@ class OverlayWindows(private val manager:WindowManager, private val onUnexpected
     private val attachmentListener = object : View.OnAttachStateChangeListener {
         override fun onViewAttachedToWindow(view: View) = Unit
         override fun onViewDetachedFromWindow(view: View) {
-            if (!closed && surfaces.containsKey(view)) onUnexpectedDetach?.invoke(view)
+            if (!closed && surfaces.remove(view) != null) {
+                view.removeOnAttachStateChangeListener(this)
+                onUnexpectedDetach?.invoke(view)
+            }
         }
     }
+    // addView registers the window before Android dispatches its first attach callback.
     fun isVisible(view: View?): Boolean =
-        view != null && surfaces.containsKey(view) && view.isAttachedToWindow && view.visibility == View.VISIBLE
+        view != null && surfaces.containsKey(view) && view.visibility == View.VISIBLE
 
     fun add(view:View,params:WindowManager.LayoutParams):Boolean {
         if(closed)return false

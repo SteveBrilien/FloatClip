@@ -26,6 +26,10 @@ class ClipboardScreenTest {
     @Test fun aboutHasRealPagesForPermissionsAndOfflineOpenSourceLicense() {
         val controller=Robolectric.buildActivity(UnifiedActivity::class.java).setup()
         val activity=controller.get()
+        val prefs=com.floatclip.app.prefs.OverlayPreferences(activity)
+        prefs.saveThemeMode(com.floatclip.app.prefs.OverlayThemeMode.DARK)
+        val windowContent=activity.findViewById<ViewGroup>(android.R.id.content)
+        val routeRoot=windowContent.getChildAt(0) as ViewGroup
         fun views(view:View):List<View> = listOf(view)+if(view is ViewGroup)(0 until view.childCount).flatMap {views(view.getChildAt(it))} else emptyList()
         fun click(label:String) {
             val text=views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().first {it.text.toString()==label}
@@ -45,6 +49,9 @@ class ClipboardScreenTest {
             click("使用帮助")
             assertTrue(views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().any { it.text.toString()=="共享文件" })
             activity.onBackPressed()
+            assertSame(routeRoot, windowContent.getChildAt(0))
+            assertEquals(1f, routeRoot.alpha, 0f)
+            assertEquals(0f, routeRoot.getChildAt(0).translationX, 0f)
             click("权限声明")
             assertTrue(views(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.TextView>().any {it.text.toString().contains("你主动选择的文字粘贴")})
             activity.findViewById<View>(R.id.clipboard_back).performClick()

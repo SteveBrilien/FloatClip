@@ -17,12 +17,12 @@ object OverlayKeepAliveScheduler {
 
     fun shouldRun(context: Context): Boolean {
         val prefs = OverlayPreferences(context)
-        return prefs.overlayEnabled() && prefs.keepAliveEnabled() && Settings.canDrawOverlays(context)
+        return prefs.overlayEnabled() && Settings.canDrawOverlays(context)
     }
 
     fun startIfNeeded(context: Context) {
         if (!shouldRun(context)) return
-        if (PasteAccessibilityService.ensureOverlayHosted()) return
+        PasteAccessibilityService.ensureOverlayHosted()
         runCatching {
             context.startForegroundService(Intent(context, ClipboardOverlayService::class.java))
         }
@@ -31,19 +31,26 @@ object OverlayKeepAliveScheduler {
     fun schedule(context: Context) {
         if (!shouldRun(context)) return
         val alarm = context.getSystemService(AlarmManager::class.java) ?: return
-        val intent = Intent(context, OverlayRestartReceiver::class.java)
-        val pending = PendingIntent.getBroadcast(
-            context,
-            REQUEST_CODE,
-            intent,
-            PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
+        val pending = restartIntent(context, PendingIntent.FLAG_UPDATE_CURRENT) ?: return
         alarm.setAndAllowWhileIdle(
             AlarmManager.ELAPSED_REALTIME,
             SystemClock.elapsedRealtime() + RESTART_DELAY_MS,
             pending,
         )
     }
+
+    fun cancel(context: Context) {
+        val pending = restartIntent(context, PendingIntent.FLAG_NO_CREATE) ?: return
+        context.getSystemService(AlarmManager::class.java)?.cancel(pending)
+        pending.cancel()
+    }
+
+    private fun restartIntent(context: Context, flags: Int): PendingIntent? = PendingIntent.getBroadcast(
+        context,
+        REQUEST_CODE,
+        Intent(context, OverlayRestartReceiver::class.java),
+        flags or PendingIntent.FLAG_IMMUTABLE,
+    )
 }
 
 class OverlayRestartReceiver : BroadcastReceiver() {

@@ -101,8 +101,8 @@ internal class FileDetailsSheet(
         val height=(available*fraction).roundToInt().coerceIn(minOf(dp(250),available),available)
         val animate=ValueAnimator.areAnimatorsEnabled()
         surface.translationY=if(animate)height.toFloat() else 0f
+        window?.setLayout(-1, height)
         super.show()
-        window?.setLayout(-1,height)
         if(animate)settle(0f,240)
     }
 

@@ -39,6 +39,7 @@ import com.floatclip.app.clipboard.ClipboardImages
 import com.floatclip.app.integration.IntegrationRegistry
 import com.floatclip.app.model.ClipEntry
 import com.floatclip.app.overlay.ClipboardOverlayService
+import com.floatclip.app.overlay.OverlayKeepAliveScheduler
 import com.floatclip.app.prefs.CategoryStore
 import com.floatclip.app.prefs.CategoryIcons
 import com.floatclip.app.prefs.OverlayPreferences
@@ -153,7 +154,6 @@ open class MainActivity : Activity() {
             currentPage == PAGE_SETTINGS && settingsSection.isNotEmpty() -> { settingsPath.removeAt(settingsPath.lastIndex); render() }
             currentPage == PAGE_CLIPBOARD && categoryManagement -> { categoryManagement = false; render() }
             currentPage != PAGE_CLIPBOARD -> { currentPage=PAGE_CLIPBOARD; settingsPath.clear(); render() }
-            isTaskRoot && canCloseTaskWithBubble() -> closeTaskWithBubble()
             else -> super.onBackPressed()
         }
     }
@@ -303,15 +303,14 @@ open class MainActivity : Activity() {
         colors = resolveAppColors()
         applySystemBars()
 
-        val root = FrameLayout(this).apply {
-            setBackgroundColor(colors.pageBackground)
-        }
-        viewport=root
-        imageImportButton=null
-        val scroll = ScrollView(this).apply {
-            setBackgroundColor(colors.pageBackground)
-            overScrollMode = View.OVER_SCROLL_NEVER
-        }
+        val existingRoot = viewport
+        val root = existingRoot ?: FrameLayout(this).apply { isFocusableInTouchMode = true }
+        root.getChildAt(0)?.animate()?.cancel()
+        root.removeAllViews()
+        root.setBackgroundColor(colors.pageBackground)
+        viewport = root
+        imageImportButton = null
+        val scroll = ScrollView(this).apply { overScrollMode = View.OVER_SCROLL_NEVER }
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(6), dp(18), dp(24))
@@ -320,12 +319,12 @@ open class MainActivity : Activity() {
             content,
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
         )
-        if(currentPage==PAGE_CLIPBOARD && !categoryManagement) {
+        val page = if (currentPage == PAGE_CLIPBOARD && !categoryManagement) {
             scroll.removeView(content)
-            root.addView(content,FrameLayout.LayoutParams(-1,-1))
-        } else root.addView(scroll, FrameLayout.LayoutParams(-1,-1))
-        root.isFocusableInTouchMode=true
-        setContentView(root)
+            content
+        } else scroll
+        root.addView(page, FrameLayout.LayoutParams(-1, -1))
+        if (existingRoot == null) setContentView(root)
 
         renderHeader()
         when (currentPage) {
@@ -334,7 +333,7 @@ open class MainActivity : Activity() {
         }
         root.requestFocus()
         renderedRoute=nextRoute
-        if(previousRoute!=null && previousRoute!=nextRoute) animateRouteIn(root,previousRoute,nextRoute)
+        if (previousRoute != null && routeDepth(nextRoute) > routeDepth(previousRoute)) animateRouteIn(page)
     }
 
     private fun renderRouteKey():String=when {
@@ -350,15 +349,12 @@ open class MainActivity : Activity() {
         else -> 1 + route.count { it == '/' }
     }
 
-    private fun animateRouteIn(root:View,from:String,to:String) {
-        if(!android.animation.ValueAnimator.areAnimatorsEnabled())return
-        val duration=(overlayPreferences.transitionDurationMs()*0.72f).toLong().coerceIn(0L,420L)
-        if(duration<=0L)return
-        val direction=if(routeDepth(to)>=routeDepth(from))1 else -1
-        root.alpha=0f
-        root.translationX=dp(14*direction).toFloat()
-        root.animate().cancel()
-        root.animate().alpha(1f).translationX(0f)
+    private fun animateRouteIn(page: View) {
+        if (!android.animation.ValueAnimator.areAnimatorsEnabled()) return
+        val duration = (overlayPreferences.transitionDurationMs() * 0.72f).toLong().coerceIn(0L, 220L)
+        if (duration == 0L) return
+        page.translationX = dp(8).toFloat()
+        page.animate().translationX(0f)
             .setDuration(duration)
             .setInterpolator(overlayPreferences.motionInterpolator())
             .start()
@@ -416,7 +412,7 @@ open class MainActivity : Activity() {
             addView(divider())
             addInformation("悬浮面板", "拖动标题移动，拖动边缘调整大小。点按图钉保持面板展开，点按面板外收回。")
             addView(divider())
-            addInformation("保留悬浮球", "开启悬浮窗和任务清理后恢复。在剪贴板主页按返回，或到权限与后台选择退出主界面。")
+            addInformation("保留悬浮球", "开启悬浮窗后，返回桌面或移除最近任务时会自动保留悬浮球。若系统结束服务，FloatClip 会尝试恢复。")
             addView(divider())
             addInformation("共享文件", "轻触文件查看详情，长按进入多选。可预览、下载、分享或保留文件。")
         })
@@ -723,12 +719,6 @@ open class MainActivity : Activity() {
                 else -> {
                     renderPermissionGuide()
                     addCard(card().apply {
-                        val keepAlive = overlayPreferences.keepAliveEnabled()
-                        addView(settingRow("清理最近任务后恢复悬浮窗", "强行停止应用后 Android 不允许自动复活", if (keepAlive) "已开启" else "已关闭") {
-                            overlayPreferences.saveKeepAliveEnabled(!keepAlive)
-                            render()
-                        })
-                        addView(divider())
                         addView(settingRow(
                             "详细常驻通知",
                             "关闭后仍保留 Android 11 要求的静默前台通知",
@@ -740,10 +730,6 @@ open class MainActivity : Activity() {
                         })
                         addView(divider())
                         addView(settingRow("系统通知设置", "", "›", ::openNotificationSettings))
-                        if(canCloseTaskWithBubble()) {
-                            addView(divider())
-                            addView(settingRow("退出主界面", "从最近任务移除并保留悬浮球", "›", ::closeTaskWithBubble))
-                        }
                     })
                 }
             }
@@ -1518,8 +1504,37 @@ open class MainActivity : Activity() {
         }
         updateDialog=FloatDialog.show(this,"检查更新",
             versionName()+" · build "+build,
-            custom=progress,negative="取消",positive=null,
-            onNegative={ updateCheck?.cancel() },onCancel={ updateCheck?.cancel() })
+            custom=progress,negative="取消",positive="下载并安装",
+            onNegative={ updateCheck?.cancel() },onCancel={ updateCheck?.cancel() },
+            positiveInitiallyVisible=false)
+    }
+
+    private fun showUpdateResult(title: String, message: String, actionLabel: String? = null, action: (() -> Unit)? = null) {
+        val progress = updateStatusText?.parent as? View
+        updateStatusText = null
+        val current = updateDialog?.takeIf { progress != null && it.dialog.isShowing }
+        if (current == null) {
+            updateDialog = FloatDialog.show(this, title, message, negative = "关闭", positive = actionLabel,
+                onPositive = action?.let { callback -> { handle -> handle.dialog.dismiss(); callback(); true } })
+            return
+        }
+
+        current.title.text = title
+        current.message?.text = message
+        progress?.visibility = View.GONE
+        current.dialog.setOnCancelListener(null)
+        current.secondary?.apply {
+            text = "关闭"
+            setOnClickListener { current.dialog.dismiss() }
+        }
+        current.primary?.apply {
+            text = actionLabel.orEmpty()
+            visibility = if (actionLabel == null) View.GONE else View.VISIBLE
+            setOnClickListener {
+                current.dialog.dismiss()
+                action?.invoke()
+            }
+        }
     }
 
     private fun updateCheckChanged(state:com.floatclip.app.ui.ClientUpdateCheck.State) {
@@ -1527,8 +1542,6 @@ open class MainActivity : Activity() {
         when(state.phase) {
             com.floatclip.app.ui.ClientUpdateCheck.Phase.CHECKING -> updateStatusText?.text=state.source
             com.floatclip.app.ui.ClientUpdateCheck.Phase.SUCCESS -> {
-                updateDialog?.dialog?.dismiss()
-                updateStatusText=null
                 val release=state.release?:return
                 UpdatePreferences(this).saveLastCheck(release.version,release.build)
                 val build=packageManager.getPackageInfo(packageName,0).longVersionCode
@@ -1542,21 +1555,20 @@ open class MainActivity : Activity() {
                     if(prefs.lastNotified()==identity)return
                     prefs.saveNotified(identity)
                 }
-                updateDialog=FloatDialog.show(this,
+                showUpdateResult(
                     if(newer)"发现 "+release.version+" · build "+release.build else "当前 "+versionName()+" · build "+build,
                     if(newer)release.notes else if(order<0 || release.build<build)
                         "已发布 "+release.version+" · build "+release.build
                     else "已是最新版本",
-                    negative="关闭",positive=if(newer)"下载并安装" else null,
-                    onPositive=if(newer) { { _ -> startClientUpdateDownload(release);true } } else null)
+                    actionLabel=if(newer)"下载并安装" else null,
+                    action=if(newer) { { startClientUpdateDownload(release) } } else null,
+                )
             }
             com.floatclip.app.ui.ClientUpdateCheck.Phase.FAILED -> {
                 if(silentUpdateCheck){silentUpdateCheck=false;return}
-                updateDialog?.dialog?.dismiss();updateStatusText=null
                 val last=UpdatePreferences(this).lastCheck()
-                updateDialog=FloatDialog.show(this,"检查未完成",
-                    state.message+(if(last.isNotEmpty())"\n\n"+last else ""),
-                    negative="关闭",positive="重试",onPositive={ checkClientUpdate();true })
+                showUpdateResult("检查未完成", state.message+(if(last.isNotEmpty())"\n\n"+last else ""),
+                    actionLabel="重试", action={ checkClientUpdate() })
             }
             else -> Unit
         }
@@ -1910,21 +1922,11 @@ open class MainActivity : Activity() {
         if(::content.isInitialized)render()
     }
 
-    private fun canCloseTaskWithBubble()=overlayPreferences.keepAliveEnabled() &&
-        overlayPreferences.overlayEnabled() && Settings.canDrawOverlays(this)
-
-    private fun closeTaskWithBubble() {
-        startOverlayRuntime()
-        finishAndRemoveTask()
-    }
-
-    private fun startOverlayRuntime() {
-        if (PasteAccessibilityService.ensureOverlayHosted()) return
-        startForegroundService(overlayServiceIntent)
-    }
+    private fun startOverlayRuntime() = OverlayKeepAliveScheduler.startIfNeeded(this)
 
     private fun stopOverlay() {
         overlayPreferences.saveOverlayEnabled(false)
+        OverlayKeepAliveScheduler.cancel(this)
         PasteAccessibilityService.releaseOverlayHosted()
         stopService(overlayServiceIntent)
     }

@@ -49,6 +49,7 @@ import com.floatclip.probe.FloatClipAccent
 import com.floatclip.app.prefs.CategoryStore
 import com.floatclip.app.prefs.CategoryIcons
 import com.floatclip.app.prefs.OverlayPreferences
+import com.floatclip.app.prefs.OverlayThemeMode
 import com.floatclip.app.overlay.ui.BorderDragFrameLayout
 import com.floatclip.app.overlay.ui.BubbleMotionController
 import com.floatclip.app.overlay.ui.PanelGeometry
@@ -334,7 +335,9 @@ class ClipboardOverlayService : Service() {
         resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
 
     private fun refreshSystemThemeIfNeeded(force: Boolean = false) {
-        if (overlayPreferences.themeMode() != com.floatclip.app.prefs.OverlayThemeMode.SYSTEM) return
+        if (overlayPreferences.themeMode() != OverlayThemeMode.SYSTEM &&
+            overlayPreferences.bubbleThemeMode() != OverlayThemeMode.SYSTEM
+        ) return
         val current = isSystemNight()
         if (!force && current == lastSystemNight) return
         lastSystemNight = current
@@ -419,7 +422,7 @@ class ClipboardOverlayService : Service() {
         bubbleMotionAnimator?.cancel()
         bubbleMotionAnimator = null
 
-        val palette = themeProvider.palette()
+        val palette = themeProvider.bubblePalette()
         val screen = screenSize()
         val size = dp(overlayPreferences.bubbleSizeDp())
         val onRight = overlayPreferences.bubbleOnRight()
@@ -652,15 +655,17 @@ class ClipboardOverlayService : Service() {
                 params.setBlurBehindRadius(0)
             }
         }
-        val panelAlpha=percentAlpha(overlayPreferences.surfacePanelAlphaPercent(blur))
-        val frostedPanel=palette.panelBackground
-        val borderAlpha=percentAlpha(overlayPreferences.surfaceBorderAlphaPercent(palette.isDark))
+        val panelAlpha = percentAlpha(overlayPreferences.surfacePanelAlphaPercent())
+        val frost = if (overlayPreferences.backgroundMode() == "frost") overlayPreferences.frostStrengthPercent() / 100f else 0f
+        val frostedPanel = blendColor(palette.panelBackground, Color.WHITE, (if (palette.isDark) 0.07f else 0.22f) * frost)
+        val borderAlpha = percentAlpha(overlayPreferences.borderAlphaPercent())
+        val borderColor = if (palette.isDark) Color.argb(borderAlpha, 255, 255, 255) else Color.argb(borderAlpha, 25, 40, 63)
         val panel = BorderDragFrameLayout(this).apply {
             isClickable = true
             background = roundedBackground(
                 withAlpha(frostedPanel, panelAlpha),
                 palette.panelCornerRadiusDp,
-                if (palette.isDark) Color.argb(borderAlpha,255,255,255) else Color.argb(borderAlpha,25,40,63),
+                borderColor.takeIf { overlayPreferences.overlayBorderEnabled() },
             )
             elevation = dp(palette.elevationDp).toFloat()
             windowFocusChanged={focused->
@@ -687,7 +692,7 @@ class ClipboardOverlayService : Service() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(2), 0, dp(2), 0)
         }
-        header.addView(passiveIcon(R.drawable.ic_drag, "拖动标题移动面板，拖动边缘调整大小"), LinearLayout.LayoutParams(dp(34), dp(40)))
+        header.addView(passiveIcon(R.drawable.ic_drag, "边框与标题空白处可拖动"), LinearLayout.LayoutParams(dp(34), dp(40)))
         header.addView(TextView(this).apply {
             text = "剪贴板"
             textSize = 17f
@@ -696,7 +701,7 @@ class ClipboardOverlayService : Service() {
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }, LinearLayout.LayoutParams(0, dp(40), 1f))
 
-        header.addView(iconButton(R.drawable.ic_delete, "全部清除，保留固定和置顶记录", palette.secondaryText, pressedOnly = true) {
+        header.addView(iconButton(R.drawable.ic_delete, "全部清除，保留固定和置顶记录", palette.secondaryText) {
             clearHistory()
         }.apply { id=R.id.clipboard_clear; tooltipText="全部清除（保留固定和置顶）" }, LinearLayout.LayoutParams(dp(40),dp(40)))
 
@@ -738,7 +743,7 @@ class ClipboardOverlayService : Service() {
         categoryScroll.addView(categoryBar, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40)))
         content.addView(categoryScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(45)))
 
-        installPanelDrag(panel, params, panelWidth, panelHeight)
+        installPanelDrag(panel, params)
 
         val scrim = View(this).apply {
             // Touch catcher only. A visual dim layer cannot cover OriginOS system bars uniformly,
@@ -835,8 +840,6 @@ class ClipboardOverlayService : Service() {
     private fun installPanelDrag(
         panel: BorderDragFrameLayout,
         windowParams: WindowManager.LayoutParams,
-        panelWidth: Int,
-        panelHeight: Int,
     ) {
         panel.borderDragPx = dp(14)
         panel.topDragHeightPx = dp(50)
@@ -845,9 +848,6 @@ class ClipboardOverlayService : Service() {
         var downY = 0f
         var startX = 0
         var startY = 0
-        var startWidth=panelWidth
-        var startHeight=panelHeight
-        var resizeEdges=0
         var moved = false
 
         panel.listener = object : BorderDragFrameLayout.DragListener {
@@ -856,31 +856,24 @@ class ClipboardOverlayService : Service() {
                 downY = rawY
                 startX = windowParams.x
                 startY = windowParams.y
-                startWidth=windowParams.width
-                startHeight=windowParams.height
-                resizeEdges=panel.resizeEdges
                 moved = false
                 panel.animate().cancel()
-                val pressScale=if (resizeEdges==0 && ValueAnimator.areAnimatorsEnabled()) overlayPreferences.panelPressScalePercent()/100f else 1f
+                val pressScale = if (ValueAnimator.areAnimatorsEnabled()) {
+                    overlayPreferences.panelPressScalePercent() / 100f
+                } else 1f
                 panel.animate().scaleX(pressScale).scaleY(pressScale)
-                    .setDuration((overlayPreferences.transitionDurationMs()*0.3f).toLong().coerceIn(0,1500)).start()
+                    .setDuration((overlayPreferences.transitionDurationMs() * 0.3f).toLong().coerceIn(0, 1500))
+                    .start()
             }
 
             override fun onDragMove(rawX: Float, rawY: Float) {
                 val dx = rawX - downX
                 val dy = rawY - downY
-                if (abs(dx) > dp(2) || abs(dy) > dp(2)) moved = true
+                if (!moved && abs(dx) <= dp(2) && abs(dy) <= dp(2)) return
+                moved = true
                 val screen = screenSize()
-                if(resizeEdges!=0) {
-                    val geometry=com.floatclip.app.overlay.ui.PanelGeometry
-                    val box=geometry.resize(PanelGeometry.Box(startX,startY,startWidth,startHeight),
-                        resizeEdges,dx.toInt(),dy.toInt(),screen.x,screen.y,dp(280),dp(300),dp(420),dp(620),dp(8),dp(16))
-                    windowParams.x=box.x;windowParams.y=box.y
-                    windowParams.width=box.width;windowParams.height=box.height
-                } else {
-                    windowParams.x = (startX + dx.toInt()).coerceIn(dp(8), max(dp(8), screen.x - windowParams.width - dp(8)))
-                    windowParams.y = (startY + dy.toInt()).coerceIn(dp(16), max(dp(16), screen.y - windowParams.height - dp(16)))
-                }
+                windowParams.x = (startX + dx.toInt()).coerceIn(dp(8), max(dp(8), screen.x - windowParams.width - dp(8)))
+                windowParams.y = (startY + dy.toInt()).coerceIn(dp(16), max(dp(16), screen.y - windowParams.height - dp(16)))
                 runCatching { overlayWindows.update(panel, windowParams) }
             }
 
@@ -888,23 +881,19 @@ class ClipboardOverlayService : Service() {
                 panel.animate()
                     .scaleX(1f)
                     .scaleY(1f)
-                    .setDuration((overlayPreferences.transitionDurationMs()*0.6f).toLong().coerceIn(0,3000))
+                    .setDuration((overlayPreferences.transitionDurationMs() * 0.6f).toLong().coerceIn(0, 3000))
                     .setInterpolator(overlayPreferences.motionInterpolator())
                     .start()
-                if(cancelled) {
-                    windowParams.x=startX;windowParams.y=startY
-                    windowParams.width=startWidth;windowParams.height=startHeight
-                    runCatching { overlayWindows.update(panel,windowParams) }
+                if (!moved) return
+                if (cancelled) {
+                    windowParams.x = startX
+                    windowParams.y = startY
+                    runCatching { overlayWindows.update(panel, windowParams) }
+                    return
                 }
-                if (moved && !cancelled) {
-                    if(resizeEdges!=0) {
-                        val density=resources.displayMetrics.density
-                        overlayPreferences.savePanelWidthDp((windowParams.width/density).toInt())
-                        overlayPreferences.savePanelHeightDp((windowParams.height/density).toInt())
-                    }
-                    restingPanelX=windowParams.x;restingPanelY=windowParams.y
-                    overlayPreferences.savePanelPosition(windowParams.x,windowParams.y)
-                }
+                restingPanelX = windowParams.x
+                restingPanelY = windowParams.y
+                overlayPreferences.savePanelPosition(windowParams.x, windowParams.y)
             }
         }
     }
@@ -1388,15 +1377,12 @@ class ClipboardOverlayService : Service() {
         contentDescription = description
     }
 
-    private fun iconButton(drawableRes: Int, description: String, tint: Int, pressedOnly: Boolean = false, action: () -> Unit): ImageView = ImageView(this).apply {
+    private fun iconButton(drawableRes: Int, description: String, tint: Int, action: () -> Unit): ImageView = ImageView(this).apply {
         val palette = themeProvider.palette()
         setImageResource(drawableRes)
         imageTintList = ColorStateList.valueOf(tint)
         setPadding(dp(10), dp(10), dp(10), dp(10))
-        val shape = roundedBackground(withAlpha(palette.rowBackground, if (palette.isDark) 210 else 190), 12f)
-        background = if (pressedOnly) android.graphics.drawable.RippleDrawable(
-            ColorStateList.valueOf(withAlpha(tint, if (palette.isDark) 66 else 44)), null, shape
-        ) else shape
+        background = roundedBackground(withAlpha(palette.rowBackground, if (palette.isDark) 210 else 190), 12f)
         contentDescription = description
         setOnClickListener { action() }
     }

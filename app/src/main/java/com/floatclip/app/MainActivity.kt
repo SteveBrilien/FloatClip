@@ -749,7 +749,13 @@ open class MainActivity : Activity() {
             }
             return
         }
-        addCard(card().apply { addView(themeSelector()) })
+        addCard(card().apply {
+            addView(segmentedSetting("应用主题", themeChoices(), overlayPreferences.themeMode()) { mode ->
+                overlayPreferences.saveThemeMode(mode)
+                notifyOverlayAppearanceChanged()
+                render()
+            })
+        })
         spacer(12)
         addCard(card().apply {
             addView(settingRow("悬浮窗","",if(overlayPreferences.overlayEnabled()) "已开启" else "已关闭") {
@@ -935,6 +941,13 @@ open class MainActivity : Activity() {
         sectionTitle("悬浮球")
         addCard(
             card().apply {
+                val choices = listOf(null to "跟随应用") + themeChoices()
+                addView(segmentedSetting("悬浮球主题", choices, overlayPreferences.bubbleThemeOverride()) { mode ->
+                    overlayPreferences.saveBubbleThemeOverride(mode)
+                    notifyOverlayAppearanceChanged()
+                    render()
+                })
+                addView(divider())
                 addView(
                     sliderSetting(
                         "悬浮球大小",
@@ -1106,39 +1119,11 @@ open class MainActivity : Activity() {
         })
     }
 
-    private fun themeSelector(): View {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val selected = overlayPreferences.themeMode()
-        listOf(
-            OverlayThemeMode.SYSTEM to "跟随系统",
-            OverlayThemeMode.LIGHT to "浅色",
-            OverlayThemeMode.DARK to "东京夜色",
-        ).forEachIndexed { index, (mode, label) ->
-            root.addView(
-                themeChoice(label, selected == mode) {
-                    overlayPreferences.saveThemeMode(mode)
-                    notifyOverlayAppearanceChanged()
-                    render()
-                },
-                LinearLayout.LayoutParams(0, dp(42), 1f).apply {
-                    if (index > 0) marginStart = dp(7)
-                },
-            )
-        }
-        return root
-    }
-
-    private fun themeChoice(label: String, selected: Boolean, action: () -> Unit): TextView = TextView(this).apply {
-        text = label
-        textSize = 13f
-        gravity = Gravity.CENTER
-        setTextColor(if (selected) colors.accent else colors.primaryText)
-        background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(colors.actionBackground),roundedBackground(if (selected) colors.actionBackground else colors.fieldBackground, 12f, true),roundedBackground(Color.WHITE,12f))
-        setOnClickListener { action() }
-    }
+    private fun themeChoices() = listOf(
+        OverlayThemeMode.SYSTEM to "跟随系统",
+        OverlayThemeMode.LIGHT to "浅色",
+        OverlayThemeMode.DARK to "东京夜色",
+    )
 
     private fun accentSelector(): View = LinearLayout(this).apply {
         orientation=LinearLayout.VERTICAL
@@ -1171,11 +1156,11 @@ open class MainActivity : Activity() {
         },LinearLayout.LayoutParams(-1,dp(42)))
     }
 
-    private fun segmentedSetting(
+    private fun <T> segmentedSetting(
         title: String,
-        choices: List<Pair<Int,String>>,
-        selected: Int,
-        onSelected: (Int) -> Unit,
+        choices: List<Pair<T, String>>,
+        selected: T,
+        onSelected: (T) -> Unit,
     ): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(0, dp(7), 0, dp(7))

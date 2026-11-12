@@ -35,6 +35,7 @@ class OverlayAppearanceTest {
         assertEquals(86,prefs.cardAlphaPercent())
         assertEquals(28,prefs.frostStrengthPercent())
         org.junit.Assert.assertFalse(prefs.borderEnabled())
+        assertTrue(prefs.overlayBorderEnabled())
         assertEquals(98,prefs.cardPressScalePercent())
         assertEquals(96,prefs.bubblePressScalePercent())
         assertEquals(240,prefs.transitionDurationMs())
@@ -118,7 +119,7 @@ class OverlayAppearanceTest {
         prefs.saveBackgroundMode("solid");assertEquals(255,alpha())
     }
 
-    @Test fun textAndImageCardsHaveNoHairlineEvenWithLegacyBordersEnabled() {
+    @Test fun appCardsHaveNoHairlineWhenOverlayBordersAreEnabled() {
         val context=RuntimeEnvironment.getApplication()
         val prefs=reset()
         prefs.saveBorderEnabled(true);prefs.saveBorderAlphaPercent(60)

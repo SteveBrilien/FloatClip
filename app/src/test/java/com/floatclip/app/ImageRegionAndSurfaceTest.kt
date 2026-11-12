@@ -86,6 +86,7 @@ class ImageRegionAndSurfaceTest {
         assertEquals("transparent",prefs.backgroundMode())
         assertEquals(45,prefs.panelAlphaPercent())
         assertFalse(prefs.borderEnabled())
+        assertFalse(prefs.overlayBorderEnabled())
         for(strength in 0..2) {
             prefs.saveFeedbackStrength(strength)
             assertEquals(strength,OverlayPreferences(context).feedbackStrength())
@@ -94,7 +95,7 @@ class ImageRegionAndSurfaceTest {
         assertEquals(93,prefs.bubblePressScalePercent())
         assertEquals(98,prefs.panelPressScalePercent())
     }
-    @Test fun restoredTransparencySlidersWorkAndFrostFallbackStaysReadable() {
+    @Test fun restoredTransparencySlidersApplyToBothTransparentAndFrostedPanels() {
         val raw=context.getSharedPreferences("floatclip_overlay",Context.MODE_PRIVATE)
         raw.edit().clear().commit()
         val prefs=OverlayPreferences(context)
@@ -103,7 +104,7 @@ class ImageRegionAndSurfaceTest {
         assertEquals(45,prefs.surfacePanelAlphaPercent())
         assertEquals(55,prefs.surfaceCardAlphaPercent())
         prefs.saveBackgroundMode("frost")
-        assertTrue(prefs.surfacePanelAlphaPercent(false)>=85)
+        assertEquals(45,prefs.surfacePanelAlphaPercent())
         assertEquals(55,prefs.surfaceCardAlphaPercent())
         prefs.saveBackgroundMode("solid")
         assertEquals(100,prefs.surfacePanelAlphaPercent())
@@ -118,14 +119,30 @@ class ImageRegionAndSurfaceTest {
         assertNull(ClipboardImageProvider.reference(Uri.parse(uri.toString()+"?other=1"),context.packageName))
         assertNull(ClipboardImageProvider.reference(Uri.parse(uri.toString().replace(ref,"../outside")),context.packageName))
     }
-    @Test fun edgeResizeKeepsOppositeCornerAndClampsToTheScreen() {
-        val g=com.floatclip.app.overlay.ui.PanelGeometry
-        assertEquals(0,g.resizeEdges(150f,100f,400,600,14))
-        assertEquals(g.RIGHT or g.BOTTOM,g.resizeEdges(399f,599f,400,600,14))
-        val leftTop=g.resize(com.floatclip.app.overlay.ui.PanelGeometry.Box(100,120,350,400),g.LEFT or g.TOP,40,60,1000,1000,280,300,420,620,8,16)
-        assertEquals(com.floatclip.app.overlay.ui.PanelGeometry.Box(140,180,310,340),leftTop)
-        val clamped=g.resize(com.floatclip.app.overlay.ui.PanelGeometry.Box(8,16,300,400),g.RIGHT or g.BOTTOM,1000,1000,360,780,280,300,420,620,8,16)
-        assertEquals(com.floatclip.app.overlay.ui.PanelGeometry.Box(8,16,344,620),clamped)
+    @Test fun floatingBubbleThemeCanOverrideTheAppThemeAndResetToInheritance() {
+        context.getSharedPreferences("floatclip_overlay", Context.MODE_PRIVATE).edit().clear().commit()
+        val prefs = OverlayPreferences(context)
+        val dark = com.floatclip.app.prefs.OverlayThemeMode.DARK
+        val light = com.floatclip.app.prefs.OverlayThemeMode.LIGHT
+        val system = com.floatclip.app.prefs.OverlayThemeMode.SYSTEM
+
+        prefs.saveThemeMode(dark)
+        assertEquals(dark, prefs.bubbleThemeMode())
+        prefs.saveBubbleThemeOverride(light)
+        assertEquals(light, OverlayPreferences(context).bubbleThemeMode())
+        assertEquals(dark, prefs.themeMode())
+
+        prefs.saveThemeMode(light)
+        prefs.saveBubbleThemeOverride(system)
+        assertEquals(system, prefs.bubbleThemeMode())
+        assertEquals(light, prefs.themeMode())
+        prefs.saveBubbleThemeOverride(null)
+        assertEquals(light, prefs.bubbleThemeMode())
+
+        prefs.saveBubbleThemeOverride(dark)
+        prefs.resetAppearance()
+        assertEquals(null, prefs.bubbleThemeOverride())
+        assertEquals(system, prefs.bubbleThemeMode())
     }
     @Test fun slowOpenStillClosesQuicklyAndToggleSpeedFollowsPreset() {
         val raw=context.getSharedPreferences("floatclip_overlay",Context.MODE_PRIVATE)

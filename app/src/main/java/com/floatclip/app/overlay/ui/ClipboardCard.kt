@@ -65,7 +65,10 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
                 Color.argb(alpha, Color.red(tinted), Color.green(tinted), Color.blue(tinted))
             } else tinted
             setColor(cardColor)
-
+            if (compact && prefs.overlayBorderEnabled()) {
+                val alpha = 255 * prefs.borderAlphaPercent() / 100
+                setStroke(dp(1), if (dark) Color.argb(alpha, 255, 255, 255) else Color.argb(alpha, 25, 40, 63))
+            }
             cornerRadius = dp(16).toFloat()
         }
         val hasSource = entry.sourceDeviceId != "local"

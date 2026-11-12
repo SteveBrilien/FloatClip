@@ -23,14 +23,20 @@ data class OverlayPalette(
 
 interface OverlayThemeProvider {
     fun palette(): OverlayPalette
+    fun bubblePalette(): OverlayPalette
 }
 
 class AdaptiveOverlayThemeProvider(
     private val context: Context,
     private val originOsBridge: OriginOsSystemBridge,
 ) : OverlayThemeProvider {
-    override fun palette(): OverlayPalette {
-        val mode = OverlayPreferences(context).themeMode()
+    private val preferences = OverlayPreferences(context)
+
+    override fun palette(): OverlayPalette = paletteFor(preferences.themeMode())
+
+    override fun bubblePalette(): OverlayPalette = paletteFor(preferences.bubbleThemeMode())
+
+    private fun paletteFor(mode: OverlayThemeMode): OverlayPalette {
         val systemNight = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
             Configuration.UI_MODE_NIGHT_YES
         val requestedDark = when (mode) {

@@ -119,7 +119,7 @@ class ImageRegionAndSurfaceTest {
         assertNull(ClipboardImageProvider.reference(Uri.parse(uri.toString()+"?other=1"),context.packageName))
         assertNull(ClipboardImageProvider.reference(Uri.parse(uri.toString().replace(ref,"../outside")),context.packageName))
     }
-    @Test fun floatingBubbleThemeCanOverrideTheAppThemeAndResetToInheritance() {
+    @Test fun floatingLayerThemeRemainsIndependentAndResetsToSystem() {
         context.getSharedPreferences("floatclip_overlay", Context.MODE_PRIVATE).edit().clear().commit()
         val prefs = OverlayPreferences(context)
         val dark = com.floatclip.app.prefs.OverlayThemeMode.DARK
@@ -127,7 +127,7 @@ class ImageRegionAndSurfaceTest {
         val system = com.floatclip.app.prefs.OverlayThemeMode.SYSTEM
 
         prefs.saveThemeMode(dark)
-        assertEquals(dark, prefs.bubbleThemeMode())
+        assertEquals(system, prefs.bubbleThemeMode())
         prefs.saveBubbleThemeOverride(light)
         assertEquals(light, OverlayPreferences(context).bubbleThemeMode())
         assertEquals(dark, prefs.themeMode())
@@ -137,7 +137,7 @@ class ImageRegionAndSurfaceTest {
         assertEquals(system, prefs.bubbleThemeMode())
         assertEquals(light, prefs.themeMode())
         prefs.saveBubbleThemeOverride(null)
-        assertEquals(light, prefs.bubbleThemeMode())
+        assertEquals(system, prefs.bubbleThemeMode())
 
         prefs.saveBubbleThemeOverride(dark)
         prefs.resetAppearance()

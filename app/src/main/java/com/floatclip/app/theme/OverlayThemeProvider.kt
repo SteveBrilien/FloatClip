@@ -32,7 +32,7 @@ class AdaptiveOverlayThemeProvider(
 ) : OverlayThemeProvider {
     private val preferences = OverlayPreferences(context)
 
-    override fun palette(): OverlayPalette = paletteFor(preferences.themeMode())
+    override fun palette(): OverlayPalette = paletteFor(preferences.bubbleThemeMode())
 
     override fun bubblePalette(): OverlayPalette = paletteFor(preferences.bubbleThemeMode())
 

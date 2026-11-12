@@ -81,10 +81,11 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
                 scaleType=if(longImage)ImageView.ScaleType.MATRIX else ImageView.ScaleType.FIT_CENTER
                 cropToPadding=true
                 contentDescription="正在载入图片"
-                setPadding(dp(12),dp(10),dp(markerWidth),dp(30))
+                setPadding(dp(12),dp(10),dp(markerWidth),dp(if(entry.imageNote.isBlank())10 else 30))
             }
             val label=TextView(context).apply {
-                text=entry.imageNote.ifBlank { "${entry.imageWidth} × ${entry.imageHeight} · ${if(longImage) "长图 · 点击展开" else "点击预览"}" }
+                text=entry.imageNote
+                visibility=if(entry.imageNote.isBlank())View.GONE else View.VISIBLE
                 textSize=12f;maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END
                 setTextColor(foreground);alpha=.72f;setPadding(dp(14),0,dp(markerWidth),dp(9))
             }
@@ -102,7 +103,7 @@ class ClipboardCard(context: Context, entry: ClipEntry, dark: Boolean, foregroun
                 retryImage=null
                 preview.setImageBitmap(image)
                 preview.contentDescription=if(image==null)"图片暂不可用" else "图片 ${entry.imageWidth} × ${entry.imageHeight}"
-                if(image==null)label.text="图片暂不可用" else if(longImage)positionLongImage()
+                if(image==null) { label.text="图片暂不可用";label.visibility=View.VISIBLE } else if(longImage)positionLongImage()
               }
             }
             retryImage=loadImage

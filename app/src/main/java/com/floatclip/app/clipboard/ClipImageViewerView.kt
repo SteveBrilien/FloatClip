@@ -94,6 +94,9 @@ class ClipImageViewerView(
         topChrome.addView(action(R.drawable.ic_chevron_left, "返回") {
             if (!cancelNoteEdit()) onCloseRequested()
         }, LayoutParams(dp(48), dp(48), Gravity.TOP or Gravity.START))
+        topChrome.addView(action(R.drawable.ic_close, "关闭图片") {
+            if (!cancelNoteEdit()) onCloseRequested()
+        }, LayoutParams(dp(48), dp(48), Gravity.TOP or Gravity.END))
         addView(topChrome, LayoutParams(-1, dp(52), Gravity.TOP).apply {
             topMargin = dp(4)
             marginStart = dp(8)

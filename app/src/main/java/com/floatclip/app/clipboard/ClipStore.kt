@@ -66,12 +66,12 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
     fun addImage(png:ByteArray):ClipEntry? = synchronized(LOCK) {
         val info=images.validate(png)
         val current=entries().toMutableList()
-        val duplicate=current.firstOrNull { it.kind=="image" && it.imageSha256==info.sha256 && it.sourceDeviceId=="local" }
-        val now=System.currentTimeMillis()
+        val duplicate=current.firstOrNull { it.kind=="image" && it.imageSha256==info.sha256 }
         if(duplicate!=null) {
-            images.write(png,duplicate.imageRef)
-            val refreshed=duplicate.copy(createdAt=now,updatedAt=now)
-            persist(current.map { if(it.key==duplicate.key)refreshed else it });return@synchronized refreshed
+            // Re-copy is not an insertion: keep the original order, provenance, tags and ID.
+            if(runCatching { images.read(duplicate.imageRef,duplicate.imageSha256) }.isFailure)
+                images.write(png,duplicate.imageRef)
+            return@synchronized duplicate
         }
         if(current.size>=MAX_ITEMS) {
             val oldest=current.filterNot { it.pinned||it.locked }.minByOrNull { it.updatedAt } ?: return@synchronized null
@@ -142,10 +142,11 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
             require(it.kind=="image" && it.imageSha256==info.sha256) { "图片事件编号冲突" }
             return@synchronized it
         }
-        val previous=current.firstOrNull {
-            it.kind=="image" && it.imageSha256==info.sha256 && it.sourceDeviceId==source.id.toString()
+        // Cross-device content identity is SHA-256 only. A second transport event is an ACK,
+        // not a re-insertion and not an opportunity to change the original sort key.
+        current.firstOrNull { it.kind=="image" && it.imageSha256==info.sha256 }?.let {
+            return@synchronized it
         }
-        if(previous!=null)current.remove(previous)
         if(current.size>=MAX_ITEMS) {
             val oldest=current.filterNot { it.pinned||it.locked }.minByOrNull { it.updatedAt }
                 ?: error("固定和置顶记录已满")
@@ -153,16 +154,16 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
         }
         val activeImageBytes=current.filter { it.kind=="image" }.sumOf { it.imageBytes.toLong() }
         require(activeImageBytes+png.size<=ImageBlobStore.MAX_ACTIVE_BYTES) { "图片总量超过 32 MiB，请先整理普通记录" }
-        val reference=previous?.imageRef?.takeIf { it.isNotBlank() } ?: java.util.UUID.randomUUID().toString().replace("-","")
-        val wasNew=previous==null
+        val reference=java.util.UUID.randomUUID().toString().replace("-","")
+        val wasNew=true
         images.write(png,reference)
         val now=maxOf(System.currentTimeMillis(),(current.maxOfOrNull { it.createdAt }?:0L)+1)
         val row=ClipEntry(
-            id=previous?.id ?: nextEntryId(current),
+            id=nextEntryId(current),
             text="图片",
-            pinned=previous?.pinned?:false,
-            locked=previous?.locked?:false,
-            category=previous?.category?:CategoryStore.DEFAULT_CATEGORY,
+            pinned=false,
+            locked=false,
+            category=CategoryStore.DEFAULT_CATEGORY,
             createdAt=now,
             key=key,
             updatedAt=now,
@@ -175,7 +176,7 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
             imageBytes=info.bytes,
             imageWidth=info.width,
             imageHeight=info.height,
-            imageNote=previous?.imageNote.orEmpty(),
+            imageNote="",
         )
         try { persist(listOf(row)+current);row }
         catch(t:Throwable) { if(wasNew)images.delete(reference);throw t }

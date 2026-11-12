@@ -60,7 +60,8 @@ class OverlayAppearanceTest {
 
     @Test fun forcedDarkOverlayUsesTokyoNightTextAndSurfaceTogether() {
         val prefs = reset()
-        prefs.saveThemeMode(com.floatclip.app.prefs.OverlayThemeMode.DARK)
+        prefs.saveThemeMode(com.floatclip.app.prefs.OverlayThemeMode.LIGHT)
+        prefs.saveBubbleThemeOverride(com.floatclip.app.prefs.OverlayThemeMode.DARK)
         val context = RuntimeEnvironment.getApplication()
         val bridge = com.floatclip.app.integration.NoOpOriginOsSystemBridge
         val palette = com.floatclip.app.theme.AdaptiveOverlayThemeProvider(context, bridge).palette()
@@ -68,6 +69,35 @@ class OverlayAppearanceTest {
         assertEquals(android.graphics.Color.rgb(36,40,59), palette.rowBackground)
         assertEquals(android.graphics.Color.rgb(192,202,245), palette.primaryText)
         assertEquals(android.graphics.Color.rgb(154,165,206), palette.secondaryText)
+    }
+
+    @Test fun floatingLayerThemeIsIndependentFromAppAndSharedByBubbleAndPanel() {
+        val prefs=reset()
+        prefs.saveThemeMode(com.floatclip.app.prefs.OverlayThemeMode.LIGHT)
+        prefs.saveBubbleThemeOverride(com.floatclip.app.prefs.OverlayThemeMode.DARK)
+        val provider=com.floatclip.app.theme.AdaptiveOverlayThemeProvider(
+            RuntimeEnvironment.getApplication(), com.floatclip.app.integration.NoOpOriginOsSystemBridge
+        )
+        assertTrue(provider.palette().isDark)
+        assertEquals(provider.palette(), provider.bubblePalette())
+        prefs.saveThemeMode(com.floatclip.app.prefs.OverlayThemeMode.DARK)
+        prefs.saveBubbleThemeOverride(com.floatclip.app.prefs.OverlayThemeMode.LIGHT)
+        assertTrue(!provider.palette().isDark)
+        assertEquals(provider.palette(), provider.bubblePalette())
+    }
+
+    @Test fun imageCardsHideSynthesizedSizeAndShowOnlyExplicitNote() {
+        val context=RuntimeEnvironment.getApplication()
+        reset()
+        fun labels(note:String): List<TextView> {
+            val card=ClipboardCard(context,ClipEntry(
+                id=11,text="图片",kind="image",imageRef="a".repeat(32),
+                imageWidth=1920,imageHeight=4000,imageNote=note,
+            ),false,android.graphics.Color.BLACK,android.graphics.Color.WHITE)
+            return (0 until card.childCount).map { card.getChildAt(it) }.filterIsInstance<TextView>()
+        }
+        assertTrue(labels("").all { it.visibility!=android.view.View.VISIBLE })
+        assertTrue(labels("我的备注").any { it.visibility==android.view.View.VISIBLE && it.text=="我的备注" })
     }
 
     @Test fun cardHeightSelectorControlsVisibleLineCount() {

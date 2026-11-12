@@ -105,7 +105,7 @@ class PhotoImportViewerTest {
             assertTrue(content is android.widget.FrameLayout)
             assertTrue(activity.window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_FULLSCREEN!=0)
             val actions = views(content).filterIsInstance<android.widget.ImageButton>()
-            assertEquals(listOf("返回", "图片备注", "锁定图片", "置顶图片", "复制图片"), actions.map { it.contentDescription.toString() })
+            assertEquals(listOf("返回", "关闭图片", "图片备注", "锁定图片", "置顶图片", "复制图片"), actions.map { it.contentDescription.toString() })
             assertTrue(actions.all { it.background is android.graphics.drawable.RippleDrawable })
         } finally {owner.pause().stop().destroy()}
     }

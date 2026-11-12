@@ -42,6 +42,7 @@ import com.floatclip.app.clipboard.ClipboardSources
 import com.floatclip.app.clipboard.ClipboardRepository
 import com.floatclip.app.clipboard.ClipboardImages
 import com.floatclip.app.clipboard.ClipViewerActivity
+import com.floatclip.app.clipboard.ClipImageViewerView
 import com.floatclip.app.integration.AccessibilityPasteBridge
 import com.floatclip.app.integration.IntegrationRegistry
 import com.floatclip.app.model.ClipEntry
@@ -59,6 +60,7 @@ import com.floatclip.app.ui.LatestSnapshotLoader
 import com.floatclip.app.overlay.ui.EntrySwipeActions
 import com.floatclip.app.overlay.ui.EntryGestureRow
 import com.floatclip.app.overlay.ui.EntryLockAction
+import com.floatclip.app.overlay.ui.FauxFrostDrawable
 import com.floatclip.app.theme.AdaptiveOverlayThemeProvider
 import com.floatclip.app.theme.OverlayPalette
 import com.floatclip.app.theme.OverlayThemeProvider
@@ -84,6 +86,7 @@ class ClipboardOverlayService : Service() {
     private var panelScrimView: View? = null
     private var panelScrimParams: WindowManager.LayoutParams? = null
     private var panelPinButton: ImageView? = null
+    private var inlineGallery: ClipImageViewerView? = null
     private var entryActionLayer: View? = null
     private var historyList: ClipboardHistoryList? = null
     private var historySnapshot=emptyList<ClipEntry>()
@@ -133,9 +136,13 @@ class ClipboardOverlayService : Service() {
     private val refreshAppearanceRunnable = Runnable { rebuildVisibleOverlay() }
     private val appearanceReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action != ACTION_REFRESH_APPEARANCE) return
-            handler.removeCallbacks(refreshAppearanceRunnable)
-            handler.postDelayed(refreshAppearanceRunnable, 80L)
+            when(intent?.action) {
+                ACTION_REPOSITION_PANEL -> repositionVisiblePanel()
+                ACTION_REFRESH_APPEARANCE -> {
+                    handler.removeCallbacks(refreshAppearanceRunnable)
+                    handler.post(refreshAppearanceRunnable)
+                }
+            }
         }
     }
     private var pendingViewerToken:String?=null
@@ -154,6 +161,15 @@ class ClipboardOverlayService : Service() {
     private val systemAppearanceReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
+                Intent.ACTION_CLOSE_SYSTEM_DIALOGS -> {
+                    @Suppress("DEPRECATION")
+                    val reason = intent.getStringExtra("reason")
+                    if (reason == "homekey" || reason == "recentapps") {
+                        closeInlineGallery()
+                        if (panelPinnedMode && panelView != null) togglePanelPinnedMode()
+                        collapsePanel()
+                    }
+                }
                 Intent.ACTION_SCREEN_OFF -> {
                     handler.removeCallbacks(restoreOverlayRunnable)
                     ClipboardImages.trimThumbnailsForStandby()
@@ -215,7 +231,10 @@ class ClipboardOverlayService : Service() {
         }
         registerReceiver(
             appearanceReceiver,
-            IntentFilter(ACTION_REFRESH_APPEARANCE),
+            IntentFilter().apply {
+                addAction(ACTION_REFRESH_APPEARANCE)
+                addAction(ACTION_REPOSITION_PANEL)
+            },
             "$packageName.permission.INTERNAL",
             null,
         )
@@ -226,6 +245,8 @@ class ClipboardOverlayService : Service() {
                 addAction(Intent.ACTION_SCREEN_ON)
                 addAction(Intent.ACTION_SCREEN_OFF)
                 addAction(Intent.ACTION_USER_PRESENT)
+                @Suppress("DEPRECATION")
+                addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
             },
         )
         val viewerFilter=IntentFilter(com.floatclip.app.clipboard.ClipViewerActivity.RETURN_ACTION)
@@ -239,9 +260,10 @@ class ClipboardOverlayService : Service() {
         ensureForeground()
         canRepairDetachedWindow = true
         when (intent?.action) {
+            ACTION_REPOSITION_PANEL -> repositionVisiblePanel()
             ACTION_REFRESH_APPEARANCE -> {
                 handler.removeCallbacks(refreshAppearanceRunnable)
-                handler.postDelayed(refreshAppearanceRunnable, 60L)
+                handler.post(refreshAppearanceRunnable)
             }
             else -> restoreOverlayWindow()
         }
@@ -297,6 +319,7 @@ class ClipboardOverlayService : Service() {
         panelPinButton = null
         entryActionLayer = null
         pendingViewerToken=null
+        closeInlineGallery()
         runCatching { unregisterReceiver(viewerReturn) }
         runCatching { unregisterReceiver(appearanceReceiver) }
         runCatching { unregisterReceiver(sharedHistoryChanged) }
@@ -366,6 +389,7 @@ class ClipboardOverlayService : Service() {
     }
 
     private fun releasePanelWindows() {
+        closeInlineGallery()
         handler.removeCallbacks(releaseIdlePanel)
         handler.removeCallbacks(clipboardPollRunnable)
         presentationGeneration++
@@ -645,11 +669,17 @@ class ClipboardOverlayService : Service() {
         val borderColor = Color.argb(borderAlpha, 25, 40, 63)
         val panel = BorderDragFrameLayout(this).apply {
             isClickable = true
-            background = roundedBackground(
+            background = if(overlayPreferences.backgroundMode()=="frost") FauxFrostDrawable(
+                withAlpha(frostedPanel, panelAlpha), dp(palette.panelCornerRadiusDp).toFloat(),
+                overlayPreferences.frostStrengthPercent(),
+                borderColor.takeIf { !palette.isDark && overlayPreferences.overlayBorderEnabled() },
+                dp(1).toFloat(),
+            ) else roundedBackground(
                 withAlpha(frostedPanel, panelAlpha),
                 palette.panelCornerRadiusDp,
                 borderColor.takeIf { !palette.isDark && overlayPreferences.overlayBorderEnabled() },
             )
+            clipToOutline = true
             elevation = dp(palette.elevationDp).toFloat()
             windowFocusChanged={focused->
                 if(focused&&captureFocusPending)handler.post {
@@ -689,7 +719,7 @@ class ClipboardOverlayService : Service() {
         }.apply { id=R.id.clipboard_clear; tooltipText="全部清除（保留固定和置顶）" }, LinearLayout.LayoutParams(dp(40),dp(40)))
 
         val pinButton = iconButton(
-            R.drawable.ic_pin,
+            if (panelPinnedMode) R.drawable.ic_pin_filled else R.drawable.ic_pin,
             if (panelPinnedMode) "退出固定模式" else "固定模式",
             if (panelPinnedMode) accentColor(palette) else palette.secondaryText,
         ) { togglePanelPinnedMode() }
@@ -784,6 +814,27 @@ class ClipboardOverlayService : Service() {
         showPanelPresentation(true)
         applyPanelFocus(panel, params)
         if(captureOnOpen)beginClipboardFocus()
+    }
+
+    /** Settings change repositions the attached panel, without reallocating its window. */
+    private fun repositionVisiblePanel() {
+        val params = panelParams ?: return
+        val panel = panelView ?: return
+        val ball = bubbleParams
+        val size = screenSize()
+        val placement = PanelGeometry.placement(
+            size.x, size.y,
+            PanelGeometry.Box(overlayPreferences.panelX(restingPanelX),
+                overlayPreferences.panelY(restingPanelY), params.width, params.height),
+            PanelGeometry.Box(ball?.x ?: 0, ball?.y ?: 0,
+                ball?.width ?: dp(50), ball?.height ?: dp(50)),
+            overlayPreferences.panelFollowsBubble(), dp(8), dp(16)
+        )
+        restingPanelX = placement.x
+        restingPanelY = placement.y
+        params.x = placement.x
+        params.y = placement.y
+        overlayWindows.update(panel, params)
     }
 
     /** Only an explicit open takes a short focus lease; idle/background never steals focus. */
@@ -1064,13 +1115,14 @@ class ClipboardOverlayService : Service() {
             )
         }
         val center = categories.indexOf(activeCategory) >= 3
+        val firstTab = bar.getChildAt(0)
         val lastTab = bar.getChildAt(bar.childCount - 1)
-        val trailingSpace = if (center && lastTab != null) {
-            lastTab.measure(0, 0)
-            val viewport = scroll.width - scroll.paddingLeft - scroll.paddingRight
-            ((viewport - lastTab.measuredWidth) / 2).coerceAtLeast(0)
-        } else 0
-        bar.setPaddingRelative(0, 0, trailingSpace, 0)
+        firstTab?.measure(0, 0)
+        lastTab?.measure(0, 0)
+        val viewport = (scroll.width - scroll.paddingLeft - scroll.paddingRight).coerceAtLeast(0)
+        val leadingSpace = if (center && firstTab != null) ((viewport - firstTab.measuredWidth) / 2).coerceAtLeast(0) else 0
+        val trailingSpace = if (center && lastTab != null) ((viewport - lastTab.measuredWidth) / 2).coerceAtLeast(0) else 0
+        bar.setPaddingRelative(leadingSpace, 0, trailingSpace, 0)
         com.floatclip.app.ui.TabReveal.reveal(scroll, selectedView, center)
     }
 
@@ -1113,6 +1165,17 @@ class ClipboardOverlayService : Service() {
         }
     }
 
+    private fun entryMenuBackground(palette: OverlayPalette): android.graphics.drawable.Drawable {
+        val mode = overlayPreferences.backgroundMode()
+        val base = withAlpha(palette.panelBackground, percentAlpha(overlayPreferences.surfacePanelAlphaPercent()))
+        val border = if (overlayPreferences.overlayBorderEnabled())
+            withAlpha(palette.secondaryText, percentAlpha(overlayPreferences.borderAlphaPercent())) else null
+        return if (mode == "frost") FauxFrostDrawable(
+            base, dp(palette.panelCornerRadiusDp).toFloat(),
+            overlayPreferences.frostStrengthPercent(), border, dp(1).toFloat()
+        ) else roundedBackground(base, palette.panelCornerRadiusDp, border)
+    }
+
     private fun showEntryMenu(
         entry: ClipEntry, choosingCategory: Boolean = false,
         confirmingDelete: Boolean = false, anchor: View? = null,
@@ -1130,7 +1193,8 @@ class ClipboardOverlayService : Service() {
         val sheet = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(6), dp(6), dp(6), dp(6))
-            background = roundedBackground(palette.panelBackground, 16f)
+            // The scroll container paints the themed translucent sheet once; avoid double tint.
+            background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
             isClickable = true
         }
         fun row(label: String, tint: Int = palette.primaryText, action: () -> Unit) {
@@ -1230,7 +1294,8 @@ class ClipboardOverlayService : Service() {
             isFillViewport = false
             overScrollMode = View.OVER_SCROLL_NEVER
             isVerticalScrollBarEnabled = false
-            background = roundedBackground(palette.panelBackground, 16f)
+            background = entryMenuBackground(palette)
+            clipToOutline = true
             addView(sheet)
         }
         val menuWidth = min(dp(216), panel.width - dp(28))
@@ -1255,6 +1320,10 @@ class ClipboardOverlayService : Service() {
     }
 
     private fun openEntryViewer(entry:ClipEntry) {
+        if(entry.kind=="image") {
+            openInlineGallery(entry)
+            return
+        }
         val token=java.util.UUID.randomUUID().toString()
         pendingViewerToken=token
         dismissEntryActionLayer(animated=false)
@@ -1264,6 +1333,46 @@ class ClipboardOverlayService : Service() {
             expandPanel(false)
             Toast.makeText(this,it.message?:"无法打开预览",Toast.LENGTH_LONG).show()
         }
+    }
+
+    /** A separate upper overlay keeps the existing panel/window and its scroll position alive. */
+    private fun openInlineGallery(entry: ClipEntry) {
+        if(inlineGallery != null) return
+        dismissEntryActionLayer(animated=false)
+        val entries=store.entries()
+        val candidates=entries.filter {
+            it.kind=="image" && when(activeSource) {
+                "" -> true
+                ClipboardSources.IMAGE_SCOPE -> overlayPreferences.mergeRemoteImages() || it.sourceDeviceId=="local"
+                else -> it.sourceDeviceId==activeSource
+            }
+        }
+        val gallery=ClipImageViewerView(this,store,
+            if(candidates.any { it.id==entry.id }) candidates else listOf(entry),
+            entry.id,::closeInlineGallery)
+        val params=WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            android.graphics.PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity=Gravity.START or Gravity.TOP
+            softInputMode=WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            windowAnimations=0
+        }
+        if(overlayWindows.add(gallery,params)) {
+            inlineGallery=gallery
+            panelView?.dragEnabled=false
+        } else gallery.close()
+    }
+
+    private fun closeInlineGallery() {
+        val gallery=inlineGallery ?: return
+        inlineGallery=null
+        gallery.close()
+        overlayWindows.remove(gallery)
+        panelView?.dragEnabled=true
+        if(panelOpen) renderEntries(false)
     }
 
     private fun dismissEntryActionLayer(animated: Boolean = true) {
@@ -1305,7 +1414,7 @@ class ClipboardOverlayService : Service() {
             ClipboardImages.captureAsync(applicationContext,imageClip,store) { result ->
                 result.onSuccess { entry ->
                     if(entry!=null) {
-                        com.floatclip.app.sync.SyncRuntime.userCopiedImage(applicationContext,entry)
+                        // Fresh image imports are synchronized in ClipboardImages.importSelected.
                         if(panelOpen&&!panelCollapsing){renderCategoryBar();renderEntries()}
                         notifyHistoryChanged()
                         if(showFeedback)Toast.makeText(this,"已收录图片",Toast.LENGTH_SHORT).show()
@@ -1348,6 +1457,7 @@ class ClipboardOverlayService : Service() {
         runCatching { overlayWindows.update(scrim, scrimParams) }
 
         button?.apply {
+            setImageResource(if (panelPinnedMode) R.drawable.ic_pin_filled else R.drawable.ic_pin)
             imageTintList = ColorStateList.valueOf(if (panelPinnedMode) accentColor(palette) else palette.secondaryText)
             contentDescription = if (panelPinnedMode) "退出固定模式" else "固定模式"
         }
@@ -1365,7 +1475,11 @@ class ClipboardOverlayService : Service() {
         setImageResource(drawableRes)
         imageTintList = ColorStateList.valueOf(tint)
         setPadding(dp(10), dp(10), dp(10), dp(10))
-        background = roundedBackground(withAlpha(palette.rowBackground, if (palette.isDark) 210 else 190), 12f)
+        background = android.graphics.drawable.RippleDrawable(
+            ColorStateList.valueOf(withAlpha(palette.secondaryText, 45)),
+            null,
+            roundedBackground(Color.WHITE, 12f)
+        )
         contentDescription = description
         setOnClickListener { action() }
     }
@@ -1534,6 +1648,7 @@ class ClipboardOverlayService : Service() {
     companion object {
         private const val ACTION_RESTORE_OVERLAY = "com.floatclip.app.action.RESTORE_OVERLAY"
         const val ACTION_REFRESH_APPEARANCE = "com.floatclip.app.action.REFRESH_APPEARANCE"
+        const val ACTION_REPOSITION_PANEL = "com.floatclip.app.action.REPOSITION_PANEL"
         const val NOTIFICATION_CHANNEL_ID = "floatclip_overlay_quiet_v2"
         private const val NOTIFICATION_ID = 2001
         private const val CLIPBOARD_POLL_MS = 650L

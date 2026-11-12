@@ -151,7 +151,8 @@ class OverlayPreferences(context: Context) {
     fun bubbleThemeOverride(): OverlayThemeMode? = prefs.getString(KEY_BUBBLE_THEME_MODE, null)
         ?.let { saved -> OverlayThemeMode.entries.firstOrNull { it.name == saved } }
 
-    fun bubbleThemeMode(): OverlayThemeMode = bubbleThemeOverride() ?: themeMode()
+    // Legacy unset/follow-app values migrate to the independent system theme.
+    fun bubbleThemeMode(): OverlayThemeMode = bubbleThemeOverride() ?: OverlayThemeMode.SYSTEM
 
     fun saveBubbleThemeOverride(mode: OverlayThemeMode?) {
         prefs.edit().putString(KEY_BUBBLE_THEME_MODE, mode?.name).apply()

@@ -74,6 +74,12 @@ open class MainActivity : Activity() {
     private var searchQuery: String = ""
     private var currentPage: Int = PAGE_CLIPBOARD
     private var renderedRoute: String? = null
+    private var routeScroll: ScrollView? = null
+    private val routeScrollPositions = mutableMapOf<String, Int>()
+    private fun rememberScroll() {
+        val route = renderedRoute ?: return
+        routeScroll?.let { routeScrollPositions[route] = it.scrollY }
+    }
     private var updateCheck:com.floatclip.app.ui.ClientUpdateCheck?=null
     private var updateDialog:FloatDialog.Handle?=null
     private var updateStatusText:TextView?=null
@@ -127,6 +133,9 @@ open class MainActivity : Activity() {
         searchQuery = savedInstanceState?.getString("searchQuery").orEmpty()
         sourceFilter = savedInstanceState?.getString("sourceFilter").orEmpty()
         settingsPath.addAll(savedInstanceState?.getStringArrayList("settingsPath").orEmpty())
+        savedInstanceState?.getBundle("routeScrollPositions")?.let { saved ->
+            saved.keySet().forEach { route -> routeScrollPositions[route] = saved.getInt(route) }
+        }
         if (savedInstanceState == null) applySettingsIntent(intent)
         categoryManagement = savedInstanceState?.getBoolean("categoryManagement") ?: false
         render()
@@ -140,6 +149,10 @@ open class MainActivity : Activity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        rememberScroll()
+        outState.putBundle("routeScrollPositions", Bundle().apply {
+            routeScrollPositions.forEach { (route, y) -> putInt(route, y) }
+        })
         outState.putInt(STATE_PAGE, currentPage)
         outState.putStringArrayList("settingsPath", ArrayList(settingsPath))
         outState.putBoolean("categoryManagement", categoryManagement)
@@ -243,7 +256,7 @@ open class MainActivity : Activity() {
             ClipboardImages.captureAsync(applicationContext,clip,clipStore) { result ->
                 result.onSuccess { entry ->
                     if(entry!=null) {
-                        SyncRuntime.userCopiedImage(applicationContext,entry)
+                        // Fresh image imports are synchronized in ClipboardImages.importSelected.
                         if(!isDestroyed&&currentPage==PAGE_CLIPBOARD)refreshHistory()
                         notifyHistoryChanged()
                     }
@@ -298,6 +311,7 @@ open class MainActivity : Activity() {
     private fun render() {
         val nextRoute=renderRouteKey()
         val previousRoute=renderedRoute
+        rememberScroll()
         historyList=null
         undoBar=null
         colors = resolveAppColors()
@@ -311,6 +325,7 @@ open class MainActivity : Activity() {
         viewport = root
         imageImportButton = null
         val scroll = ScrollView(this).apply { overScrollMode = View.OVER_SCROLL_NEVER }
+        routeScroll = scroll
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(6), dp(18), dp(24))
@@ -333,6 +348,10 @@ open class MainActivity : Activity() {
         }
         root.requestFocus()
         renderedRoute=nextRoute
+        if (page === scroll) {
+            val targetY = routeScrollPositions[nextRoute] ?: 0
+            scroll.post { if (renderedRoute == nextRoute && scroll.isAttachedToWindow) scroll.scrollTo(0, targetY) }
+        }
         if (previousRoute != null && routeDepth(nextRoute) > routeDepth(previousRoute)) animateRouteIn(page)
     }
 
@@ -735,8 +754,9 @@ open class MainActivity : Activity() {
             }
             return
         }
+        sectionTitle("应用主题", compactTop = true)
         addCard(card().apply {
-            addView(segmentedSetting("应用主题", themeChoices(), overlayPreferences.themeMode()) { mode ->
+            addView(segmentedSetting("", themeChoices(), overlayPreferences.themeMode()) { mode ->
                 overlayPreferences.saveThemeMode(mode)
                 notifyOverlayAppearanceChanged()
                 render()
@@ -896,7 +916,7 @@ open class MainActivity : Activity() {
     }
 
     private fun renderAppearanceSettings() {
-        sectionTitle("主题")
+        sectionTitle("主题颜色", compactTop = true)
         addCard(card().apply {
             addView(accentSelector())
 
@@ -924,11 +944,11 @@ open class MainActivity : Activity() {
                 render()
             })
         })
-        sectionTitle("悬浮球")
+        sectionTitle("悬浮层")
         addCard(
             card().apply {
-                val choices = listOf(null to "跟随应用") + themeChoices()
-                addView(segmentedSetting("悬浮球主题", choices, overlayPreferences.bubbleThemeOverride()) { mode ->
+                val choices = themeChoices()
+                addView(segmentedSetting("主题", choices, overlayPreferences.bubbleThemeMode()) { mode ->
                     overlayPreferences.saveBubbleThemeOverride(mode)
                     notifyOverlayAppearanceChanged()
                     render()
@@ -985,7 +1005,8 @@ open class MainActivity : Activity() {
                     if(overlayPreferences.panelFollowsBubble())1 else 0,
                 ) { value ->
                     overlayPreferences.savePanelFollowsBubble(value==1)
-                    notifyOverlayAppearanceChanged()
+                    sendBroadcast(Intent(ClipboardOverlayService.ACTION_REPOSITION_PANEL).setPackage(packageName))
+                    render()
                 })
                 addView(divider())
                 addView(segmentedSetting(
@@ -1017,15 +1038,15 @@ open class MainActivity : Activity() {
                     ) { overlayPreferences.saveCardAlphaPercent(it); notifyOverlayAppearanceChanged() },
                 )
                 addView(divider())
-                if(android.os.Build.VERSION.SDK_INT>=31 &&
-                    runCatching { getSystemService(android.view.WindowManager::class.java).isCrossWindowBlurEnabled }.getOrDefault(false)) {
+                if(overlayPreferences.backgroundMode()=="frost") {
                     addView(sliderSetting("磨砂强度",0,100,overlayPreferences.frostStrengthPercent(),"%") {
                         overlayPreferences.saveFrostStrengthPercent(it);notifyOverlayAppearanceChanged()
                     })
-                } else {
-                    addView(textView("当前系统不支持实时背景模糊，磨砂使用半透明表面。",12f,false,colors.secondaryText))
+                    if(android.os.Build.VERSION.SDK_INT<31) {
+                        addView(textView("Android 11 使用软件拟态磨砂，不读取屏幕内容。",12f,false,colors.secondaryText))
+                    }
+                    addView(divider())
                 }
-                addView(divider())
                 addView(
                     sliderSetting(
                         "面板宽度",
@@ -1114,7 +1135,6 @@ open class MainActivity : Activity() {
     private fun accentSelector(): View = LinearLayout(this).apply {
         orientation=LinearLayout.VERTICAL
         setPadding(0,dp(5),0,dp(7))
-        addView(textView("主题颜色",14.5f,false),LinearLayout.LayoutParams(-1,dp(30)))
         addView(HorizontalScrollView(this@MainActivity).apply {
             isHorizontalScrollBarEnabled=false
             overScrollMode=View.OVER_SCROLL_NEVER
@@ -1150,7 +1170,7 @@ open class MainActivity : Activity() {
     ): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(0, dp(7), 0, dp(7))
-        addView(textView(title, 14.5f, false), LinearLayout.LayoutParams(-1, dp(30)))
+        if (title.isNotBlank()) addView(textView(title, 14.5f, false), LinearLayout.LayoutParams(-1, dp(30)))
         addView(LinearLayout(this@MainActivity).apply {
             orientation = LinearLayout.HORIZONTAL
             choices.forEachIndexed { index, (value,label) ->

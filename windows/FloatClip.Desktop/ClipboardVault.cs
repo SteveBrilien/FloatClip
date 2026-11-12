@@ -221,15 +221,16 @@ public sealed partial class ClipboardVault
         for(int retry=0;;retry++)
         {
             var snapshot=Load();var entries=snapshot["entries"]!.AsArray();long now=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            var duplicate=entries.OfType<JsonObject>().FirstOrDefault(c=>Kind(c)=="image"&&c["imageSha256"]?.GetValue<string>()==hash&&c["source"]?["id"]?.GetValue<string>()==sourceId);
+            var duplicate=entries.OfType<JsonObject>().FirstOrDefault(c=>Kind(c)=="image"&&c["imageSha256"]?.GetValue<string>()==hash);
             if(duplicate!=null)
             {
                 // A new copy is also a recovery opportunity for an interrupted or damaged blob write.
                 bool repair=false;try{ReadImage(duplicate);}catch(IOException){repair=true;}
+                if(!repair)return snapshot;
                 string? repairedRef=null;
                 string previousRef=duplicate["imageRef"]!.GetValue<string>();
                 if(repair){repairedRef=Guid.NewGuid().ToString("N");WriteImageBlob(repairedRef,pngBytes);duplicate["imageRef"]=repairedRef;}
-                duplicate["updatedAt"]=now;duplicate["imageBytes"]=(long)pngBytes.Length;duplicate["imageWidth"]=(long)width;duplicate["imageHeight"]=(long)height;
+                // Repair changes only the encrypted blob reference, never original chronology.
                 try{
                     var committed=Commit(snapshot["revision"]!.GetValue<string>(),entries);
                     if(repairedRef!=null&&!ImageReferences(entries.OfType<JsonObject>()).Contains(previousRef,StringComparer.OrdinalIgnoreCase))
@@ -285,7 +286,8 @@ public sealed partial class ClipboardVault
                 if(Kind(exact)!="image"||exact["imageSha256"]?.GetValue<string>()!=hash)throw new IOException("图片事件编号冲突");
                 return snapshot;
             }
-            var previous=entries.OfType<JsonObject>().FirstOrDefault(c=>Kind(c)=="image"&&c["imageSha256"]?.GetValue<string>()==hash&&c["source"]?["id"]?.GetValue<string>()==source.Id.ToString());
+            var previous=entries.OfType<JsonObject>().FirstOrDefault(c=>Kind(c)=="image"&&c["imageSha256"]?.GetValue<string>()==hash);
+            if(previous!=null)return snapshot; // Duplicate delivery: ACK without mutation.
             JsonObject row;string imageRef;bool fresh=previous==null;
             JsonObject? evicted=null;
             if(previous!=null){row=(JsonObject)previous.DeepClone();imageRef=row["imageRef"]!.GetValue<string>();entries.Remove(previous);}

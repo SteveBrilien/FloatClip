@@ -124,18 +124,18 @@ static class Program
         Check(beforeFailure.Load()["revision"]!.GetValue<string>()==priorRevision&&Directory.GetFiles(Path.Combine(failedCommitRoot,"Images")).Length==0,"metadata commit failure lost prior data or left staged blobs");
 
         var protectedSource=(JsonObject)source.DeepClone();protectedSource["id"]="locked-image";images.AddImage(png,1,1,protectedSource);
-        var ordinary=(JsonObject)source.DeepClone();ordinary["id"]="ordinary-image";images.AddImage(png,1,1,ordinary);images.AddText("ordinary-text");
-        var protectSnapshot=images.Load();var protectedRows=protectSnapshot["entries"]!.AsArray().OfType<JsonObject>();var locked=protectedRows.Single(c=>c["source"]!["id"]!.GetValue<string>()=="locked-image");locked["locked"]=true;
-        images.Commit(protectSnapshot["revision"]!.GetValue<string>(),protectSnapshot["entries"]!.AsArray());
-        Check(images.ClearUnprotected()==2,"clear removes ordinary image and text");
+        var ordinary=(JsonObject)source.DeepClone();ordinary["id"]="ordinary-image";images.AddImage(png,1,1,ordinary);
+        Check(images.Load()["entries"]!.AsArray().Count==1,"identical images from different devices occupy one row");
+        images.AddText("ordinary-text");
+        Check(images.ClearUnprotected()==1,"clear removes ordinary text, not protected image");
         var reboot=new ClipboardVault(imagesRoot,protect,unprotect);var retained=reboot.Load()["entries"]!.AsArray().OfType<JsonObject>().ToList();
-        Check(retained.Count==2&&retained.All(c=>reboot.ReadImage(c).AsSpan().SequenceEqual(png)),"protected images survive clear and restart");
-        Check(retained.Any(ClipboardVault.IsPinned)&&retained.All(ClipboardVault.IsLocked),"image protection flags survive restart");
-        Check(Directory.GetFiles(Path.Combine(imagesRoot,"Images"),"*.bin").Length==2,"only explicitly removed and replaced image files are cleaned up");
-        Check(reboot.ClearUnprotected()==0,"repeated clear preserves all protected images");
+        Check(retained.Count==1&&reboot.ReadImage(retained.Single()).AsSpan().SequenceEqual(png),"protected image survives clear and restart");
+        Check(retained.All(ClipboardVault.IsPinned)&&retained.All(ClipboardVault.IsLocked),"image protection flags survive restart");
+        Check(Directory.GetFiles(Path.Combine(imagesRoot,"Images"),"*.bin").Length==1,"deduplicated image blob is stored only once");
+        Check(reboot.ClearUnprotected()==0,"repeated clear preserves protected image");
         var oversizedMetadata=reboot.Load();var huge=oversizedMetadata["entries"]![0]!.AsObject();for(int i=0;i<10;i++){var clone=(JsonObject)huge.DeepClone();clone["id"]=Guid.NewGuid().ToString();clone["imageRef"]=Guid.NewGuid().ToString("N");clone["imageBytes"]=(long)ClipboardVault.MaximumImageBytes;oversizedMetadata["entries"]!.AsArray().Add(clone);}
         Throws(()=>reboot.Commit(oversizedMetadata["revision"]!.GetValue<string>(),oversizedMetadata["entries"]!.AsArray()),"aggregate image storage bound ignored");
-        Check(reboot.Load()["entries"]!.AsArray().Count==2,"capacity failure removed protected images");
+        Check(reboot.Load()["entries"]!.AsArray().Count==1,"capacity failure removed protected images");
         if(OperatingSystem.IsWindows())
         {
             string dpapiRoot=Path.Combine(root,"WindowsDpapi");var windowsVault=new ClipboardVault(dpapiRoot);windowsVault.AddText("FC-SYNTHETIC-DPAPI-😀");windowsVault.AddImage(png,1,1);
@@ -168,7 +168,11 @@ static class Program
             var imageRow=imageVault["entries"]!.AsArray().OfType<JsonObject>().Single(c=>ClipboardVault.Kind(c)=="image");
             Check(vault.ReadImage(imageRow).AsSpan().SequenceEqual(png),"image blob round trip");
             Check(new ClipboardVault(root,Protect,Unprotect).ReadImage(imageRow).AsSpan().SequenceEqual(png),"image blob survives vault reload");
-            var imageAgain=vault.AddImage(png,1,1,imageSource);Check(imageAgain["entries"]!.AsArray().OfType<JsonObject>().Count(c=>ClipboardVault.Kind(c)=="image")==1,"image dedup by source and hash");
+            var otherImageSource=(JsonObject)imageSource.DeepClone();otherImageSource["id"]="other-device";
+            long oldUpdatedAt=imageRow["updatedAt"]!.GetValue<long>();
+            var imageAgain=vault.AddImage(png,1,1,otherImageSource);
+            Check(imageAgain["entries"]!.AsArray().OfType<JsonObject>().Count(c=>ClipboardVault.Kind(c)=="image")==1,"cross-source SHA-256 dedup");
+            Check(imageAgain["entries"]!.AsArray().OfType<JsonObject>().Single(c=>ClipboardVault.Kind(c)=="image")["updatedAt"]!.GetValue<long>()==oldUpdatedAt,"duplicate image does not reorder");
             var clearRoot=Path.Combine(root,"ClearTest");var clearVault=new ClipboardVault(clearRoot,Protect,Unprotect);clearVault.AddText("ordinary-clear");clearVault.AddText("keep-pinned");clearVault.AddText("keep-locked");
             var clearSnapshot=clearVault.Load();var clearRows=clearSnapshot["entries"]!.AsArray().OfType<JsonObject>().ToList();clearRows.Single(c=>c["text"]!.GetValue<string>()=="keep-pinned")["pinned"]=true;clearRows.Single(c=>c["text"]!.GetValue<string>()=="keep-locked")["locked"]=true;clearVault.Commit(clearSnapshot["revision"]!.GetValue<string>(),clearSnapshot["entries"]!.AsArray());
             Check(clearVault.ClearUnprotected()==1,"clear-all removes only unprotected rows");var afterClear=clearVault.Load()["entries"]!.AsArray().OfType<JsonObject>().ToList();

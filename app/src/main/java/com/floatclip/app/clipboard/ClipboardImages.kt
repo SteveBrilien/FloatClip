@@ -22,6 +22,7 @@ import java.io.ByteArrayOutputStream
 object ClipboardImages {
     private val captures=java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task,"FloatClip image capture").apply { isDaemon=true } }
     private val main=Handler(Looper.getMainLooper())
+    private val importLock=Any()
     private val sequence=java.util.concurrent.atomic.AtomicLong()
     private class DecodeTask(val priority:Int,val order:Long,val work:()->Unit):Runnable,Comparable<DecodeTask> {
         override fun run()=work()
@@ -65,7 +66,15 @@ object ClipboardImages {
         } ?: error("未能读取图片，请在相册重新选择")
         val prepared=ClipboardPhotoImporter.prepare(encoded)
         if(Thread.currentThread().isInterrupted)throw InterruptedException("图片导入已取消")
-        return ImportResult(store.addImage(prepared.png),prepared.resized)
+        val (saved,fresh)=synchronized(importLock) {
+            val keys=store.entries().filter { it.kind=="image" }.mapTo(HashSet()) { it.key }
+            val entry=store.addImage(prepared.png)
+            entry to (entry!=null && entry.key !in keys)
+        }
+        // Capture and document-import workers can race; only the winner publishes the image.
+        if(fresh && saved!=null)
+            main.post { com.floatclip.app.sync.SyncRuntime.userCopiedImage(context.applicationContext,saved) }
+        return ImportResult(saved,prepared.resized)
     }
     fun thumbnail(store:ClipStore,entry:ClipEntry,maxDimension:Int=480):Bitmap?=runCatching {
         val key=thumbnailKey(store,entry,maxDimension,false)
@@ -144,7 +153,7 @@ object ClipboardImages {
 
     private fun publishCopy(context:Context,entry:ClipEntry) {
         ClipboardWrites.writeImage(context,context.getSystemService(ClipboardManager::class.java),ClipboardImageProvider.uri(context.packageName,entry.imageRef))
-        com.floatclip.app.sync.SyncRuntime.userCopiedImage(context,entry)
+        // Copying a saved image is clipboard-only: never create a new sync event or move the row.
     }
     fun copy(context:Context,store:ClipStore,entry:ClipEntry) {
         store.readImage(entry)

@@ -94,7 +94,7 @@ class ClipboardImageTest {
         (0 until tampered.length()).map { tampered.getJSONObject(it) }.first { it.optString("kind")=="image" }.put("imageSha256","0".repeat(64))
         assertFalse(store.importJson(tampered.toString()));assertEquals(before,store.exportJson())
     }
-    @Test fun repeatedRemoteImageMovesForwardAndRetainsOrganizationAndRetryIdentity() {
+    @Test fun repeatedRemoteImageIsAckOnlyAndKeepsOriginalOrderingAcrossSources() {
         val store=ClipStore(context(),cipher)
         val remote=com.floatclip.share.ClipboardSync.Device(java.util.UUID.randomUUID(),"电脑","windows")
         val image=store.receiveSharedImage(java.util.UUID.randomUUID(),remote,png,1,1,1)
@@ -104,13 +104,18 @@ class ClipboardImageTest {
         for(i in 0 until rows.length())rows.getJSONObject(i).put("createdAt",if(rows.getJSONObject(i).getString("id")==image.key)1L else 2L)
         store.commitUnified(fixture.getString("revision"),rows)
         assertEquals(other.key,store.entries().first().key)
-        val next=java.util.UUID.randomUUID()
-        store.receiveSharedImage(next,remote,png,1,1,1)
-        val newest=store.entries().first()
-        assertEquals(next.toString(),newest.key);assertEquals("工作",newest.category);assertTrue(newest.locked)
-        assertEquals(2,store.entries().size);assertArrayEquals(png,store.readImage(newest))
         val before=store.unifiedSnapshot().toString()
+        val next=java.util.UUID.randomUUID()
+        val received=store.receiveSharedImage(next,remote,png,1,1,1)
+        assertEquals(image.key,received.key)
+        assertEquals(other.key,store.entries().first().key)
+        assertEquals("工作",received.category);assertTrue(received.locked)
+        assertEquals(2,store.entries().size);assertArrayEquals(png,store.readImage(received))
+        assertEquals(before,store.unifiedSnapshot().toString())
         store.receiveSharedImage(next,remote,png,1,1,1)
+        val another=com.floatclip.share.ClipboardSync.Device(java.util.UUID.randomUUID(),"其他设备","android")
+        assertEquals(image.key,store.receiveSharedImage(java.util.UUID.randomUUID(),another,png,1,1,1).key)
+        assertEquals(image.key,store.addImage(png)!!.key)
         assertEquals(before,store.unifiedSnapshot().toString())
     }
 

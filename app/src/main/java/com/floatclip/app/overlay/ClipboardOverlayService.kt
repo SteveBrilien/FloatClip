@@ -43,6 +43,7 @@ import com.floatclip.app.clipboard.ClipboardRepository
 import com.floatclip.app.clipboard.ClipboardImages
 import com.floatclip.app.clipboard.ClipViewerActivity
 import com.floatclip.app.clipboard.ClipImageViewerView
+import com.floatclip.app.notifications.FloatClipForeground
 import com.floatclip.app.integration.AccessibilityPasteBridge
 import com.floatclip.app.integration.IntegrationRegistry
 import com.floatclip.app.model.ClipEntry
@@ -281,7 +282,7 @@ class ClipboardOverlayService : Service() {
 
     private fun ensureForeground() {
         if (foregroundStarted) return
-        startForeground(NOTIFICATION_ID, createNotification())
+        FloatClipForeground.enter(this)
         foregroundStarted = true
     }
 
@@ -325,6 +326,10 @@ class ClipboardOverlayService : Service() {
         runCatching { unregisterReceiver(sharedHistoryChanged) }
         runCatching { unregisterReceiver(systemAppearanceReceiver) }
         if (OverlayKeepAliveScheduler.shouldRun(this)) OverlayKeepAliveScheduler.schedule(this)
+        if (foregroundStarted) {
+            FloatClipForeground.leave(this)
+            foregroundStarted=false
+        }
         super.onDestroy()
     }
 
@@ -384,7 +389,7 @@ class ClipboardOverlayService : Service() {
         bubbleParams = null
         releasePanelWindows()
         showBubble()
-        if (foregroundStarted) getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, createNotification())
+        if (foregroundStarted) FloatClipForeground.refresh(this)
         if (reopenPanel) handler.postDelayed({ expandPanel(false) }, 20L)
     }
 
@@ -1574,36 +1579,6 @@ class ClipboardOverlayService : Service() {
         } }
     }
 
-    private fun createNotification(): Notification {
-        val manager = getSystemService(NotificationManager::class.java)
-        val channel = NotificationChannel(
-            NOTIFICATION_CHANNEL_ID,
-            "FloatClip 后台运行",
-            NotificationManager.IMPORTANCE_MIN,
-        ).apply {
-            description = "保持悬浮剪贴板稳定运行"
-            setShowBadge(false)
-            setSound(null, null)
-            enableVibration(false)
-            lockscreenVisibility = Notification.VISIBILITY_SECRET
-        }
-        manager.createNotificationChannel(channel)
-        return Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("FloatClip")
-            .setContentText(if(overlayPreferences.detailedNotification()) "悬浮剪贴板正在后台运行" else "")
-            .setCategory(Notification.CATEGORY_SERVICE)
-            .setShowWhen(false)
-            .setOnlyAlertOnce(true)
-            .setVisibility(Notification.VISIBILITY_SECRET)
-            .setOngoing(true)
-            .addAction(Notification.Action.Builder(null, "恢复悬浮窗", android.app.PendingIntent.getForegroundService(
-                this, NOTIFICATION_ID, Intent(this, ClipboardOverlayService::class.java).setAction(ACTION_RESTORE_OVERLAY),
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
-            )).build())
-            .build()
-    }
-
     private fun percentAlpha(percent: Int): Int = (255f * percent.coerceIn(0, 100) / 100f).toInt().coerceIn(0, 255)
 
     private fun accentColor(palette: OverlayPalette): Int =
@@ -1649,8 +1624,6 @@ class ClipboardOverlayService : Service() {
         private const val ACTION_RESTORE_OVERLAY = "com.floatclip.app.action.RESTORE_OVERLAY"
         const val ACTION_REFRESH_APPEARANCE = "com.floatclip.app.action.REFRESH_APPEARANCE"
         const val ACTION_REPOSITION_PANEL = "com.floatclip.app.action.REPOSITION_PANEL"
-        const val NOTIFICATION_CHANNEL_ID = "floatclip_overlay_quiet_v2"
-        private const val NOTIFICATION_ID = 2001
         private const val CLIPBOARD_POLL_MS = 650L
         private const val BUBBLE_APPEAR_MS = 240L
         private const val EDGE_HIDE_DELAY_MS = 900L

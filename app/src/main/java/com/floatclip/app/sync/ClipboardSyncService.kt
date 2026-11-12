@@ -24,6 +24,7 @@ import com.floatclip.app.files.FileRuntime
 import com.floatclip.app.UnifiedActivity
 import com.floatclip.app.clipboard.ClipStore
 import com.floatclip.app.model.ClipEntry
+import com.floatclip.app.notifications.FloatClipForeground
 import com.floatclip.app.clipboard.ClipboardWrites
 import com.floatclip.app.clipboard.DeviceIdentity
 import com.floatclip.app.prefs.OverlayPreferences
@@ -161,9 +162,7 @@ class ClipboardSyncService: Service() {
         trust=getSharedPreferences("share-pairs",MODE_PRIVATE);trust.registerOnSharedPreferenceChangeListener(trustListener)
         credentials=TrustedPeerStore(this)
         lastCapture=runCatching{clipboard.primaryClip?.let{SyncRuntime.stamp(it)}}.getOrNull().orEmpty()
-        val notifications=getSystemService(NotificationManager::class.java)
-        notifications.createNotificationChannel(NotificationChannel(CHANNEL,"设备共享",NotificationManager.IMPORTANCE_LOW))
-        startForeground(NOTIFICATION,notification())
+        FloatClipForeground.enter(this)
         SyncRuntime.attach(this)
         library=ClipStore(this)
         imageStorage=ClipboardImageSyncStorage(this)
@@ -601,27 +600,8 @@ class ClipboardSyncService: Service() {
     fun peers(): List<ClipboardSync.PeerView> = if(::engine.isInitialized)engine.peerViews() else emptyList()
     fun peerEnabled(key: String,on: Boolean){if(!closing)actor.execute{runCatching{engine.peerEnabled(key,on);if(!on){dropImagePeer(key);links[key]?.close()}else trySendImage(key)}.onFailure{setStatus("设备共享开关未保存")};main.post{refreshUi()}}}
     fun session(peer: String)=links[peer]?.session
-    private fun setStatus(value: String){status=value;main.post{if(!closing){getSystemService(NotificationManager::class.java).notify(NOTIFICATION,notification());SyncRuntime.changed()}}}
+    private fun setStatus(value: String){status=value;main.post{if(!closing){FloatClipForeground.refresh(this);SyncRuntime.changed()}}}
     private fun historyChanged(){sendBroadcast(Intent(HISTORY_CHANGED).setPackage(packageName),"$packageName.permission.INTERNAL")}
-    private fun notification(): Notification {
-        val flags=PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        val open=PendingIntent.getActivity(this,7080,Intent(this,UnifiedActivity::class.java),flags)
-        val connectionsPaused=prefs.connectionsPaused()
-        val pause=PendingIntent.getService(this,7081,Intent(this,ClipboardSyncService::class.java).setAction(if(connectionsPaused) RESUME else PAUSE),flags)
-        val detailed=OverlayPreferences(this).detailedNotification()
-        return Notification.Builder(this,CHANNEL)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(if(detailed) "FloatClip 设备共享" else "FloatClip")
-            .setContentText(if(detailed) status else "")
-            .setContentIntent(open)
-            .setShowWhen(false)
-            .setOnlyAlertOnce(true)
-            .setOngoing(true)
-            .apply {
-                if(detailed) addAction(Notification.Action.Builder(null,if(connectionsPaused) "恢复共享" else "暂停共享",pause).build())
-            }
-            .build()
-    }
     override fun dump(fd:java.io.FileDescriptor,writer:java.io.PrintWriter,args:Array<out String>?) {
         writer.println("FloatClip sync: enabled=${prefs.enabled()} connectedPeers=${links.size} pendingOutgoing=$pendingOutgoingCount")
         writer.println("File catalog: peers=${FileRuntime.get(this).connectedFilePeers()} local=${FileRuntime.get(this).snapshot().count{it.peer=="local"}} remote=${FileRuntime.get(this).snapshot().count{it.peer!="local"}}")
@@ -644,6 +624,7 @@ class ClipboardSyncService: Service() {
         bluetooth?.close();bluetooth=null
         for(host in hosts.values.toList())host.close();for(link in links.values)link.close();links.clear();actor.shutdownNow();SyncRuntime.detach(this)
         if(SyncKeepAliveScheduler.shouldRun(this))SyncKeepAliveScheduler.schedule(this)
+        FloatClipForeground.leave(this)
         super.onDestroy()
     }
     companion object {
@@ -653,7 +634,5 @@ class ClipboardSyncService: Service() {
         const val RESUME="com.floatclip.app.sync.RESUME"
         private const val RETRY_SECONDS = 5L
         private const val IDLE_SECONDS = 60L
-        private const val CHANNEL="floatclip-device-sync"
-        private const val NOTIFICATION=7080
     }
 }

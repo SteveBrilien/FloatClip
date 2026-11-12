@@ -190,7 +190,9 @@ class ClipImageViewerView(
         updateActions(entry)
 
         val progress = ProgressBar(context).apply { indeterminateTintList = ColorStateList.valueOf(Color.WHITE) }
-        val zoom = ZoomImageView(context, fillHeight = true).apply {
+        // Portrait images may begin at full-height; landscape images must fit completely
+        // inside the viewport (no forced height crop). Pinch and double-tap still zoom.
+        val zoom = ZoomImageView(context, fillHeight = shouldFillHeight(entry.imageWidth, entry.imageHeight)).apply {
             onHorizontalPage = ::page
             onVerticalPage = ::categoryPage
             setOnClickListener { toggleChrome() }
@@ -415,8 +417,10 @@ class ClipImageViewerView(
     private fun toast(message: String) = Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToLong().toInt()
 
-    private companion object {
-        val writes = Executors.newSingleThreadExecutor { task -> Thread(task, "FloatClip gallery writes").apply { isDaemon = true } }
-        val main = Handler(Looper.getMainLooper())
+    companion object {
+        /** Full-height initial zoom is reserved for portrait attachments, never landscape. */
+        internal fun shouldFillHeight(width: Int, height: Int): Boolean = width > 0 && height > width
+        private val writes = Executors.newSingleThreadExecutor { task -> Thread(task, "FloatClip gallery writes").apply { isDaemon = true } }
+        private val main = Handler(Looper.getMainLooper())
     }
 }

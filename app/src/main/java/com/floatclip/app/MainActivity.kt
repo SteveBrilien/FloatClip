@@ -1394,7 +1394,7 @@ open class MainActivity : Activity() {
     private fun openNotificationSettings() {
         val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
             putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-            putExtra(Settings.EXTRA_CHANNEL_ID, ClipboardOverlayService.NOTIFICATION_CHANNEL_ID)
+            putExtra(Settings.EXTRA_CHANNEL_ID, com.floatclip.app.notifications.FloatClipForeground.CHANNEL)
         }
         startActivity(intent)
     }

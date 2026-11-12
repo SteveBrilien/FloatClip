@@ -522,7 +522,7 @@ class ClipboardSyncService: Service() {
                 connectionTokens[peer]=token
                 if(previous!=null){FileRuntime.get(this@ClipboardSyncService).disconnected(peer,previous.session);links.remove(peer,previous);previous.close()}
                 links[peer]=Link(peer,session,kind)
-                FileRuntime.get(this@ClipboardSyncService).attach(peer,session){!closing&&!paused&&!prefs.connectionsPaused()&&prefs.enabled()&&authorized(peer)&&connectionTokens[peer]==token&&engine.peerViews().none{it.key==peer&&!it.enabled}}
+                FileRuntime.get(this@ClipboardSyncService).attach(peer,session,kind){!closing&&!paused&&!prefs.connectionsPaused()&&prefs.enabled()&&authorized(peer)&&connectionTokens[peer]==token&&engine.peerViews().none{it.key==peer&&!it.enabled}}
                 runCatching{configureEngine();engine.connected(peer);setStatus("${links.size} 台设备已连接 · 加密共享")}.onFailure{links.remove(peer)?.close();setStatus("设备授权状态未保存")}
             }}
             override fun sync(frame: ShareWire.Frame){if(!closing)actor.execute{if(!closing&&!paused&&prefs.enabled()&&!prefs.connectionsPaused()&&(frame.type!=ClipboardSync.CLIP||prefs.receiving())&&authorized(peer)&&connectionTokens[peer]==token)runCatching{

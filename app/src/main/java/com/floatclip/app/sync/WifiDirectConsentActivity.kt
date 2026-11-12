@@ -30,16 +30,27 @@ class WifiDirectConsentActivity:Activity() {
                     requestPermissions(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION),2);true
                 })
         } else {
-            val transfer=SyncRuntime.current()?.continueDirectTransfer(peer,request)?:run{finish();return}
-            val waiting=FloatDialog.show(this,"连接 Wi-Fi 直连","请在系统弹窗确认连接。",negative="取消",positive=null,
-                onNegative=::finish,onCancel=::finish)
-            transfer.whenComplete { success,_ -> runOnUiThread {
-                if(!isFinishing) {
-                    proceeding=success==true
-                    waiting.dialog.dismiss()
-                    finish()
-                }
-            } }
+            // Android 11's network request confirmation belongs to the system. Present a
+            // clear first-party explanation before Android's mandatory security prompt.
+            FloatDialog.show(this,"使用 Wi-Fi 高速直连",
+                "将临时连接已授权设备提供的直连网络以传输大文件。\n\n接下来 Android 会弹出一次系统连接确认，完成传输后会释放临时连接。不能由应用代替系统授权。",
+                negative="取消",positive="继续连接",onNegative=::finish,onCancel=::finish,
+                onPositive={
+                    val transfer=SyncRuntime.current()?.continueDirectTransfer(peer,request)
+                    if(transfer==null) { finish();true }
+                    else {
+                        val waiting=FloatDialog.show(this,"正在连接设备","正在等待 Android 的 Wi-Fi 连接确认…",
+                            negative="取消",positive=null,onNegative=::finish,onCancel=::finish)
+                        transfer.whenComplete { success,_ -> runOnUiThread {
+                            if(!isFinishing) {
+                                proceeding=success==true
+                                waiting.dialog.dismiss()
+                                finish()
+                            }
+                        } }
+                        true
+                    }
+                })
         }
     }
     @Deprecated("Native Wi-Fi panel result")

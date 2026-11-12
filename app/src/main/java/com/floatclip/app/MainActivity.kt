@@ -449,7 +449,9 @@ open class MainActivity : Activity() {
             setPadding(dp(13), 0, dp(13), 0)
         }
         val addCategory = actionButton("添加", false) {
-            if (categoryStore.add(categoryInput.text?.toString().orEmpty())) { notifyOverlayAppearanceChanged(); render() }
+            val name=categoryInput.text?.toString().orEmpty().trim()
+            if (categoryStore.add(name)) { notifyOverlayAppearanceChanged(); render() }
+            else Toast.makeText(this,"请输入不重复的分类名称",Toast.LENGTH_SHORT).show()
         }
         categoryCard.addView(
             LinearLayout(this).apply {
@@ -477,18 +479,21 @@ open class MainActivity : Activity() {
                         imageTintList=ColorStateList.valueOf(com.floatclip.app.prefs.CategoryColors.color(categoryStore.colorKey(category),colors.dark))
                         setPadding(dp(11),dp(11),dp(11),dp(11))
                         contentDescription="更换 $category 图标"
-                        setOnClickListener {
-                            val labels=CategoryIcons.choices.map { it.label }
-                            val selected=CategoryIcons.choices.indexOfFirst { it.key==categoryStore.iconKey(category) }
-                            FloatDialog.choices(this@MainActivity,"选择“$category”的图标",labels,selected) { index ->
-                                categoryStore.saveIcon(category,CategoryIcons.choices[index].key)
-                                notifyOverlayAppearanceChanged()
-                                render()
-                            }
-                        }
+                        setOnClickListener { showCategoryIconPicker(category) }
                     }
                     addView(iconButton,LinearLayout.LayoutParams(dp(46),dp(48)))
-                    addView(textView(category, 15f, false), LinearLayout.LayoutParams(0, dp(48), 1f))
+                    addView(textView(category, 15f, false).apply {
+                        setOnClickListener { showCategoryActions(category) }
+                        contentDescription="编辑分类 $category"
+                    }, LinearLayout.LayoutParams(0, dp(48), 1f))
+                    val swatchButton=TextView(this@MainActivity).apply {
+                        text="●";textSize=23f;gravity=Gravity.CENTER
+                        setTextColor(com.floatclip.app.prefs.CategoryColors.color(categoryStore.colorKey(category),colors.dark))
+                        contentDescription="修改 $category 的颜色"
+                        background=roundedBackground(colors.fieldBackground,12f,true)
+                        setOnClickListener { showCategoryColorPicker(category) }
+                    }
+                    addView(swatchButton,LinearLayout.LayoutParams(dp(38),dp(44)))
                 }
                 val handle = ImageView(this).apply {
                     setImageResource(R.drawable.ic_drag)
@@ -502,6 +507,7 @@ open class MainActivity : Activity() {
                 wrapper.onSingleTap = { showCategoryActions(category) }
                 wrapper.onLongPress = { showCategoryActions(category) }
                 wrapper.touchPassthrough = handle
+                wrapper.touchPassthroughViews=listOf(row.getChildAt(0),row.getChildAt(2))
                 dragList.addView(wrapper, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(6) })
                 installCategoryDrag(handle, wrapper, dragList, dragItems, category)
             }
@@ -509,6 +515,94 @@ open class MainActivity : Activity() {
         }
         addCard(categoryCard)
 
+    }
+
+    /** Live icon gallery: the preview changes immediately, Save commits once. */
+    private fun showCategoryIconPicker(category:String) {
+        var chosen=categoryStore.iconKey(category)
+        val content=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+        val preview=ImageView(this).apply {
+            setImageResource(CategoryIcons.resource(chosen))
+            imageTintList=ColorStateList.valueOf(
+                com.floatclip.app.prefs.CategoryColors.color(categoryStore.colorKey(category),colors.dark))
+            contentDescription="分类图标预览"
+        }
+        content.addView(preview,LinearLayout.LayoutParams(dp(50),dp(50)).apply{gravity=Gravity.CENTER_HORIZONTAL;bottomMargin=dp(12)})
+        CategoryIcons.choices.chunked(4).forEach { choices ->
+            val grid=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
+            choices.forEach { choice ->
+                val icon=ImageView(this).apply {
+                    setImageResource(choice.res)
+                    contentDescription=choice.label
+                    setPadding(dp(12),dp(12),dp(12),dp(12))
+                    imageTintList=ColorStateList.valueOf(colors.primaryText)
+                    background=roundedBackground(if(chosen==choice.key)colors.selectedNavigationBackground else colors.fieldBackground,12f)
+                    setOnClickListener {
+                        chosen=choice.key;preview.setImageResource(choice.res)
+                        for(i in 0 until grid.childCount)grid.getChildAt(i).isSelected=false
+                        // Redraw the complete picker on selection, not the parent settings page.
+                        content.post { for (j in 1 until content.childCount) {
+                            val group=content.getChildAt(j) as? LinearLayout ?: continue
+                            group.childrenIconsTint(chosen)
+                        } }
+                    }
+                }
+                grid.addView(icon,LinearLayout.LayoutParams(0,dp(52),1f).apply{marginEnd=dp(4);bottomMargin=dp(6)})
+            }
+            content.addView(grid)
+        }
+        FloatDialog.show(this,"$category · 图标",custom=content,negative="取消",positive="保存") {
+            categoryStore.saveIcon(category,chosen);notifyOverlayAppearanceChanged();render();true
+        }
+    }
+
+    /** Render the selected tile directly instead of showing abstract text-only choices. */
+    private fun LinearLayout.childrenIconsTint(chosen:String) {
+        for(i in 0 until childCount) {
+            val icon=getChildAt(i) as? ImageView ?: continue
+            val key=CategoryIcons.choices.firstOrNull{it.label==icon.contentDescription.toString()}?.key
+            icon.background=roundedBackground(if(key==chosen)colors.selectedNavigationBackground else colors.fieldBackground,12f)
+        }
+    }
+
+    private fun showCategoryColorPicker(category:String) {
+        var chosen=categoryStore.colorKey(category)
+        val content=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+        val preview=TextView(this).apply {
+            text="●  $category";textSize=17f;gravity=Gravity.CENTER
+            setTextColor(com.floatclip.app.prefs.CategoryColors.color(chosen,colors.dark))
+            setPadding(0,0,0,dp(10))
+        }
+        content.addView(preview)
+        com.floatclip.app.prefs.CategoryColors.keys.chunked(3).forEach { choices ->
+            val row=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
+            choices.forEach { key ->
+                val index=com.floatclip.app.prefs.CategoryColors.keys.indexOf(key)
+                val label=com.floatclip.app.prefs.CategoryColors.labels[index]
+                val tile=TextView(this).apply {
+                    text="●  $label";textSize=14f;gravity=Gravity.CENTER
+                    setTextColor(com.floatclip.app.prefs.CategoryColors.color(key,colors.dark))
+                    background=roundedBackground(if(key==chosen)colors.selectedNavigationBackground else colors.fieldBackground,12f)
+                    contentDescription=label
+                    setOnClickListener {
+                        chosen=key
+                        preview.setTextColor(com.floatclip.app.prefs.CategoryColors.color(key,colors.dark))
+                        for(j in 1 until content.childCount) {
+                            val group=content.getChildAt(j) as? LinearLayout ?: continue
+                            for(k in 0 until group.childCount) {
+                                val item=group.getChildAt(k) as? TextView ?: continue
+                                item.background=roundedBackground(if(item.contentDescription==label)colors.selectedNavigationBackground else colors.fieldBackground,12f)
+                            }
+                        }
+                    }
+                }
+                row.addView(tile,LinearLayout.LayoutParams(0,dp(54),1f).apply{marginEnd=dp(5);bottomMargin=dp(6)})
+            }
+            content.addView(row)
+        }
+        FloatDialog.show(this,"$category · 特征色",custom=content,negative="取消",positive="保存") {
+            categoryStore.saveColor(category,chosen);notifyOverlayAppearanceChanged();render();true
+        }
     }
 
     private fun showCategoryActions(category: String) {
@@ -529,12 +623,8 @@ open class MainActivity : Activity() {
                         }.getOrElse { Toast.makeText(this,it.message ?: "重命名未完成",Toast.LENGTH_LONG).show();false }
                     }
                 }
-                1 -> FloatDialog.choices(this,"分类特征色",com.floatclip.app.prefs.CategoryColors.labels,com.floatclip.app.prefs.CategoryColors.keys.indexOf(categoryStore.colorKey(category))) {
-                    categoryStore.saveColor(category,com.floatclip.app.prefs.CategoryColors.keys[it]);notifyOverlayAppearanceChanged();render()
-                }
-                2 -> FloatDialog.choices(this,"分类图标",CategoryIcons.choices.map { it.label },CategoryIcons.choices.indexOfFirst { it.key==categoryStore.iconKey(category) }) {
-                    categoryStore.saveIcon(category,CategoryIcons.choices[it].key);notifyOverlayAppearanceChanged();render()
-                }
+                1 -> showCategoryColorPicker(category)
+                2 -> showCategoryIconPicker(category)
                 else -> FloatDialog.show(this,"删除分类“$category”？","词条会保留并移到未分类。",negative="取消",positive="删除") {
                     clipStore.moveCategoryToDefault(category);categoryStore.delete(category);notifyOverlayAppearanceChanged();render();true
                 }
@@ -967,11 +1057,11 @@ open class MainActivity : Activity() {
                 addView(
                     sliderSetting(
                         "悬浮球透明度",
-                        35,
-                        100,
-                        overlayPreferences.bubbleAlphaPercent(),
+                        0,
+                        65,
+                        overlayPreferences.bubbleTransparencyPercent(),
                         "%",
-                    ) { overlayPreferences.saveBubbleAlphaPercent(it); notifyOverlayAppearanceChanged() },
+                    ) { overlayPreferences.saveBubbleTransparencyPercent(it); notifyOverlayAppearanceChanged() },
                 )
                 addView(divider())
                 addView(
@@ -1011,40 +1101,56 @@ open class MainActivity : Activity() {
                 addView(divider())
                 addView(segmentedSetting(
                     "背景",
-                    listOf(0 to "纯色",1 to "磨砂",2 to "透明"),
-                    when(overlayPreferences.backgroundMode()) { "solid"->0;"frost"->1;else->2 },
+                    if(android.os.Build.VERSION.SDK_INT>=31) listOf(0 to "纯色",1 to "磨砂",2 to "透明")
+                    else listOf(0 to "纯色",1 to "透明"),
+                    if(android.os.Build.VERSION.SDK_INT>=31)
+                        when(overlayPreferences.backgroundMode()) { "solid"->0;"frost"->1;else->2 }
+                    else if(overlayPreferences.backgroundMode()=="solid") 0 else 1,
                 ) { value ->
-                    overlayPreferences.saveBackgroundMode(listOf("solid","frost","transparent")[value])
+                    overlayPreferences.saveBackgroundMode(
+                        (if(android.os.Build.VERSION.SDK_INT>=31) listOf("solid","frost","transparent")
+                         else listOf("solid","transparent"))[value])
                     notifyOverlayAppearanceChanged();render()
                 })
                 addView(divider())
                 addView(
                     sliderSetting(
                         "面板透明度",
-                        45,
-                        100,
-                        overlayPreferences.panelAlphaPercent(),
+                        0,
+                        55,
+                        overlayPreferences.panelTransparencyPercent(),
                         "%",
-                    ) { overlayPreferences.savePanelAlphaPercent(it); notifyOverlayAppearanceChanged() },
+                    ) { overlayPreferences.savePanelTransparencyPercent(it); notifyOverlayAppearanceChanged() },
                 )
                 addView(divider())
                 addView(
                     sliderSetting(
                         "区块透明度",
-                        45,
-                        100,
-                        overlayPreferences.cardAlphaPercent(),
+                        0,
+                        55,
+                        overlayPreferences.cardTransparencyPercent(),
                         "%",
-                    ) { overlayPreferences.saveCardAlphaPercent(it); notifyOverlayAppearanceChanged() },
+                    ) { overlayPreferences.saveCardTransparencyPercent(it); notifyOverlayAppearanceChanged() },
                 )
                 addView(divider())
-                if(overlayPreferences.backgroundMode()=="frost") {
-                    addView(sliderSetting("磨砂强度",0,100,overlayPreferences.frostStrengthPercent(),"%") {
+                if(android.os.Build.VERSION.SDK_INT<31) {
+                    addView(textView("磨砂效果 ⓘ  ·  此设备不支持系统级背景模糊",12f,false,colors.secondaryText).apply {
+                        setPadding(dp(12),dp(12),dp(12),dp(12))
+                        isClickable=true
+                        setOnClickListener {
+                            FloatDialog.show(this@MainActivity,"关于磨砂效果",
+                                "Android 11 无法对其他应用窗口直接采样模糊。Cloudy 的旧系统方案需要额外 CPU 截图处理，PrismalAGSL 的真正着色器需要 Android 13。为保持流畅和省电，已关闭原来的噪点拟态磨砂。",negative="知道了")
+                        }
+                    })
+                    addView(divider())
+                } else if(overlayPreferences.backgroundMode()=="frost") {
+                    addView(sliderSetting("磨砂强度  ⓘ",0,100,overlayPreferences.frostStrengthPercent(),"%") {
                         overlayPreferences.saveFrostStrengthPercent(it);notifyOverlayAppearanceChanged()
                     })
-                    if(android.os.Build.VERSION.SDK_INT<31) {
-                        addView(textView("Android 11 使用软件拟态磨砂，不读取屏幕内容。",12f,false,colors.secondaryText))
-                    }
+                    addView(textView("ⓘ  说明",12f,false,colors.secondaryText).apply {
+                        setPadding(dp(12),dp(8),dp(12),dp(8));isClickable=true
+                        setOnClickListener { FloatDialog.show(this@MainActivity,"磨砂效果", "Android 12 及以上可使用系统跨窗口模糊；实际效果也取决于系统是否允许窗口模糊。",negative="知道了") }
+                    })
                     addView(divider())
                 }
                 addView(

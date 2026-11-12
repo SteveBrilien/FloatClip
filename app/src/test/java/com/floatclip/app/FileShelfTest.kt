@@ -49,7 +49,9 @@ class FileShelfTest {
         val a=FileRepository(aContext);val b=FileRepository(bContext);val listener=ServerSocket(0);val outgoing=Socket("127.0.0.1",listener.localPort);val incoming=listener.accept();listener.close()
         val aSession=ShareSession(outgoing,File(aContext.cacheDir,"sync-files"),events(a,"phone"),true,true);val bSession=ShareSession(incoming,File(bContext.cacheDir,"sync-files"),events(b,"windows"),true,true)
         try{
-            a.attach("phone",aSession){true};b.attach("windows",bSession){true};aSession.start();bSession.start();waitFor{b.snapshot().size==1};val row=b.snapshot().single();assertEquals("合同 😀.pdf",row.name);assertNull(b.local(row));assertEquals(0,File(bContext.cacheDir,"sync-files").listFiles()!!.size)
+            a.attach("phone",aSession,"bluetooth"){true};b.attach("windows",bSession,"wifi-direct"){true};
+            assertEquals("蓝牙",a.transportName("phone"));assertEquals("Wi-Fi Direct",b.transportName("windows"))
+            aSession.start();bSession.start();waitFor{b.snapshot().size==1};val row=b.snapshot().single();assertEquals("合同 😀.pdf",row.name);assertNull(b.local(row));assertEquals(0,File(bContext.cacheDir,"sync-files").listFiles()!!.size)
             assertEquals(1,a.connectedFilePeers());assertEquals(1,b.connectedFilePeers())
             val received=b.download(row).get(8,TimeUnit.SECONDS);assertArrayEquals(bytes,received.readBytes());assertArrayEquals(bytes,file.readBytes());b.keep(row,true);b.clear(listOf(row),true,true);assertTrue(received.exists());assertEquals(1,b.snapshot().size)
             FileRepository(bContext).use{restored->assertTrue(restored.snapshot().single().kept);assertNotNull(restored.local(restored.snapshot().single()));assertFalse(restored.snapshot().single().online)}

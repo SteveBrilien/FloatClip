@@ -61,7 +61,6 @@ import com.floatclip.app.ui.LatestSnapshotLoader
 import com.floatclip.app.overlay.ui.EntrySwipeActions
 import com.floatclip.app.overlay.ui.EntryGestureRow
 import com.floatclip.app.overlay.ui.EntryLockAction
-import com.floatclip.app.overlay.ui.FauxFrostDrawable
 import com.floatclip.app.theme.AdaptiveOverlayThemeProvider
 import com.floatclip.app.theme.OverlayPalette
 import com.floatclip.app.theme.OverlayThemeProvider
@@ -165,11 +164,14 @@ class ClipboardOverlayService : Service() {
                 Intent.ACTION_CLOSE_SYSTEM_DIALOGS -> {
                     @Suppress("DEPRECATION")
                     val reason = intent.getStringExtra("reason")
-                    if (reason == "homekey" || reason == "recentapps") {
+                    if ((reason == "homekey" || reason == "recentapps") && !panelPinnedMode) {
                         closeInlineGallery()
-                        if (panelPinnedMode && panelView != null) togglePanelPinnedMode()
                         collapsePanel()
                     }
+                    // An explicitly pinned floating panel must survive Home and Recents.
+                    // System/OEM transitions may detach the window; recover its presentation.
+                    if ((reason == "homekey" || reason == "recentapps") && panelPinnedMode)
+                        handler.postDelayed(restoreOverlayRunnable, 200L)
                 }
                 Intent.ACTION_SCREEN_OFF -> {
                     handler.removeCallbacks(restoreOverlayRunnable)
@@ -373,7 +375,7 @@ class ClipboardOverlayService : Service() {
         if (stopping || !canPresentOverlay() || pendingViewerToken != null) return
         val visible = if (panelOpen) panelView else bubbleView
         if (overlayWindows.isVisible(visible)) return
-        rebuildVisibleOverlay(reopenPanel = false)
+        rebuildVisibleOverlay(reopenPanel = panelOpen && panelPinnedMode)
     }
 
     private fun rebuildVisibleOverlay(reopenPanel: Boolean = panelOpen && !panelCollapsing) {
@@ -674,12 +676,9 @@ class ClipboardOverlayService : Service() {
         val borderColor = Color.argb(borderAlpha, 25, 40, 63)
         val panel = BorderDragFrameLayout(this).apply {
             isClickable = true
-            background = if(overlayPreferences.backgroundMode()=="frost") FauxFrostDrawable(
-                withAlpha(frostedPanel, panelAlpha), dp(palette.panelCornerRadiusDp).toFloat(),
-                overlayPreferences.frostStrengthPercent(),
-                borderColor.takeIf { !palette.isDark && overlayPreferences.overlayBorderEnabled() },
-                dp(1).toFloat(),
-            ) else roundedBackground(
+            // The noise texture was not blur. Real cross-window blur is controlled
+            // by FLAG_BLUR_BEHIND on API 31+; use a plain tinted surface otherwise.
+            background = roundedBackground(
                 withAlpha(frostedPanel, panelAlpha),
                 palette.panelCornerRadiusDp,
                 borderColor.takeIf { !palette.isDark && overlayPreferences.overlayBorderEnabled() },
@@ -1046,6 +1045,22 @@ class ClipboardOverlayService : Service() {
         historyList?.setPadding(0,0,0,if(visible)dp(66) else 0)
     }
 
+    /** Follow the physical tab order: move to a right-hand tab from the right, and vice versa. */
+    private fun animateHistoryTabSwitch(oldIndex:Int,newIndex:Int) {
+        val history=historyList ?: return
+        if(oldIndex==newIndex || oldIndex<0 || newIndex<0) return
+        history.animate().cancel()
+        if(!android.animation.ValueAnimator.areAnimatorsEnabled()) {
+            history.translationX=0f;history.alpha=1f;return
+        }
+        val direction=if(newIndex>oldIndex) 1f else -1f
+        history.translationX=direction*dp(24)
+        history.alpha=.76f
+        history.animate().translationX(0f).alpha(1f)
+            .setDuration(overlayPreferences.switchAnimationMs().toLong().coerceIn(90,260))
+            .setInterpolator(overlayPreferences.motionInterpolator()).start()
+    }
+
     private fun renderSourceBar() {
         val bar=sourceBar ?: return
         val palette=themeProvider.palette()
@@ -1068,9 +1083,11 @@ class ClipboardOverlayService : Service() {
                 contentDescription="剪贴板来源：${source.name}"
                 setOnClickListener {
                     if(activeSource!=source.id){
+                        val previous=tabs.indexOfFirst { it.id==activeSource }
                         activeSource=source.id
                         activeCategory=ALL_CATEGORY
                         renderSourceBar();renderCategoryBar();renderEntries(false)
+                        animateHistoryTabSwitch(previous,index)
                     }
                 }
             }
@@ -1105,9 +1122,11 @@ class ClipboardOverlayService : Service() {
                     )
                     setOnClickListener {
                         if (activeCategory != category) {
+                            val previous=categories.indexOf(activeCategory)
                             activeCategory = category
                             renderCategoryBar()
                             renderEntries(false)
+                            animateHistoryTabSwitch(previous,index)
                         } else if (index >= 3) com.floatclip.app.ui.TabReveal.reveal(scroll, this, center = true)
                     }
                 }
@@ -1171,14 +1190,11 @@ class ClipboardOverlayService : Service() {
     }
 
     private fun entryMenuBackground(palette: OverlayPalette): android.graphics.drawable.Drawable {
-        val mode = overlayPreferences.backgroundMode()
         val base = withAlpha(palette.panelBackground, percentAlpha(overlayPreferences.surfacePanelAlphaPercent()))
         val border = if (overlayPreferences.overlayBorderEnabled())
             withAlpha(palette.secondaryText, percentAlpha(overlayPreferences.borderAlphaPercent())) else null
-        return if (mode == "frost") FauxFrostDrawable(
-            base, dp(palette.panelCornerRadiusDp).toFloat(),
-            overlayPreferences.frostStrengthPercent(), border, dp(1).toFloat()
-        ) else roundedBackground(base, palette.panelCornerRadiusDp, border)
+        // Menu surface shares the panel's plain tint and never renders synthetic noise.
+        return roundedBackground(base, palette.panelCornerRadiusDp, border)
     }
 
     private fun showEntryMenu(

@@ -43,6 +43,29 @@ class OverlayAppearanceTest {
         assertEquals("blue",prefs.accentTheme())
     }
 
+    @Test fun transparencyControlsReadAsTransparencyAndPreserveLegacyStoredAlpha() {
+        val prefs=reset()
+        assertEquals(10,prefs.panelTransparencyPercent())
+        assertEquals(14,prefs.cardTransparencyPercent())
+        prefs.savePanelTransparencyPercent(45)
+        prefs.saveCardTransparencyPercent(30)
+        prefs.saveBubbleTransparencyPercent(55)
+        assertEquals(55,prefs.panelAlphaPercent())
+        assertEquals(70,prefs.cardAlphaPercent())
+        assertEquals(45,prefs.bubbleAlphaPercent())
+        assertEquals(45,OverlayPreferences(RuntimeEnvironment.getApplication()).panelTransparencyPercent())
+    }
+
+    @Test fun androidElevenDisablesFakeNoiseFrostWithoutErasingPreference() {
+        val prefs=reset()
+        prefs.saveBackgroundMode("frost")
+        assertEquals("transparent",prefs.backgroundMode())
+        // The original setting remains saved for safe compatibility with newer OS.
+        assertEquals("frost",RuntimeEnvironment.getApplication()
+            .getSharedPreferences("floatclip_overlay",Context.MODE_PRIVATE)
+            .getString("panel_background_mode",null))
+    }
+
     @Test fun appearanceResetRestoresVisualFlagsAndKeepsServiceConsent() {
         val prefs = reset()
         prefs.saveSourceColors(false)

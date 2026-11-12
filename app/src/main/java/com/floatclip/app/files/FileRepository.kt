@@ -32,7 +32,7 @@ object FileRuntime {
 /** Only explicitly imported files are advertised over authenticated catalog-capable sessions. */
 class FileRepository(private val context:Context):AutoCloseable {
     private class Pending(val row:SharedFile){val id=UUID.randomUUID();val future=CompletableFuture<File>();@Volatile var progressAt=System.nanoTime()}
-    private class Link(val session:ShareSession,val allowed:()->Boolean){var pending:Pending?=null;var serving:UUID?=null}
+    private class Link(val session:ShareSession,val transport:String,val allowed:()->Boolean){var pending:Pending?=null;var serving:UUID?=null}
     private val lock=Any()
     private val root=File(context.filesDir,"shared-files").apply{mkdirs()}
     private val sources=File(root,"sources").apply{mkdirs()}
@@ -61,6 +61,13 @@ class FileRepository(private val context:Context):AutoCloseable {
     fun local(row:SharedFile):File?=safeFile(row.source,sources)?:safeFile(row.cached,wireCache)
     fun snapshot():List<SharedFile> = synchronized(lock){rows.values.sortedByDescending{it.shared}.toList()}
     fun connectedFilePeers():Int=synchronized(lock){links.values.count{!it.session.isClosed&&it.allowed()}}
+    fun transportName(peer:String):String?=synchronized(lock){links[peer]?.let {
+        if(it.session.isClosed || !it.allowed()) null else when(it.transport) {
+            "wifi-direct" -> "Wi-Fi Direct"
+            "bluetooth" -> "蓝牙"
+            else -> "局域网"
+        }
+    }}
     fun byKey(key:String):SharedFile?=synchronized(lock){rows[key]}
     private fun encode(row:SharedFile)=JSONObject().put("id",row.id).put("version",row.version).put("name",row.name).put("size",row.size).put("modified",row.modified).put("created",row.created).put("shared",row.shared)
     private fun parse(json:JSONObject,peer:String):SharedFile {
@@ -84,7 +91,7 @@ class FileRepository(private val context:Context):AutoCloseable {
         }.onFailure{link.session.close()}}
         changed()
     }
-    fun attach(peer:String,session:ShareSession,allowed:()->Boolean){if(!session.catalogEnabled)return;synchronized(lock){links[peer]=Link(session,allowed)};publish()}
+    fun attach(peer:String,session:ShareSession,transport:String="lan",allowed:()->Boolean){if(!session.catalogEnabled)return;synchronized(lock){links[peer]=Link(session,transport,allowed)};publish()}
     fun disconnected(peer:String,session:ShareSession){synchronized(lock){val link=links[peer];if(link?.session!==session)return;links.remove(peer);rows.values.filter{it.peer==peer}.forEach{it.online=false};link.pending?.future?.completeExceptionally(IOException("来源设备已离线"))};changed()}
     fun catalog(peer:String,data:ByteArray){
         val link=synchronized(lock){links[peer]}?:return;if(!link.allowed())return

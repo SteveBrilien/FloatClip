@@ -77,7 +77,13 @@ class OverlayPreferences(context: Context) {
     fun saveSourceColors(value: Boolean) { prefs.edit().putBoolean("source_colors",value).apply() }
     fun saveTranslucentCards(value: Boolean) { prefs.edit().putBoolean("translucent_cards",value).apply() }
 
-    fun backgroundMode():String=prefs.getString("panel_background_mode","transparent")?.takeIf { it in listOf("solid","transparent","frost","window") }?:"transparent"
+    fun backgroundMode():String {
+        val saved=prefs.getString("panel_background_mode","transparent")
+            ?.takeIf { it in listOf("solid","transparent","frost","window") } ?: "transparent"
+        // API 30 and below cannot blur other applications through this overlay window.
+        // Do not substitute a synthetic noise texture while preserving the saved choice.
+        return if (saved=="frost" && android.os.Build.VERSION.SDK_INT<31) "transparent" else saved
+    }
     fun saveBackgroundMode(value:String) { require(value in listOf("solid","transparent","frost","window"));prefs.edit().putString("panel_background_mode",value).apply() }
     fun windowAlphaPercent()=prefs.getInt("window_alpha",100).coerceIn(20,100)
     fun saveWindowAlphaPercent(value:Int) { prefs.edit().putInt("window_alpha",value.coerceIn(20,100)).apply() }
@@ -116,6 +122,15 @@ class OverlayPreferences(context: Context) {
     fun panelHeightDp(): Int = prefs.getInt(KEY_PANEL_HEIGHT_DP, DEFAULT_PANEL_HEIGHT_DP).coerceIn(300, 620)
     fun entryLineCount(): Int = prefs.getInt(KEY_ENTRY_LINE_COUNT, DEFAULT_ENTRY_LINE_COUNT).coerceIn(1, 3)
     fun cardAlphaPercent(): Int = prefs.getInt(KEY_CARD_ALPHA_PERCENT, DEFAULT_CARD_ALPHA_PERCENT).coerceIn(45, 100)
+    // UI labels say transparency: 0% is opaque, higher values are more see-through.
+    // Persisted alpha values remain untouched for safe upgrade and downgrade.
+    fun panelTransparencyPercent()=100-panelAlphaPercent()
+    fun bubbleTransparencyPercent()=100-bubbleAlphaPercent()
+    fun cardTransparencyPercent()=100-cardAlphaPercent()
+    fun savePanelTransparencyPercent(value:Int)=savePanelAlphaPercent(100-value.coerceIn(0,55))
+    fun saveBubbleTransparencyPercent(value:Int)=saveBubbleAlphaPercent(100-value.coerceIn(0,65))
+    fun saveCardTransparencyPercent(value:Int)=saveCardAlphaPercent(100-value.coerceIn(0,55))
+
     fun frostStrengthPercent(): Int = prefs.getInt(KEY_FROST_STRENGTH_PERCENT, DEFAULT_FROST_STRENGTH_PERCENT).coerceIn(0, 100)
     fun borderEnabled(): Boolean = false
     fun borderAlphaPercent(): Int = prefs.getInt(KEY_BORDER_ALPHA_PERCENT, DEFAULT_BORDER_ALPHA_PERCENT).coerceIn(5, 60)

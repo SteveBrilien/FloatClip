@@ -38,6 +38,7 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
     private var tracker: VelocityTracker? = null
     private var settling: ValueAnimator? = null
     var touchPassthrough: View? = null
+    var touchPassthroughViews: List<View> = emptyList()
     var onSingleTap: (() -> Unit)? = null
     var onDoubleTap: (() -> Unit)? = null
     var onLongPress: (() -> Unit)? = null
@@ -132,12 +133,13 @@ class EntryGestureRow(context: Context) : FrameLayout(context) {
     override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
         if (event.actionMasked != MotionEvent.ACTION_DOWN) return false
         active?.get()?.takeIf { it !== this }?.close()
-        val pass = touchPassthrough
-        if (pass != null && openedSide == 0) {
+        if (openedSide == 0) {
             val pos = IntArray(2)
-            pass.getLocationOnScreen(pos)
-            if (event.rawX >= pos[0] && event.rawX < pos[0] + pass.width &&
-                event.rawY >= pos[1] && event.rawY < pos[1] + pass.height) return false
+            for (pass in listOfNotNull(touchPassthrough) + touchPassthroughViews) {
+                pass.getLocationOnScreen(pos)
+                if (event.rawX >= pos[0] && event.rawX < pos[0] + pass.width &&
+                    event.rawY >= pos[1] && event.rawY < pos[1] + pass.height) return false
+            }
         }
         val tx=front?.translationX ?: 0f
         if (openedSide < 0 && event.x >= width + tx) { removeCallbacks(autoClose); return false }

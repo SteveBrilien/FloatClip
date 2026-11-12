@@ -76,8 +76,7 @@ internal class WifiDirectUpgrade(
                 attempt.id=id;attempt.offer=offer
                 main.post {
                     val foreground=SyncRuntime.foregroundActivity()
-                    if(foreground!=null&&WifiDirectTransferClient.wifiOn(context)&&WifiDirectTransferClient.hasPermission(context))continueAttempt(peer,id)
-                    else if(foreground!=null)foreground.startActivity(consent(peer,id))
+                    if(foreground!=null)foreground.startActivity(consent(peer,id))
                     else notifyConsent(peer,id)
                 }
             }

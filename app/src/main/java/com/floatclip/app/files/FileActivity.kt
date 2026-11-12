@@ -80,6 +80,35 @@ class FileActivity:Activity(),SyncRuntime.Observer {
     private fun column()=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
     private fun row()=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
     private fun button(value:String,action:()->Unit)=label(value,14f,accent).apply{gravity=Gravity.CENTER;minHeight=dp(FileUi.HIT);setPadding(dp(12),0,dp(12),0);isClickable=true;isFocusable=true;background=FileUi.action(this@FileActivity,colors);setOnClickListener{action()}}
+    private fun dropdown(value:String,description:String,action:()->Unit):LinearLayout = row().apply {
+        minimumHeight=dp(FileUi.HIT);gravity=Gravity.CENTER_VERTICAL
+        setPadding(dp(12),0,dp(8),0)
+        background=FileUi.action(this@FileActivity,colors)
+        isFocusable=true;isClickable=true;contentDescription=description
+        addView(label(value,14f,accent))
+        addView(ImageView(this@FileActivity).apply {
+            setImageResource(R.drawable.ic_chevron_right)
+            rotation=90f
+            imageTintList=android.content.res.ColorStateList.valueOf(accent)
+            contentDescription=null
+            importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        },LinearLayout.LayoutParams(dp(15),dp(15)).apply{marginStart=dp(4)})
+        setOnClickListener { action() }
+    }
+    private val savedFiles get()=getSharedPreferences("floatclip_saved_files",MODE_PRIVATE)
+    private fun savedUri(file:SharedFile):Uri? {
+        val value=savedFiles.getString(file.key,null)?:return null
+        val parts=value.split('|',limit=2)
+        if(parts.size!=2 || parts[0]!=file.version)return null
+        return runCatching { Uri.parse(parts[1]).takeIf { it.scheme=="content" } }.getOrNull()
+    }
+    private fun openSavedFile(file:SharedFile) {
+        val uri=savedUri(file)?:return
+        val intent=Intent(Intent.ACTION_VIEW).setDataAndType(uri,SharedFileProvider.mime(file.name))
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        runCatching { startActivity(intent) }
+            .onFailure { message("已保存的文件可能被移动或无可用打开应用，请重新下载") }
+    }
     private fun icon(resource:Int,name:String,action:()->Unit)=ImageView(this).apply{setImageResource(resource);imageTintList=android.content.res.ColorStateList.valueOf(accent);contentDescription=name;setPadding(dp(14),dp(14),dp(14),dp(14));isFocusable=true;background=FileUi.action(this@FileActivity,colors);setOnClickListener{action()}}
     private fun time(value:Long)=if(value<=0)"未知" else DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(value))
     private fun size(value:Long)=FileUi.size(value)
@@ -94,8 +123,8 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         title.addView(icon(R.drawable.ic_chevron_left,"返回"){finish()},LinearLayout.LayoutParams(dp(48),dp(48)).apply{marginStart=-dp(14)})
         title.addView(label("文件",24f).apply{typeface=Typeface.DEFAULT_BOLD},LinearLayout.LayoutParams(0,dp(52),1f))
         title.addView(icon(R.drawable.ic_add,"添加文件"){pickFiles()},LinearLayout.LayoutParams(dp(48),dp(48)))
-        val manageButton=button("管理"){}
-        manageButton.setOnClickListener{manage(manageButton)}
+        lateinit var manageButton:LinearLayout
+        manageButton=dropdown("管理","文件管理菜单") { manage(manageButton) }
         title.addView(manageButton);shell.addView(title)
         val peers=repo.connectedFilePeers()
         val connection=if(peers>0)"$peers 台设备已连接" else "设备未连接"
@@ -105,10 +134,14 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         connectionRow.addView(button("设备"){devices()});shell.addView(connectionRow,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(10);bottomMargin=dp(4)})
         if(repo.warning.isNotEmpty())shell.addView(label(repo.warning,12f,muted).apply{setPadding(0,0,0,dp(8))})
         val filter=row()
-        val timeFilter=button(arrayOf("全部时间⌄","最近24小时⌄","最近7天⌄","最近30天⌄")[range]){}
-        timeFilter.setOnClickListener{menu?.dismiss();menu=com.floatclip.app.ui.FloatMenu.show(timeFilter,listOf("全部时间","最近24小时","最近7天","最近30天"),range){range=it;render()}}
-        filter.addView(timeFilter)
-        filter.addView(View(this),LinearLayout.LayoutParams(0,1,1f));filter.addView(button(if(selecting)"完成" else "选择"){selecting=!selecting;selected.clear();render()});shell.addView(filter)
+        filter.addView(button(if(selecting)"完成" else "选择") { selecting=!selecting;selected.clear();render() })
+        filter.addView(View(this),LinearLayout.LayoutParams(0,1,1f))
+        lateinit var timeFilter:LinearLayout
+        timeFilter=dropdown(arrayOf("全部时间","最近24小时","最近7天","最近30天")[range],"筛选文件时间") {
+            menu?.dismiss();menu=com.floatclip.app.ui.FloatMenu.show(timeFilter,
+                listOf("全部时间","最近24小时","最近7天","最近30天"),range) { range=it;render() }
+        }
+        filter.addView(timeFilter);shell.addView(filter)
         if(selecting){val actions=row();actions.addView(button(if(selected.size==visible().size&&selected.isNotEmpty())"取消全选" else "全选"){if(selected.size==visible().size)selected.clear() else selected.addAll(visible().map{it.key});render()});actions.addView(label("已选 ${selected.size}",12f,muted).apply{setPadding(dp(8),0,dp(8),0)});actions.addView(button("下载"){chooseFolder(picked())}.apply{isEnabled=selected.isNotEmpty();alpha=if(isEnabled)1f else .45f});actions.addView(button("分享"){prepare(picked(),"share",null)}.apply{isEnabled=selected.isNotEmpty();alpha=if(isEnabled)1f else .45f});shell.addView(HorizontalScrollView(this).apply{isHorizontalScrollBarEnabled=false;addView(actions)},LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(4)})}
         list=column();val files=visible();if(files.isEmpty())list.addView(label("暂无文件",15f,muted).apply{gravity=Gravity.CENTER;setPadding(dp(8),dp(48),dp(8),dp(32))}) else files.forEach{list.addView(card(it),LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(8)})}
         scroll=ScrollView(this).apply{isFillViewport=true;addView(list)};shell.addView(scroll,LinearLayout.LayoutParams(-1,0,1f));setContentView(shell);scroll.post{scroll.scrollTo(0,oldY)}
@@ -125,7 +158,8 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         val checked=file.key in selected
         val status=when {
             file.kept -> "已保留"
-            local -> "本机已有"
+            savedUri(file)!=null -> "已保存到文件夹"
+            local -> "已缓存"
             file.online -> "可下载"
             else -> "来源离线"
         }
@@ -174,14 +208,29 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         detailSheet?.dismiss()
         val body=column().apply { setPadding(dp(18),dp(2),dp(18),dp(18)) }
         val local=repo.local(file)!=null
-        val status=if(local)"本机已有" else if(file.online)"可下载" else "来源离线"
+        val status=if(savedUri(file)!=null)"已保存到文件夹" else if(local)"已缓存" else if(file.online)"可下载" else "来源离线"
+        val kind=SharedFileProvider.mime(file.name)
+        val hero=row().apply {
+            background=shape(tint,tint)
+            setPadding(dp(12),dp(10),dp(12),dp(10))
+            addView(fileIcon(if(kind.startsWith("image/"))R.drawable.ic_image else R.drawable.ic_document,accent,30),
+                LinearLayout.LayoutParams(dp(30),dp(30)).apply{marginEnd=dp(12)})
+            addView(column().apply {
+                addView(label(status,14f,if(local||savedUri(file)!=null)colors.success else muted).apply {
+                    typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+                })
+                addView(label("${size(file.size)}  ·  ${kind.substringAfter('/').uppercase().take(10)}",12f,muted),
+                    LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(3)})
+            },LinearLayout.LayoutParams(0,-2,1f))
+        }
+        body.addView(hero,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(12)})
         val properties=column().apply {
             background=shape(page,line)
             setPadding(dp(12),dp(6),dp(12),dp(6))
-            listOf("大小" to size(file.size),"来源" to peer(file.peer),"修改时间" to time(file.modified),"状态" to status).forEach { (name,value) ->
+            listOf("来源设备" to peer(file.peer),"修改时间" to time(file.modified),"当前状态" to status).forEach { (name,value) ->
                 addView(row().apply {
                     minimumHeight=dp(29)
-                    addView(label(name,13f,muted),LinearLayout.LayoutParams(dp(68),-2))
+                    addView(label(name,13f,muted),LinearLayout.LayoutParams(dp(78),-2))
                     addView(label(value,13f),LinearLayout.LayoutParams(0,-2,1f))
                 })
             }
@@ -200,7 +249,12 @@ class FileActivity:Activity(),SyncRuntime.Observer {
             },LinearLayout.LayoutParams(-1,-2))
         }
         action("应用内预览",R.drawable.ic_document){prepare(listOf(file),"open",null)}
-        action("下载到文件夹",R.drawable.ic_update){chooseFolder(listOf(file))}
+        if(savedUri(file)!=null) {
+            action("在文件夹中打开",R.drawable.ic_folder){openSavedFile(file)}
+            action("另存到其他文件夹",R.drawable.ic_update){chooseFolder(listOf(file))}
+        } else {
+            action("下载到文件夹",R.drawable.ic_update){chooseFolder(listOf(file))}
+        }
         action("分享 / 转发",R.drawable.ic_share){prepare(listOf(file),"share",null)}
         if(SharedFileProvider.mime(file.name).startsWith("image/")&&local)action("加入剪贴板",R.drawable.ic_copy_paste){
             startActivity(Intent(this,ImageImportActivity::class.java).setAction(Intent.ACTION_SEND).setType("image/*")
@@ -234,14 +288,31 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         fun cancel(){canceled=true;active?.cancel(true)}
         batchDialog=FloatDialog.show(this,if(mode=="share")"准备分享" else "准备文件",custom=body,negative="取消",positive=null,onNegative={cancel()},onCancel={cancel()})
         val total=files.sumOf{it.size}.coerceAtLeast(1);val started=System.currentTimeMillis();var completed=0L;var index=0
-        val tick=object:Runnable{override fun run(){if(!busy)return;val row=files.getOrNull(index);val bytes=(completed+(row?.done?:0)).coerceAtMost(total);val elapsed=(System.currentTimeMillis()-started)/1000.0;val remaining=if(bytes>0&&elapsed>1)((total-bytes)*elapsed/bytes).toLong() else -1;info.text="${(index+1).coerceAtMost(files.size)} / ${files.size} · ${row?.name.orEmpty()}\n${size(bytes)} / ${size(total)} · "+if(remaining>=0)"预计剩余 ${remaining/60}分${remaining%60}秒" else "正在计算剩余时间";progress.progress=(bytes*1000/total).toInt();main.postDelayed(this,250)}};main.post(tick)
+        val tick=object:Runnable{override fun run(){if(!busy)return;val row=files.getOrNull(index)
+            val live=row?.let { repo.byKey(it.key) }
+            val bytes=(completed+(live?.done?:0)).coerceAtMost(total)
+            val transport=row?.let { repo.transportName(it.peer) }
+            val status=when { (live?.done ?: 0L)>0L -> transport?:"正在传输";row!=null&&row.size>=8L*1024*1024 -> "正在协商高速直连";else -> transport?:"正在连接" }
+            val elapsed=(System.currentTimeMillis()-started)/1000.0
+            val remaining=if(bytes>0&&elapsed>1)((total-bytes)*elapsed/bytes).toLong() else -1
+            info.text="${(index+1).coerceAtMost(files.size)} / ${files.size} · ${row?.name.orEmpty()} · $status\n${size(bytes)} / ${size(total)} · "+if(remaining>=0)"预计剩余 ${remaining/60}分${remaining%60}秒" else "正在计算剩余时间"
+            progress.progress=(bytes*1000/total).toInt();main.postDelayed(this,250)}};main.post(tick)
         worker.execute{try{
             files.forEachIndexed{i,entry->index=i;if(canceled)throw IOException("操作已取消");val current=repo.byKey(entry.key)?:throw IOException("文件记录已移除");val future=repo.download(current);active=future;val file=future.get();active=null;if(canceled)throw IOException("操作已取消");if(mode=="folder")saveToTree(tree!!,current,file);completed+=entry.size;index=i+1}
             main.post{if(isDestroyed)return@post;finishBatch();val handoff={if(mode=="folder")message("已保存 ${files.size} 个文件到所选文件夹") else launchFiles(files,mode)};if(resumed)handoff() else pendingHandoff=handoff}
         }catch(e:Exception){main.post{if(isDestroyed)return@post;finishBatch();if(!canceled)FloatDialog.show(this,"文件准备未完成",(e.cause?.message?:e.message?:"连接已中断")+"\n已完成文件保留；不会自动转发部分文件。",positive="重试",onPositive={prepare(if(mode=="folder")files.drop(index) else files,mode,tree);true}) else message("操作已取消，未完成的传输可重连后重试")}}}
     }
     private fun finishBatch(){busy=false;active=null;batchDialog?.dialog?.dismiss();batchDialog=null;render()}
-    private fun saveToTree(tree:Uri,row:SharedFile,file:File){val parent=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree));val target=DocumentsContract.createDocument(contentResolver,parent,SharedFileProvider.mime(row.name),row.name)?:throw IOException("文件夹无法写入");try{contentResolver.openOutputStream(target,"w")?.use{out->file.inputStream().use{it.copyTo(out)}}?:throw IOException("无法写入所选文件夹")}catch(e:Exception){runCatching{DocumentsContract.deleteDocument(contentResolver,target)};throw e}}
+    private fun saveToTree(tree:Uri,row:SharedFile,file:File){
+        val parent=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree))
+        val target=DocumentsContract.createDocument(contentResolver,parent,SharedFileProvider.mime(row.name),row.name)?:throw IOException("文件夹无法写入")
+        try {
+            contentResolver.openOutputStream(target,"w")?.use{out->file.inputStream().use{it.copyTo(out)}}?:throw IOException("无法写入所选文件夹")
+            savedFiles.edit().putString(row.key,row.version+"|"+target.toString()).apply()
+        } catch(e:Exception) {
+            runCatching{DocumentsContract.deleteDocument(contentResolver,target)};throw e
+        }
+    }
     private fun launchFiles(files:List<SharedFile>,mode:String){
         if(mode=="open") { startActivity(Intent(this,FilePreviewActivity::class.java).putExtra("key",files.first().key)); return }
         val uris=files.map{SharedFileProvider.uri(packageName,it.key)};val intent=Intent(if(files.size==1)Intent.ACTION_SEND else Intent.ACTION_SEND_MULTIPLE).apply{type=files.map{SharedFileProvider.mime(it.name)}.distinct().singleOrNull()?:"*/*";if(files.size==1)putExtra(Intent.EXTRA_STREAM,uris.first()) else putParcelableArrayListExtra(Intent.EXTRA_STREAM,ArrayList(uris))}

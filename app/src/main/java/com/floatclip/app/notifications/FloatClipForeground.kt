@@ -95,6 +95,16 @@ object FloatClipForeground {
             context,7080,Intent(context,UnifiedActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val flags=PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val restore=PendingIntent.getForegroundService(
+            context,7082,Intent(context,ClipboardOverlayService::class.java)
+                .setAction(ClipboardOverlayService.ACTION_RESTORE_OVERLAY),flags
+        )
+        val paused=SyncPreferences(context).connectionsPaused()
+        val shareAction=PendingIntent.getService(
+            context,7081,Intent(context,ClipboardSyncService::class.java)
+                .setAction(if(paused) ClipboardSyncService.RESUME else ClipboardSyncService.PAUSE),flags
+        )
         return Notification.Builder(context,CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("FloatClip")
@@ -105,6 +115,12 @@ object FloatClipForeground {
             .setShowWhen(false)
             .setOnlyAlertOnce(true)
             .setOngoing(true)
+            .apply {
+                if(detailed) {
+                    if(overlayRunning) addAction(Notification.Action.Builder(null,"恢复悬浮窗",restore).build())
+                    if(syncRunning) addAction(Notification.Action.Builder(null,if(paused) "恢复共享" else "暂停共享",shareAction).build())
+                }
+            }
             .build()
     }
 }

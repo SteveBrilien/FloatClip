@@ -1621,7 +1621,7 @@ class ClipboardOverlayService : Service() {
     private fun dp(value: Float): Int = (value * resources.displayMetrics.density).toInt()
 
     companion object {
-        private const val ACTION_RESTORE_OVERLAY = "com.floatclip.app.action.RESTORE_OVERLAY"
+        const val ACTION_RESTORE_OVERLAY = "com.floatclip.app.action.RESTORE_OVERLAY"
         const val ACTION_REFRESH_APPEARANCE = "com.floatclip.app.action.REFRESH_APPEARANCE"
         const val ACTION_REPOSITION_PANEL = "com.floatclip.app.action.REPOSITION_PANEL"
         private const val CLIPBOARD_POLL_MS = 650L

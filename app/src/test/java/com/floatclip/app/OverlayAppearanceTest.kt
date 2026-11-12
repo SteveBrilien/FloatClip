@@ -48,7 +48,6 @@ class OverlayAppearanceTest {
         prefs.saveSourceColors(false)
         prefs.saveTranslucentCards(false)
         prefs.saveDetailedNotification(true)
-        prefs.saveKeepAliveEnabled(false)
         prefs.saveOverlayEnabled(true)
         prefs.saveTransitionDurationMs(480)
         prefs.resetAppearance()
@@ -56,7 +55,6 @@ class OverlayAppearanceTest {
         assertTrue(prefs.translucentCards())
         assertEquals(240, prefs.transitionDurationMs())
         assertTrue(prefs.detailedNotification())
-        org.junit.Assert.assertFalse(prefs.keepAliveEnabled())
         assertTrue(prefs.overlayEnabled())
     }
 

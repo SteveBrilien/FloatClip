@@ -30,7 +30,6 @@ class RecoveryLifecycleTest {
         val context=RuntimeEnvironment.getApplication()
         context.getSharedPreferences("floatclip_overlay",Context.MODE_PRIVATE).edit().clear().commit()
         val prefs=OverlayPreferences(context)
-        prefs.saveKeepAliveEnabled(false)
         prefs.saveOverlayEnabled(enabled)
         org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true)
         java.io.File(context.filesDir,"floatclip_vault.bin").delete()
@@ -50,6 +49,30 @@ class RecoveryLifecycleTest {
             assertFalse(OverlayPreferences(owner.get()).overlayEnabled())
             assertNull(field(owner.get(),"bubbleView"))
         } finally { owner.destroy() }
+    }
+    @Test fun taskRemovalKeepsTheSameBubbleEvenWithTheOldRecoveryToggleOff() {
+        val owner = service()
+        val service = owner.get()
+        val prefs = OverlayPreferences(service)
+        val scheduler = com.floatclip.app.overlay.OverlayKeepAliveScheduler
+        service.getSharedPreferences("floatclip_overlay", Context.MODE_PRIVATE)
+            .edit().putBoolean("keep_alive_enabled", false).commit()
+        try {
+            val bubble = field(service, "bubbleView")
+            assertNotNull(bubble)
+            assertTrue(scheduler.shouldRun(service))
+            assertEquals(android.app.Service.START_STICKY, service.onStartCommand(null, 0, 1))
+            service.onTaskRemoved(android.content.Intent(service, UnifiedActivity::class.java))
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(400))
+            assertSame(bubble, field(service, "bubbleView"))
+            assertNotNull(shadowOf(service).lastForegroundNotification)
+            prefs.saveOverlayEnabled(false)
+            assertFalse(scheduler.shouldRun(service))
+        } finally {
+            prefs.saveOverlayEnabled(false)
+            scheduler.cancel(service)
+            owner.destroy()
+        }
     }
     @Test fun fortyImmediateOpenCloseCyclesRestoreVisibleTouchableBallWithoutWaitingForFrames() {
         val owner=service();val service=owner.get()

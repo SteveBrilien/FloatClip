@@ -1,0 +1,53 @@
+name: Publish Android build52
+on:
+  push:
+    branches: [delivery/android-build52]
+permissions:
+  contents: write
+concurrency:
+  group: floatclip-android-build52
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: v0.7.9-build52
+      APK: FloatClip-Android-0.7.9-build52.apk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '12266719'
+          packages: 'build-tools;35.0.1'
+          log-accepted-android-sdk-licenses: false
+      - name: Verify Android package and published source
+        shell: bash
+        run: |
+          set -euo pipefail
+          source=$(cat SOURCE_COMMIT.txt)
+          [[ "$source" =~ ^[a-f0-9]{40}$ ]]
+          git fetch --no-tags origin refs/heads/release/native-refresh
+          git merge-base --is-ancestor "$source" FETCH_HEAD
+          sha256sum --check SHA256SUMS.txt
+          tools="$ANDROID_HOME/build-tools/35.0.1"
+          "$tools/apksigner" verify --print-certs "$APK" | grep -Fx 'Signer #1 certificate SHA-256 digest: 0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c'
+          "$tools/aapt2" dump badging "$APK" | grep -F "package: name='com.floatclip.probe' versionCode='52' versionName='0.7.9'"
+      - name: Publish the verified APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          source=$(cat SOURCE_COMMIT.txt)
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --target "$source" --title 'FloatClip 0.7.9 · Android build52' \
+              --notes-file RELEASE_NOTES.md --prerelease --draft --latest=false "$APK" SHA256SUMS.txt
+          fi
+          mkdir -p "$RUNNER_TEMP/release-check"
+          gh release download "$TAG" --dir "$RUNNER_TEMP/release-check" --pattern "$APK"
+          (cd "$RUNNER_TEMP/release-check" && sha256sum --check "$GITHUB_WORKSPACE/SHA256SUMS.txt")
+          gh release edit "$TAG" --draft=false --prerelease

@@ -1,16 +1,16 @@
 {
   "version": "0.7.9",
-  "build": 40,
-  "sourceCommit": "7a0a3d7fa39ed8d44c5495f5154f4d4eb46dc6c9",
+  "build": 55,
+  "sourceCommit": "9412e587c5492a2797be1fea9d1185af083ecb41",
   "android": {
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-5d7663cdd44a4aae8a7d3b745001fee5/FloatClip-Android-0.7.9-build40-photo-candidate.apk?exp=0&sig=a69b2599aeaebc535490cb0d62daf9dc2cc396887509b5b4ed5a0f08366b33ba",
-    "sha256": "24d12dc362d0be627e2ca6b34b0a2ccf595d2b6ab1d33ddd3e16e5f5c082ba2f",
-    "bytes": 3968857
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-190eec3b1bd84cd4a73678cf3dd45dbc/FloatClip-Android-0.7.9-build55.apk?exp=0&sig=7d45a12ade439a33c0f0f6d9e6acbe33552dfd0754bfb3b4cd5b62e38cece0f3",
+    "sha256": "b4f963371c2a4c63f184ea552893a494ec47d557920838acad401732c4d44c2a",
+    "bytes": 4233666
   },
   "windows": {
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-94129d0b0a774869bbe454bc40eedd58/FloatClip-Windows-0.7.9-build40-photo-candidate.zip?exp=0&sig=6063476feb244599593e037543d15b1aa37f6ee06ab483d5c4797eafc5bd7dfe",
-    "sha256": "71f9fe9e9d0c9453e366af66d319f5ccca0dea017208649d61f257134bd21116",
-    "bytes": 78906077
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-f97c243e23a64ab0b7f4173369fa2100/FloatClip-Windows-0.7.9-build55.zip?exp=0&sig=c80461172f0924abc5c50b3a72e4e0ebaf718a478a5898759cc286dacbd668b9",
+    "sha256": "43010ea8597789b66ced68cbfbf90a322c82c17138f955794cf3fc32e3d15c57",
+    "bytes": 79079656
   },
-  "notes": "相机照片按预算采样导入，支持相册 ClipData/data URI 与 EXIF 方向校正；保留原图，必要时缩小导入副本。悬浮剪贴板新增查看全文、图片全屏缩放，返回后恢复面板；复制图片有按压、忙碌、成功/失败反馈。保留 build39 的按需历史、缓存/预取、窗口层级和动画设置。\n\n验证：Android 107 项回归、lint 0 error/25 warnings；Windows 236 项原生隔离检查（界面异常 0）及 48 项更新检查通过。APK 保持原包名和升级签名。\n\nMCP 直连：[Android APK](https://mcp.wmy-cloud.cn/artifacts/pub-5d7663cdd44a4aae8a7d3b745001fee5/FloatClip-Android-0.7.9-build40-photo-candidate.apk?exp=0&sig=a69b2599aeaebc535490cb0d62daf9dc2cc396887509b5b4ed5a0f08366b33ba) · [Windows ZIP](https://mcp.wmy-cloud.cn/artifacts/pub-94129d0b0a774869bbe454bc40eedd58/FloatClip-Windows-0.7.9-build40-photo-candidate.zip?exp=0&sig=6063476feb244599593e037543d15b1aa37f6ee06ab483d5c4797eafc5bd7dfe)。\n\n两端 Remote 当前离线，未覆盖安装到用户设备；真机相册格式/OEM 观感仍待验收。正式应用内更新源仍待 Windows 原签名器恢复。"
+  "notes": "FloatClip 0.7.9 build55 · 2026-11-14 验收候选版\n\nAndroid：按原始解码尺寸适配横图；支持记忆文件默认下载文件夹；新增克莱因蓝 #0F2254FF（应用与悬浮剪贴板/悬浮球主题）；长按全文采用沉浸式悬浮预览；修复深色透明背景选中分类的对比度和分类栏左侧错位；优化备份迁移 PIN 窗口与输入框。\n\nWindows：更新源暂时不可达不再显示失败横幅；文件支持拖放导入、可拖动预览宽度；Office 文件优先使用系统资源管理器缩略图，PPTX 可退回文档内嵌缩略图；修复重复复制同一张图片后未刷新最近记录。\n\n验证：Android 129 项单元测试通过，APK 与原应用同签名；Windows GitHub CI 成功、共享契约验证通过，Java ↔ C# 传输及重连回环测试通过。\n\n注意：Windows 文件页面需要安装相应预览处理器才能提供视觉缩略图，不是完整 PowerPoint 编辑/逐页渲染。Windows 构建未添加受信任代码签名，SmartScreen 仍可能提示。当前手机保留 build54，build55 未覆盖安装。正式签名更新清单尚未发布，暂请从 GitHub Releases 手动下载安装。"
 }

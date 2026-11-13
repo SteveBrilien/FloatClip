@@ -15,7 +15,13 @@ object FileUi {
     const val HIT=48
     data class Palette(val page:Int,val surface:Int,val text:Int,val muted:Int,val border:Int,val accent:Int,val selected:Int,val success:Int,val destructive:Int)
     fun palette(context:Context):Palette {
-        val dark=when(OverlayPreferences(context).themeMode().name){"DARK"->true;"LIGHT"->false;else->context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK==Configuration.UI_MODE_NIGHT_YES}
+        val mode=OverlayPreferences(context).themeMode().name
+        if(mode=="KLEIN")return Palette(
+            Color.rgb(15,34,84),Color.rgb(23,47,100),Color.rgb(242,247,255),Color.rgb(183,206,241),
+            Color.rgb(47,78,135),Color.rgb(160,205,255),Color.rgb(35,69,137),
+            Color.rgb(126,219,185),Color.rgb(255,165,177)
+        )
+        val dark=when(mode){"DARK"->true;"LIGHT"->false;else->context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK==Configuration.UI_MODE_NIGHT_YES}
         fun c(light:String,night:String)=Color.parseColor(if(dark)night else light)
         return Palette(c("#F0F3F8","#1A1B26"),c("#FFFFFF","#24283B"),c("#19283F","#E4E9FF"),c("#596C85","#BBC4E5"),c("#DCE3EF","#414868"),com.floatclip.probe.FloatClipAccent.color(OverlayPreferences(context).accentTheme(),dark),c("#EAF0FF","#303C5B"),c("#237858","#7EDDB7"),c("#B3263B","#FF9BA8"))
     }

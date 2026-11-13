@@ -23,7 +23,7 @@ public sealed partial class LocalClipboardWindow
     {
         var state=host.Updates.Snapshot;
         if(updateBanner!=null){
-            updateBanner.Visibility=state.Notice&&state.Phase is UpdatePhase.Available or UpdatePhase.Downloading or UpdatePhase.Ready or UpdatePhase.Failed?Visibility.Visible:Visibility.Collapsed;
+            updateBanner.Visibility=state.Notice&&state.Phase is UpdatePhase.Available or UpdatePhase.Downloading or UpdatePhase.Ready?Visibility.Visible:Visibility.Collapsed;
             var row=new DockPanel();var view=Button(state.Phase==UpdatePhase.Ready?"安装":"查看",ShowUpdates);view.MinHeight=30;view.Padding=new(10,4,10,4);view.Margin=new(8,0,0,0);DockPanel.SetDock(view,Dock.Right);row.Children.Add(view);
             var label=new TextBlock{Text=state.Message,FontSize=13,TextWrapping=TextWrapping.Wrap,VerticalAlignment=VerticalAlignment.Center};label.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Text");row.Children.Add(label);updateBanner.Child=row;
         }
@@ -38,7 +38,7 @@ public sealed partial class LocalClipboardWindow
     {
         section.Children.Clear();section.Children.Add(new TextBlock{Text="版本与更新",FontSize=20,FontWeight=FontWeights.SemiBold});
         section.Children.Add(MutedLabel("当前版本 "+ShareUpdates.Version+" · build "+ShareUpdates.Build,new(0,6,0,16)));
-        var status=new TextBlock{Text=state.Message,TextWrapping=TextWrapping.Wrap,Margin=new(0,0,0,12)};status.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Text");section.Children.Add(status);
+        var status=new TextBlock{Text=state.Phase==UpdatePhase.Failed?"暂未取得更新信息，可在联网后手动重试。":state.Message,TextWrapping=TextWrapping.Wrap,Margin=new(0,0,0,12)};status.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Text");section.Children.Add(status);
         if(state.Release!=null&&ShareUpdates.Compare(state.Release)>0)section.Children.Add(MutedLabel(state.Release.Notes,new(0,0,0,16)));
         if(state.Phase==UpdatePhase.Downloading){var bar=new ProgressBar{Minimum=0,Maximum=100,Value=state.Progress,Height=4,Margin=new(0,0,0,10)};bar.SetResourceReference(Control.ForegroundProperty,"FloatClip.Accent");bar.SetResourceReference(Control.BackgroundProperty,"FloatClip.Tint");section.Children.Add(bar);section.Children.Add(MutedLabel($"{state.Progress:F0}%",new(0,0,0,12)));}
         var actions=new WrapPanel{Margin=new(0,0,0,12)};

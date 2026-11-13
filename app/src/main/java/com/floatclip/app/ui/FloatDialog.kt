@@ -201,6 +201,11 @@ object FloatDialog {
 
     private fun palette(context:Context):P {
         val prefs=OverlayPreferences(context)
+        if(prefs.themeMode().name=="KLEIN") return P(
+            Color.rgb(23,47,100),Color.rgb(242,247,255),Color.rgb(183,206,241),
+            Color.rgb(47,78,135),Color.rgb(18,41,92),Color.rgb(160,205,255),
+            Color.rgb(36,66,121),true
+        )
         val dark=when(prefs.themeMode().name) {
             "DARK"->true;"LIGHT"->false
             else -> context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==

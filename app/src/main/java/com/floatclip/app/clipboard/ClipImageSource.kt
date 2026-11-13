@@ -18,6 +18,7 @@ import kotlin.math.floor
 internal class ClipImageSource(
     private val store: ClipStore,
     private val entry: ClipEntry,
+    private val onDimensions: ((Int, Int) -> Unit)? = null,
     private val onError: () -> Unit,
 ) : AutoCloseable {
     private data class Request(val rect: Rect, val sample: Int, val generation: Long, val done: (Bitmap, Rect) -> Unit)
@@ -54,10 +55,19 @@ internal class ClipImageSource(
                 if (closed || failed) return@runCatching null
                 val source = decoder ?: store.readImage(entry).let { bytes ->
                     if (closed) return@runCatching null
-                    BitmapRegionDecoder.newInstance(bytes, 0, bytes.size, false).also { decoder = it }
+                    BitmapRegionDecoder.newInstance(bytes, 0, bytes.size, false).also {
+                        decoder = it
+                        val width = it.width;val height = it.height
+                        main.post { if(!closed)onDimensions?.invoke(width,height) }
+                    }
                 }
                 if (closed) return@runCatching null
-                source.decodeRegion(request.rect, BitmapFactory.Options().apply { inSampleSize = request.sample })
+                // Older entries may contain stale width/height metadata. Clamp the first
+                // region request; the decoded dimensions callback then corrects the viewport.
+                val bounded=Rect(request.rect)
+                if(!bounded.intersect(0,0,source.width,source.height)) return@runCatching null
+                source.decodeRegion(bounded, BitmapFactory.Options().apply { inSampleSize = request.sample })
+                    ?.let { it to bounded }
             }.getOrElse {
                 failed = true
                 main.post { if (!closed) onError() }
@@ -65,7 +75,7 @@ internal class ClipImageSource(
             }
             if (bitmap != null) main.post {
                 val active = synchronized(lock) { !closed && generation == request.generation }
-                if (active) request.done(bitmap, request.rect) else bitmap.recycle()
+                if (active) request.done(bitmap.first, bitmap.second) else bitmap.first.recycle()
             }
         }
     }

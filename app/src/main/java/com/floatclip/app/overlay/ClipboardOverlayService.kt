@@ -43,6 +43,7 @@ import com.floatclip.app.clipboard.ClipboardRepository
 import com.floatclip.app.clipboard.ClipboardImages
 import com.floatclip.app.clipboard.ClipViewerActivity
 import com.floatclip.app.clipboard.ClipImageViewerView
+import com.floatclip.app.clipboard.ClipTextViewerView
 import com.floatclip.app.notifications.FloatClipForeground
 import com.floatclip.app.integration.AccessibilityPasteBridge
 import com.floatclip.app.integration.IntegrationRegistry
@@ -87,6 +88,7 @@ class ClipboardOverlayService : Service() {
     private var panelScrimParams: WindowManager.LayoutParams? = null
     private var panelPinButton: ImageView? = null
     private var inlineGallery: ClipImageViewerView? = null
+    private var inlineTextViewer: ClipTextViewerView? = null
     private var entryActionLayer: View? = null
     private var historyList: ClipboardHistoryList? = null
     private var historySnapshot=emptyList<ClipEntry>()
@@ -323,6 +325,7 @@ class ClipboardOverlayService : Service() {
         entryActionLayer = null
         pendingViewerToken=null
         closeInlineGallery()
+        closeInlineTextViewer()
         runCatching { unregisterReceiver(viewerReturn) }
         runCatching { unregisterReceiver(appearanceReceiver) }
         runCatching { unregisterReceiver(sharedHistoryChanged) }
@@ -397,6 +400,7 @@ class ClipboardOverlayService : Service() {
 
     private fun releasePanelWindows() {
         closeInlineGallery()
+        closeInlineTextViewer()
         handler.removeCallbacks(releaseIdlePanel)
         handler.removeCallbacks(clipboardPollRunnable)
         presentationGeneration++
@@ -1077,9 +1081,9 @@ class ClipboardOverlayService : Service() {
                 maxLines=1
                 ellipsize=android.text.TextUtils.TruncateAt.END
                 setPadding(dp(14),0,dp(14),0)
-                setTextColor(if(selected) accentColor(palette) else palette.secondaryText)
+                setTextColor(if(selected && palette.isDark) palette.primaryText else if(selected) accentColor(palette) else palette.secondaryText)
                 val chipAlpha=if(overlayPreferences.translucentCards()) { if(palette.isDark) 145 else 155 } else { if(palette.isDark) 190 else 220 }
-                background=roundedBackground(if(selected) withAlpha(accentColor(palette),if(palette.isDark)70 else 34) else withAlpha(palette.rowBackground,chipAlpha),12f)
+                background=roundedBackground(if(selected) selectedTabBackground(palette) else withAlpha(palette.rowBackground,chipAlpha),12f)
                 contentDescription="剪贴板来源：${source.name}"
                 setOnClickListener {
                     if(activeSource!=source.id){
@@ -1114,10 +1118,10 @@ class ClipboardOverlayService : Service() {
                     textSize = 12f
                     gravity = Gravity.CENTER
                     setPadding(dp(13), 0, dp(13), 0)
-                    setTextColor(if (selected) accentColor(palette) else palette.secondaryText)
+                    setTextColor(if (selected && palette.isDark) palette.primaryText else if (selected) accentColor(palette) else palette.secondaryText)
                     val chipAlpha=if(overlayPreferences.translucentCards()) { if(palette.isDark) 145 else 155 } else { if(palette.isDark) 190 else 220 }
                     background = roundedBackground(
-                        if (selected) withAlpha(accentColor(palette), if (palette.isDark) 70 else 34) else withAlpha(palette.rowBackground, chipAlpha),
+                        if (selected) selectedTabBackground(palette) else withAlpha(palette.rowBackground, chipAlpha),
                         12f,
                     )
                     setOnClickListener {
@@ -1144,7 +1148,9 @@ class ClipboardOverlayService : Service() {
         firstTab?.measure(0, 0)
         lastTab?.measure(0, 0)
         val viewport = (scroll.width - scroll.paddingLeft - scroll.paddingRight).coerceAtLeast(0)
-        val leadingSpace = if (center && firstTab != null) ((viewport - firstTab.measuredWidth) / 2).coerceAtLeast(0) else 0
+        // Never shift the first category chip away from the actual left edge.
+        // Center later categories with scroll offset and optional trailing space only.
+        val leadingSpace = 0
         val trailingSpace = if (center && lastTab != null) ((viewport - lastTab.measuredWidth) / 2).coerceAtLeast(0) else 0
         bar.setPaddingRelative(leadingSpace, 0, trailingSpace, 0)
         com.floatclip.app.ui.TabReveal.reveal(scroll, selectedView, center)
@@ -1341,10 +1347,8 @@ class ClipboardOverlayService : Service() {
     }
 
     private fun openEntryViewer(entry:ClipEntry) {
-        if(entry.kind=="image") {
-            openInlineGallery(entry)
-            return
-        }
+        if(entry.kind=="image") { openInlineGallery(entry);return }
+        if(entry.kind=="text") { openInlineTextViewer(entry);return }
         val token=java.util.UUID.randomUUID().toString()
         pendingViewerToken=token
         dismissEntryActionLayer(animated=false)
@@ -1354,6 +1358,31 @@ class ClipboardOverlayService : Service() {
             expandPanel(false)
             Toast.makeText(this,it.message?:"无法打开预览",Toast.LENGTH_LONG).show()
         }
+    }
+
+    private fun openInlineTextViewer(entry: ClipEntry) {
+        if(inlineTextViewer != null) return
+        dismissEntryActionLayer(animated=false)
+        val entries=store.entries().filter { it.kind=="text" &&
+            (activeSource.isBlank() || it.sourceDeviceId==activeSource) }
+        val viewer=ClipTextViewerView(this,store,
+            if(entries.any { it.id==entry.id }) entries else listOf(entry),entry.id,::closeInlineTextViewer)
+        val params=WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            android.graphics.PixelFormat.TRANSLUCENT,
+        ).apply { gravity=Gravity.START or Gravity.TOP;windowAnimations=0 }
+        if(overlayWindows.add(viewer,params)) {
+            inlineTextViewer=viewer;panelView?.dragEnabled=false
+        }
+    }
+
+    private fun closeInlineTextViewer() {
+        val viewer=inlineTextViewer ?: return
+        inlineTextViewer=null;overlayWindows.remove(viewer)
+        panelView?.dragEnabled=true
+        if(panelOpen)renderEntries(false)
     }
 
     /** A separate upper overlay keeps the existing panel/window and its scroll position alive. */
@@ -1599,6 +1628,15 @@ class ClipboardOverlayService : Service() {
 
     private fun accentColor(palette: OverlayPalette): Int =
         FloatClipAccent.color(overlayPreferences.accentTheme(), palette.isDark)
+
+    private fun selectedTabBackground(palette: OverlayPalette): Int {
+        val accent=accentColor(palette)
+        if(!palette.isDark) return withAlpha(accent, 75)
+        val base=palette.panelBackground
+        fun mix(a:Int,b:Int)=(a*.60f+b*.40f).toInt().coerceIn(0,255)
+        return Color.argb(248,mix(Color.red(base),Color.red(accent)),
+            mix(Color.green(base),Color.green(accent)),mix(Color.blue(base),Color.blue(accent)))
+    }
 
     private fun withAlpha(color: Int, alpha: Int): Int = Color.argb(
         alpha.coerceIn(0, 255),

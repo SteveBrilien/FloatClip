@@ -6,6 +6,7 @@ enum class OverlayThemeMode {
     SYSTEM,
     LIGHT,
     DARK,
+    KLEIN,
 }
 
 class OverlayPreferences(context: Context) {

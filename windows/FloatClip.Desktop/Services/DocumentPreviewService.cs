@@ -18,7 +18,7 @@ public static class DocumentPreviewService
     const int MaxText=24000,MaxXml=2*1024*1024,MaxEntries=1000;
     public static bool CanPreview(string path)=>Path.GetExtension(path).ToLowerInvariant() is
         ".pdf" or ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".webp" or
-        ".zip" or ".docx" or ".xlsx" or ".pptx" or ".txt" or ".md" or ".csv" or ".json" or ".log" or ".xml" or ".yaml" or ".yml" or ".cs" or ".py" or ".js" or ".ts" or ".ini";
+        ".zip" or ".docx" or ".xlsx" or ".pptx" or ".ppt" or ".doc" or ".xls" or ".txt" or ".md" or ".csv" or ".json" or ".log" or ".xml" or ".yaml" or ".yml" or ".cs" or ".py" or ".js" or ".ts" or ".ini";
     public static Task<DocumentPreview> ReadAsync(string path,CancellationToken token)=>Task.Run(()=>Read(path,token),token);
     internal static DocumentPreview Read(string path,CancellationToken token)
     {

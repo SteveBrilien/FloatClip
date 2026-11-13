@@ -16,7 +16,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 /** Shared by clipboard and file previews; all gestures use original-image coordinates. */
-class ZoomImageView(context: Context, private val fillHeight: Boolean = false) : View(context) {
+class ZoomImageView(context: Context, private var fillHeight: Boolean = false) : View(context) {
     var onHorizontalPage: ((Int) -> Boolean)? = null
     var onVerticalPage: ((Int) -> Boolean)? = null
     var onViewportChanged: ((Rect, Float) -> Unit)? = null
@@ -73,6 +73,13 @@ class ZoomImageView(context: Context, private val fillHeight: Boolean = false) :
     })
     init { isFocusable = true; contentDescription = "图片预览，双指缩放，拖动查看，双击切换缩放" }
 
+    /** Update only after decoding the actual original, never trust imported metadata alone. */
+    fun useDecodedDimensions(sourceWidth:Int,sourceHeight:Int) {
+        if(sourceWidth <= 0 || sourceHeight <= 0)return
+        fillHeight=sourceHeight>sourceWidth
+        originalWidth=sourceWidth;originalHeight=sourceHeight
+        reset();invalidate()
+    }
     fun setImageBitmap(value: Bitmap) = setImageBitmap(value, value.width, value.height)
     fun setImageBitmap(value: Bitmap, sourceWidth: Int, sourceHeight: Int) {
         val reset = originalWidth != sourceWidth || originalHeight != sourceHeight

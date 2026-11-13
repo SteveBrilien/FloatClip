@@ -51,7 +51,7 @@ class NativeBridge(private val activity: Activity, private val legacy: (String) 
         "clipboard.read" -> clipboard.readCurrentText().orEmpty().also { require(it.length <= 1000000) { "剪贴板文字过长" } }
         "clipboard.write" -> args.getString("text").let { require(it.length <= 1000000); clipboard.writeText(it); true }
         "theme.set" -> {
-            val mode = when (args.getString("theme")) { "dark" -> OverlayThemeMode.DARK; "light" -> OverlayThemeMode.LIGHT; "system" -> OverlayThemeMode.SYSTEM; else -> error("主题无效") }
+            val mode = when (args.getString("theme")) { "klein" -> OverlayThemeMode.KLEIN; "dark" -> OverlayThemeMode.DARK; "light" -> OverlayThemeMode.LIGHT; "system" -> OverlayThemeMode.SYSTEM; else -> error("主题无效") }
             OverlayPreferences(activity).saveThemeMode(mode)
             activity.sendBroadcast(Intent(ClipboardOverlayService.ACTION_REFRESH_APPEARANCE).setPackage(activity.packageName), "${activity.packageName}.permission.INTERNAL")
             (activity as? NodeActivity)?.applyBars(mode)

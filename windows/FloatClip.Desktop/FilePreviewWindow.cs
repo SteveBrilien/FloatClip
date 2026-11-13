@@ -97,6 +97,22 @@ internal sealed class FilePreviewPane:UserControl,IDisposable
                 var bitmap=await Task.Run(()=>LoadImage(path,2400),lifetime.Token);lifetime.Token.ThrowIfCancellationRequested();
                 ShowImage(bitmap);hint.Text=FileSizeFormatter.Format(new FileInfo(path).Length)+"  |  图片";return;
             }
+            if(ext is ".pptx" or ".ppt" or ".docx" or ".doc" or ".xlsx" or ".xls")
+            {
+                // Use the same native preview/thumbnail provider as Windows Explorer.
+                // Office slide layout is not reconstructible from Open XML text runs.
+                var rendered=await ExplorerDocumentThumbnail.GetAsync(path,lifetime.Token);
+                lifetime.Token.ThrowIfCancellationRequested();
+                if(rendered!=null)
+                {
+                    ShowImage(rendered);
+                    hint.Text="资源管理器文档页面预览 · 预览完整演示请用默认应用打开";
+                    return;
+                }
+                if(ext is ".ppt" or ".doc" or ".xls" or ".pptx") {
+                    hint.Text="缺少可用的文档页面缩略图处理程序，请用默认应用打开。";return;
+                }
+            }
             if(!CanPreview(path)){hint.Text="此类型暂不支持内嵌预览，可在资源管理器中查看。";return;}
             var document=await DocumentPreviewService.ReadAsync(path,lifetime.Token);lifetime.Token.ThrowIfCancellationRequested();
             hint.Text=FileSizeFormatter.Format(new FileInfo(path).Length)+"  |  "+document.Description;
@@ -138,7 +154,7 @@ internal sealed class FilePreviewPane:UserControl,IDisposable
         finally{rendering=false;previous.IsEnabled=pageIndex>0;next.IsEnabled=pdf!=null&&pageIndex+1<pdf.PageCount;}
     }
     internal static bool CanPreview(string path)=>DocumentPreviewService.CanPreview(path);
-    internal static bool CanOpenDocument(string path)=>Path.GetExtension(path).ToLowerInvariant() is ".pdf" or ".doc" or ".docx" or ".xls" or ".xlsx" or ".ppt" or ".pptx" or ".txt" or ".md" or ".csv" or ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".webp" or ".rtf";
+    internal static bool CanOpenDocument(string path)=>Path.GetExtension(path).ToLowerInvariant() is ".pdf" or ".doc" or ".docx" or ".xls" or ".xlsx" or ".ppt" or ".pptx" or ".ppt" or ".txt" or ".md" or ".csv" or ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".webp" or ".rtf";
     static BitmapSource LoadImage(string path,int decodeWidth){using var stream=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.ReadWrite|FileShare.Delete);return LoadImage(stream,decodeWidth);}
     static BitmapSource LoadImage(byte[] bytes,int decodeWidth){using var stream=new MemoryStream(bytes);return LoadImage(stream,decodeWidth);}
     static BitmapSource LoadImage(Stream stream,int decodeWidth)

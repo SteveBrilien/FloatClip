@@ -73,8 +73,13 @@ public sealed class FileShelfView:UserControl,IDisposable
     readonly Border activity=new(){Height=126,Padding=new Thickness(0,8,0,0),BorderThickness=new Thickness(0,1,0,0)};
     readonly TextBlock activitySummary=new(){Text="暂无传输活动",FontSize=12,VerticalAlignment=VerticalAlignment.Center};
     CancellationTokenSource? batch;
-    readonly ColumnDefinition detailsColumn=new(){Width=GridLength.Auto};
+    readonly ColumnDefinition detailsColumn=new(){Width=new GridLength(300),MinWidth=0};
+    readonly GridSplitter detailsSplitter=new(){Width=6,HorizontalAlignment=HorizontalAlignment.Stretch,
+        VerticalAlignment=VerticalAlignment.Stretch,ResizeDirection=GridResizeDirection.Columns,
+        ResizeBehavior=GridResizeBehavior.PreviousAndNext,ShowsPreview=true,
+        Cursor=Cursors.SizeWE,Visibility=Visibility.Collapsed};
     readonly Border details=new(){Visibility=Visibility.Collapsed,BorderThickness=new Thickness(1,0,0,0)};
+    double lastDetailsWidth=300;
     GridView? rowView;
     FilePreviewPane? detailPreview;
     string? detailKey;
@@ -87,6 +92,16 @@ public sealed class FileShelfView:UserControl,IDisposable
         this.preferencesRoot=preferencesRoot;this.sync=sync;this.storage=storage??DesktopStoragePreferences.Load(preferencesRoot,System.IO.Path.Combine(preferencesRoot,"Library"),true);store=sync?.Files.Store??new FileShelfStore(System.IO.Path.Combine(preferencesRoot,"file-shelf.json"));previewThumbnails=new FilePreviewThumbnailService(preferencesRoot);
         Background=Brushes.Transparent;SetResourceReference(ForegroundProperty,"FloatClip.Text");
         SetResourceReference(FontFamilyProperty,"FloatClip.FontFamily");SetResourceReference(FontSizeProperty,"FloatClip.Font.Body");
+        AllowDrop=true;
+        PreviewDragOver+=(_,e)=>{
+            e.Effects=e.Data.GetDataPresent(DataFormats.FileDrop)?DragDropEffects.Copy:DragDropEffects.None;
+            e.Handled=true;
+        };
+        PreviewDrop+=(_,e)=>{
+            if(e.Data.GetData(DataFormats.FileDrop) is string[] files)
+                ImportFiles(files.Where(File.Exists));
+            e.Handled=true;
+        };
         var root=new Grid();
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
@@ -139,11 +154,16 @@ public sealed class FileShelfView:UserControl,IDisposable
 
         var body=new Grid{Margin=new Thickness(12,0,12,0)};body.RowDefinitions.Add(new RowDefinition{Height=new GridLength(1,GridUnitType.Star)});body.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});body.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
         var localPanel=new DockPanel{LastChildFill=true};
-        body.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(1,GridUnitType.Star)});
+        body.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(1,GridUnitType.Star),MinWidth=250});
+        body.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(0)});
         body.ColumnDefinitions.Add(detailsColumn);
+        detailsSplitter.Background=Brushes.Transparent;
+        System.Windows.Automation.AutomationProperties.SetName(detailsSplitter,"拖动调整文件预览宽度");
+        Grid.SetColumn(detailsSplitter,1);body.Children.Add(detailsSplitter);
         details.SetResourceReference(Border.BorderBrushProperty,"FloatClip.Line");
         details.SetResourceReference(Border.BackgroundProperty,"FloatClip.Surface");
-        Grid.SetColumn(details,1);body.Children.Add(details);
+        Grid.SetColumn(details,2);body.Children.Add(details);
+        detailsSplitter.DragCompleted+=(_,_)=>{lastDetailsWidth=detailsColumn.ActualWidth;FitColumns();};
         var footer=new DockPanel{LastChildFill=true};
         var layoutButtons=new StackPanel{Orientation=Orientation.Horizontal};
         Button LayoutButton(string label,Wpf.Ui.Controls.SymbolRegular symbol,bool tiled)
@@ -161,7 +181,7 @@ public sealed class FileShelfView:UserControl,IDisposable
         tileLayout=LayoutButton("按块显示",Wpf.Ui.Controls.SymbolRegular.Grid24,true);
         layoutButtons.Children.Add(rowLayout);layoutButtons.Children.Add(tileLayout);DesignStates.SetIsSelected(rowLayout,true);
         DockPanel.SetDock(layoutButtons,Dock.Right);footer.Children.Add(layoutButtons);
-        selectedInfo.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Muted");selectedInfo.TextWrapping=TextWrapping.NoWrap;selectedInfo.TextTrimming=TextTrimming.CharacterEllipsis;selectedInfo.Height=28;selectedInfo.FontSize=12;selectedInfo.VerticalAlignment=VerticalAlignment.Center;selectedInfo.Margin=new Thickness(2,0,2,0);footer.Children.Add(selectedInfo);Grid.SetRow(footer,2);Grid.SetColumnSpan(footer,2);body.Children.Add(footer);
+        selectedInfo.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Muted");selectedInfo.TextWrapping=TextWrapping.NoWrap;selectedInfo.TextTrimming=TextTrimming.CharacterEllipsis;selectedInfo.Height=28;selectedInfo.FontSize=12;selectedInfo.VerticalAlignment=VerticalAlignment.Center;selectedInfo.Margin=new Thickness(2,0,2,0);footer.Children.Add(selectedInfo);Grid.SetRow(footer,2);Grid.SetColumnSpan(footer,3);body.Children.Add(footer);
         ConfigureList(localList,localRows);rowView=localList.View as GridView;
         System.Windows.Automation.AutomationProperties.SetAutomationId(localList,"FileShelfList");
         localList.SelectionChanged+=(_,_)=>{UpdateSelectedInfo();RefreshActions();QueueDetailsRefresh();};
@@ -185,7 +205,7 @@ public sealed class FileShelfView:UserControl,IDisposable
         More("直接发送到设备",()=>{var menu=new ContextMenu();if(sync!=null)foreach(var peer in sync.Transfers.Peers()){var item=new MenuItem{Header=peer.Name};item.Click+=(_,_)=>Run(()=>{peers.SelectedItem=peer;SendSelected();});menu.Items.Add(item);}if(menu.Items.Count==0)menu.Items.Add(new MenuItem{Header="暂无文件连接",IsEnabled=false});menu.PlacementTarget=more;menu.IsOpen=true;});
         DockPanel.SetDock(transferActions,Dock.Bottom);transferPanel.Children.Add(transferActions);
         ConfigureList(transferList,transferRows);System.Windows.Automation.AutomationProperties.SetAutomationId(transferList,"TransferActivityList");transferList.SelectionChanged+=(_,_)=>RefreshActions();transferList.MouseDoubleClick+=(_,_)=>OpenSelectedTransfer();transferPanel.Children.Add(transferList);
-        transferList.MinHeight=0;Grid.SetColumnSpan(activity,2);activity.Child=transferPanel;activity.Margin=new Thickness(0,8,0,0);activity.SetResourceReference(Border.BorderBrushProperty,"FloatClip.Line");Grid.SetRow(activity,1);body.Children.Add(activity);
+        transferList.MinHeight=0;Grid.SetColumnSpan(activity,3);activity.Child=transferPanel;activity.Margin=new Thickness(0,8,0,0);activity.SetResourceReference(Border.BorderBrushProperty,"FloatClip.Line");Grid.SetRow(activity,1);body.Children.Add(activity);
         Grid.SetRow(body,2);root.Children.Add(body);
 
         status.TextWrapping=TextWrapping.NoWrap;status.TextTrimming=TextTrimming.CharacterEllipsis;status.FontSize=12;status.Margin=new Thickness(14,0,14,6);status.Visibility=Visibility.Collapsed;status.SetResourceReference(TextBlock.ForegroundProperty,"FloatClip.Text");Grid.SetRow(status,3);root.Children.Add(status);
@@ -243,8 +263,9 @@ public sealed class FileShelfView:UserControl,IDisposable
     }
     void FitColumns()
     {
-        if(showDetails)details.Width=Math.Clamp(ActualWidth/3,156,320);
-        double available=Math.Max(320,ActualWidth-36-(showDetails?details.Width:0));
+        // The width is driven by the GridSplitter, not re-assigned on each layout.
+        // Leave the user's chosen ratio intact when the file list redraws.
+        double available=Math.Max(320,ActualWidth-36-(showDetails?detailsColumn.ActualWidth+6:0));
         foreach(var list in new[]{localList,transferList})
         {
             if(list.View is not GridView view||view.Columns.Count<6)continue;
@@ -375,14 +396,24 @@ public sealed class FileShelfView:UserControl,IDisposable
     void AddFiles()
     {
         var dialog=new OpenFileDialog{Title="添加到 FloatClip 文件清单",Filter="所有文件 (*.*)|*.*",Multiselect=true,CheckFileExists=true};
-        if(dialog.ShowDialog(Window.GetWindow(this))!=true)return;
-        int added=0;string? last=null;var errors=new System.Collections.Generic.List<string>();
-        foreach(string file in dialog.FileNames)
+        if(dialog.ShowDialog(Window.GetWindow(this))==true)ImportFiles(dialog.FileNames);
+    }
+    void ImportFiles(IEnumerable<string> paths)
+    {
+        int added=0;string? last=null;var errors=new List<string>();
+        foreach(string path in paths.Distinct(StringComparer.OrdinalIgnoreCase).Take(128))
         {
-            try{if(store.Load().Length>=FileCatalog.MaximumShared)throw new IOException("最多共享 64 个文件，请先移除不需要的条目");var row=store.Add(file);added++;last=row.Path;}
-            catch(IOException e){if(errors.Count<4)errors.Add(System.IO.Path.GetFileName(file)+": "+e.Message);}
+            try{
+                if(!File.Exists(path))continue;
+                if(store.Load().Length>=FileCatalog.MaximumShared)throw new IOException("最多共享 64 个文件，请先移除不需要的条目");
+                var row=store.Add(path);added++;last=row.Path;
+            }
+            catch(Exception error)when(error is IOException or UnauthorizedAccessException or ArgumentException){
+                if(errors.Count<4)errors.Add(System.IO.Path.GetFileName(path)+": "+error.Message);
+            }
         }
-        sync?.Files.Publish();sync?.RequestFileConnection();RefreshLocal(last);status.Text=errors.Count==0?$"已添加 {added} 个文件":$"已添加 {added} 个文件。"+string.Join("；",errors);
+        if(added>0){sync?.Files.Publish();sync?.RequestFileConnection();RefreshLocal(last);}
+        status.Text=errors.Count==0?$"已添加 {added} 个文件":$"已添加 {added} 个文件。"+string.Join("；",errors);
     }
     void RemoveLocal()
     {
@@ -443,10 +474,18 @@ public sealed class FileShelfView:UserControl,IDisposable
 
     void SetDetails(bool visible,bool preview=false)
     {
+        if(showDetails && !visible && detailsColumn.ActualWidth>=160)
+            lastDetailsWidth=detailsColumn.ActualWidth;
         showDetails=visible;
         showPreview=preview;
         detailKey=null;
         details.Visibility=visible?Visibility.Visible:Visibility.Collapsed;
+        detailsSplitter.Visibility=visible?Visibility.Visible:Visibility.Collapsed;
+        var fileGrid=details.Parent as Grid;
+        if(fileGrid!=null && fileGrid.ColumnDefinitions.Count==3)
+            fileGrid.ColumnDefinitions[1].Width=visible?new GridLength(6):new GridLength(0);
+        detailsColumn.MinWidth=visible?160:0;
+        detailsColumn.Width=visible?new GridLength(Math.Clamp(lastDetailsWidth,160,Math.Max(160,ActualWidth-320))):new GridLength(0);
         FitColumns();
         RefreshDetails();
     }

@@ -1236,6 +1236,7 @@ open class MainActivity : Activity() {
         OverlayThemeMode.SYSTEM to "跟随系统",
         OverlayThemeMode.LIGHT to "浅色",
         OverlayThemeMode.DARK to "东京夜色",
+        OverlayThemeMode.KLEIN to "克莱因蓝",
     )
 
     private fun accentSelector(): View = LinearLayout(this).apply {
@@ -2071,7 +2072,23 @@ open class MainActivity : Activity() {
             OverlayThemeMode.SYSTEM -> systemDark
             OverlayThemeMode.LIGHT -> false
             OverlayThemeMode.DARK -> true
+            OverlayThemeMode.KLEIN -> true
         }
+        if (overlayPreferences.themeMode() == OverlayThemeMode.KLEIN) return AppColors(
+            pageBackground = Color.rgb(15, 34, 84),
+            cardBackground = Color.rgb(23, 47, 100),
+            primaryText = Color.rgb(242, 247, 255),
+            secondaryText = Color.rgb(180, 203, 239),
+            dividerColor = Color.rgb(47, 78, 135),
+            accent = Color.rgb(160, 205, 255),
+            accentTextOnFill = Color.rgb(15, 34, 84),
+            actionBackground = Color.rgb(36, 66, 121),
+            fieldBackground = Color.rgb(18, 41, 92),
+            borderColor = Color.rgb(47, 78, 135),
+            navigationBackground = Color.rgb(12, 27, 72),
+            selectedNavigationBackground = Color.rgb(35, 69, 137),
+            dark = true,
+        )
         // Keep the app shell on the same token family as DeviceActivity / ShareDesign.
         return if (dark) {
             AppColors(

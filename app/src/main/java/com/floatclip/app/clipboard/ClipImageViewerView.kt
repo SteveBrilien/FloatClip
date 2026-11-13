@@ -192,7 +192,9 @@ class ClipImageViewerView(
         val progress = ProgressBar(context).apply { indeterminateTintList = ColorStateList.valueOf(Color.WHITE) }
         // Portrait images may begin at full-height; landscape images must fit completely
         // inside the viewport (no forced height crop). Pinch and double-tap still zoom.
-        val zoom = ZoomImageView(context, fillHeight = shouldFillHeight(entry.imageWidth, entry.imageHeight)).apply {
+        // Start with fit-to-screen. An old entry's metadata can be transposed or stale.
+        // Decoded original dimensions decide whether full-height portrait is appropriate.
+        val zoom = ZoomImageView(context, fillHeight = false).apply {
             onHorizontalPage = ::page
             onVerticalPage = ::categoryPage
             setOnClickListener { toggleChrome() }
@@ -201,7 +203,13 @@ class ClipImageViewerView(
         imageHost.addView(zoom, LayoutParams(-1, -1))
         imageHost.addView(progress, LayoutParams(dp(40), dp(40), Gravity.CENTER))
         var hasImage = false
-        val source = ClipImageSource(store, entry) {
+        var decodedDimensions: Pair<Int,Int>? = null
+        val source = ClipImageSource(store, entry, onDimensions = { w,h ->
+            if(!closed && zoomView === zoom && w>0 && h>0) {
+                decodedDimensions = w to h
+                zoom.useDecodedDimensions(w,h)
+            }
+        }) {
             if (!closed && zoomView === zoom && !hasImage) {
                 progress.visibility = View.GONE
                 imageHost.addView(TextView(context).apply {
@@ -229,7 +237,8 @@ class ClipImageViewerView(
             if (!closed && zoomView === zoom && bitmap != null) {
                 hasImage = true
                 progress.visibility = View.GONE
-                zoom.setImageBitmap(bitmap, entry.imageWidth, entry.imageHeight)
+                val (w,h)=decodedDimensions ?: (entry.imageWidth to entry.imageHeight)
+                zoom.setImageBitmap(bitmap, w.coerceAtLeast(1), h.coerceAtLeast(1))
             }
         }
         val animate = (horizontal != 0 || vertical != 0) && android.animation.ValueAnimator.areAnimatorsEnabled()

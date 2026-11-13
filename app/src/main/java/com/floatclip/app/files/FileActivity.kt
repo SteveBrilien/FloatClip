@@ -70,7 +70,7 @@ class FileActivity:Activity(),SyncRuntime.Observer {
     override fun dispatchTouchEvent(event:android.view.MotionEvent):Boolean{if(event.actionMasked==android.view.MotionEvent.ACTION_DOWN)EntryGestureRow.closeOutside(event.rawX,event.rawY);return super.dispatchTouchEvent(event)}
     private fun palette(){
         colors=FileUi.palette(this)
-        val dark=when(OverlayPreferences(this).themeMode().name){"DARK"->true;"LIGHT"->false;else->resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK==Configuration.UI_MODE_NIGHT_YES}
+        val dark=when(OverlayPreferences(this).themeMode().name){"DARK","KLEIN"->true;"LIGHT"->false;else->resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK==Configuration.UI_MODE_NIGHT_YES}
         page=colors.page;card=colors.surface;text=colors.text;muted=colors.muted;line=colors.border;accent=colors.accent;tint=colors.selected
         window.statusBarColor=page;window.navigationBarColor=page
         window.decorView.systemUiVisibility=if(dark)0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
@@ -94,6 +94,21 @@ class FileActivity:Activity(),SyncRuntime.Observer {
             importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
         },LinearLayout.LayoutParams(dp(15),dp(15)).apply{marginStart=dp(4)})
         setOnClickListener { action() }
+    }
+    private val fileOptions get()=getSharedPreferences("floatclip_file_options",MODE_PRIVATE)
+    private fun defaultTree():Uri? {
+        val raw=fileOptions.getString("default_folder",null) ?: return null
+        val uri=runCatching { Uri.parse(raw) }.getOrNull() ?: return null
+        return uri.takeIf { target->contentResolver.persistedUriPermissions.any { it.uri==target && it.isWritePermission } }
+    }
+    private fun directoryLabel():String=defaultTree()?.let { tree->
+        runCatching { android.provider.DocumentsContract.getTreeDocumentId(tree).substringAfter(':').ifBlank { "已授权文件夹" } }
+            .getOrDefault("已授权文件夹")
+    } ?: "未设置 · 首次下载时选择"
+    private fun selectDefaultFolder(){
+        if(busy)return
+        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),102)
     }
     private val savedFiles get()=getSharedPreferences("floatclip_saved_files",MODE_PRIVATE)
     private fun savedUri(file:SharedFile):Uri? {
@@ -132,6 +147,15 @@ class FileActivity:Activity(),SyncRuntime.Observer {
         connectionRow.addView(ImageView(this).apply{setImageResource(R.drawable.ic_device_computer);imageTintList=android.content.res.ColorStateList.valueOf(if(peers>0)colors.success else muted)},LinearLayout.LayoutParams(dp(20),dp(20)).apply{marginEnd=dp(10)})
         connectionRow.addView(label(connection,12f,muted).apply{maxLines=2},LinearLayout.LayoutParams(0,-2,1f))
         connectionRow.addView(button("设备"){devices()});shell.addView(connectionRow,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(10);bottomMargin=dp(4)})
+        shell.addView(row().apply {
+            minimumHeight=dp(48)
+            addView(fileIcon(R.drawable.ic_folder,accent,20),LinearLayout.LayoutParams(dp(20),dp(20)).apply { marginEnd=dp(12) })
+            addView(column().apply {
+                addView(label("默认下载目录",13f,text))
+                addView(label(directoryLabel(),11.5f,muted).apply { maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.MIDDLE })
+            },LinearLayout.LayoutParams(0,-2,1f))
+            addView(button("更换"){selectDefaultFolder()})
+        },LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(4)})
         if(repo.warning.isNotEmpty())shell.addView(label(repo.warning,12f,muted).apply{setPadding(0,0,0,dp(8))})
         val filter=row()
         filter.addView(button(if(selecting)"完成" else "选择") { selecting=!selecting;selected.clear();render() })
@@ -268,19 +292,35 @@ class FileActivity:Activity(),SyncRuntime.Observer {
     }
     private fun devices(){startActivity(Intent(this,DeviceActivity::class.java).putExtra("devicesOnly",true))}
     private fun pickFiles(){if(busy)return;startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE);putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true)},100)}
-    private fun chooseFolder(files:List<SharedFile>){if(files.isEmpty()){message("请先选择文件");return};if(busy)return;treeSelection=files;startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),101)}
+    private fun chooseFolder(files:List<SharedFile>){
+        if(files.isEmpty()){message("请先选择文件");return}
+        if(busy)return
+        val saved=defaultTree()
+        if(saved!=null){prepare(files,"folder",saved);return}
+        treeSelection=files
+        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),101)
+    }
     @Deprecated("Native Activity results") override fun onActivityResult(request:Int,result:Int,data:Intent?){super.onActivityResult(request,result,data);if(result!=RESULT_OK)return
         if(request==100){val uris=if(data?.clipData!=null)(0 until data.clipData!!.itemCount).map{data.clipData!!.getItemAt(it).uri} else listOfNotNull(data?.data);worker.execute{var count=0;var error="";for(uri in uris)try{repo.import(uri);count++}catch(e:Exception){error=e.message?:"无法读取文件";break};main.post{message(if(error.isEmpty())"已添加 $count 个文件" else "已添加 $count 个文件：$error");render()}}}
-        if(request==101){val uri=data?.data?:return;runCatching{
-            val grants=data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            when(grants){
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION->contentResolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-                Intent.FLAG_GRANT_READ_URI_PERMISSION->contentResolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                Intent.FLAG_GRANT_WRITE_URI_PERMISSION->contentResolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            }
-        };prepare(treeSelection,"folder",uri);treeSelection=emptyList()}
+        if(request==101 || request==102){
+            val uri=data?.data?:return
+            val granted=runCatching {
+                val flags=data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                require(flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0) { "该文件夹没有写入授权" }
+                contentResolver.takePersistableUriPermission(uri,flags)
+                contentResolver.persistedUriPermissions.any { it.uri==uri && it.isWritePermission }
+            }.getOrDefault(false)
+            if(!granted){message("文件夹未授权写入，请重新选择");treeSelection=emptyList();return}
+            fileOptions.edit().putString("default_folder",uri.toString()).apply()
+            if(request==101){val files=treeSelection;treeSelection=emptyList();prepare(files,"folder",uri)}
+            else{message("默认下载目录已保存");render()}
+        }
     }
-    private fun manage(anchor:View){menu?.dismiss();menu=com.floatclip.app.ui.FloatMenu.show(anchor,listOf("设备与配对","清理当前时间范围内的下载缓存","清除当前时间范围内的文件记录")){when(it){0->devices();1->clear(false);2->clear(true)}}}
+    private fun manage(anchor:View){menu?.dismiss();menu=com.floatclip.app.ui.FloatMenu.show(anchor,
+        listOf("设置默认下载文件夹","设备与配对","清理当前时间范围内的下载缓存","清除当前时间范围内的文件记录")) {
+        when(it){0->selectDefaultFolder();1->devices();2->clear(false);3->clear(true)}
+    }}
     private fun clear(records:Boolean){val files=if(selecting)picked() else visible();val eligible=files.filter{!it.kept};FloatDialog.show(this,if(records)"清除文件记录" else "清理下载缓存","将处理 ${eligible.size} 个文件，跳过 ${files.size-eligible.size} 个保留文件。"+if(records)"本机分享的应用内副本也会移除，原始文件不受影响。" else "保留文件清单，之后可以重新下载。",onPositive={repo.clear(files,records,true);selected.clear();render();true})}
     private fun prepare(files:List<SharedFile>,mode:String,tree:Uri?){
         if(busy||files.isEmpty()){if(files.isEmpty())message("请先选择文件");return};busy=true;canceled=false

@@ -37,12 +37,24 @@ class AdaptiveOverlayThemeProvider(
     override fun bubblePalette(): OverlayPalette = paletteFor(preferences.bubbleThemeMode())
 
     private fun paletteFor(mode: OverlayThemeMode): OverlayPalette {
+        // Klein blue: #0F2254FF in RGBA, opaque navy #0F2254.
+        // Surface/text contrast is shared by the bubble and the floating panel.
+        if (mode == OverlayThemeMode.KLEIN) return OverlayPalette(
+            bubbleBackground = Color.rgb(15, 34, 84),
+            panelBackground = Color.rgb(15, 34, 84),
+            rowBackground = Color.rgb(27, 56, 116),
+            primaryText = Color.rgb(242, 247, 255),
+            secondaryText = Color.rgb(183, 206, 241),
+            isDark = true,
+            source = "standalone:klein",
+        )
         val systemNight = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
             Configuration.UI_MODE_NIGHT_YES
         val requestedDark = when (mode) {
             OverlayThemeMode.SYSTEM -> systemNight
             OverlayThemeMode.LIGHT -> false
             OverlayThemeMode.DARK -> true
+            OverlayThemeMode.KLEIN -> true
         }
 
         val fallback = fallbackPalette(requestedDark)

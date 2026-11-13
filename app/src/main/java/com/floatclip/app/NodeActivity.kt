@@ -27,8 +27,8 @@ class NodeActivity : Activity() {
         catch (_: Throwable) { fallback("共享页面暂不可用，本机剪贴板仍可使用") }
     }
     fun applyBars(mode: OverlayThemeMode) {
-        val dark = mode == OverlayThemeMode.DARK || mode == OverlayThemeMode.SYSTEM && resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        window.statusBarColor = Color.parseColor(if (dark) "#1A1B26" else "#F4F7FC")
+        val dark = (mode == OverlayThemeMode.DARK || mode == OverlayThemeMode.KLEIN) || mode == OverlayThemeMode.SYSTEM && resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        window.statusBarColor = Color.parseColor(if(mode==OverlayThemeMode.KLEIN)"#0F2254" else if(dark) "#1A1B26" else "#F4F7FC")
         window.navigationBarColor = Color.parseColor(if (dark) "#162235" else "#FFFFFF")
         window.decorView.systemUiVisibility = if (dark) 0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
     }
@@ -80,7 +80,7 @@ class NodeActivity : Activity() {
     private fun fallback(message: String) {
         trusted = false
         val mode = OverlayPreferences(this).themeMode()
-        val dark = mode == OverlayThemeMode.DARK || mode == OverlayThemeMode.SYSTEM && resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        val dark = (mode == OverlayThemeMode.DARK || mode == OverlayThemeMode.KLEIN) || mode == OverlayThemeMode.SYSTEM && resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(40, 40, 40, 40); setBackgroundColor(Color.parseColor(if (dark) "#1A1B26" else "#F4F7FC")) }
         root.addView(TextView(this).apply { text = "FloatClip"; textSize = 27f; setTextColor(Color.parseColor(if (dark) "#C0CAF5" else "#19283F")) })
         root.addView(TextView(this).apply { text = message; textSize = 15f; setPadding(0, 25, 0, 25); setTextColor(Color.parseColor(if (dark) "#9AA5CE" else "#596C85")) })

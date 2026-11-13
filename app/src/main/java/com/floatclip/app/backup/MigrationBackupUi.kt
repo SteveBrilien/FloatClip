@@ -6,7 +6,10 @@ import android.text.InputFilter
 import android.text.InputType
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
+import android.view.Gravity
+import android.graphics.Typeface
 import com.floatclip.app.clipboard.ClipStore
 import com.floatclip.app.security.PortableVaultCrypto
 import com.floatclip.app.ui.FloatDialog
@@ -19,8 +22,14 @@ class MigrationBackupUi(private val owner:Activity,private val store:ClipStore,p
     fun export() {
         val first=pinField("设置 6 位迁移 PIN")
         val confirm=pinField("再次输入 PIN")
-        val box=LinearLayout(owner).apply { orientation=LinearLayout.VERTICAL;addView(first);addView(confirm) }
-        FloatDialog.show(owner,"导出迁移包","包含文字、图片、分类及固定/置顶记录。请记住 PIN，在新设备导入时使用。",custom=box,negative="取消",positive="选择保存位置") {
+        val box=LinearLayout(owner).apply {
+            orientation=LinearLayout.VERTICAL
+            addView(pinSection("迁移密码",first))
+            addView(pinSection("确认密码",confirm),LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(12)})
+            addView(hint("迁移密码仅用于加密当前导出的文件，不会同步到其他设备。"),
+                LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(13)})
+        }
+        FloatDialog.show(owner,"导出迁移包","加密备份将包含文字、图片、分类及受保护记录。请妥善保管迁移密码。",custom=box,negative="取消",positive="选择保存位置") {
             val pin=first.text.toString()
             if(!pin.matches(Regex("\\d{6}")) || pin!=confirm.text.toString()) {
                 confirm.error="请输入两次相同的 6 位数字";false
@@ -57,7 +66,13 @@ class MigrationBackupUi(private val owner:Activity,private val store:ClipStore,p
             }.apply { name="FloatClip migration export";start() }
         } else {
             val pin=pinField("输入迁移包的 6 位 PIN")
-            FloatDialog.show(owner,"导入迁移包","先验证文件，确认后合并到本机历史。设备授权需要重新配对。",custom=pin,negative="取消",positive="验证") { handle ->
+            val form=LinearLayout(owner).apply {
+                orientation=LinearLayout.VERTICAL
+                addView(pinSection("迁移密码",pin))
+                addView(hint("验证成功后会展示记录数量，再由你确认是否合并；不会覆盖本机已有记录。"),
+                    LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(12)})
+            }
+            FloatDialog.show(owner,"验证迁移文件","导入前先检查文件完整性。设备授权信息不会随备份迁移。",custom=form,negative="取消",positive="验证") { handle ->
                 val value=pin.text.toString()
                 if(!value.matches(Regex("\\d{6}"))) {pin.error="请输入 6 位数字";false} else {
                     handle.primary?.isEnabled=false
@@ -109,15 +124,35 @@ class MigrationBackupUi(private val owner:Activity,private val store:ClipStore,p
             false
         }
     }
+    private fun dp(value:Int)=(value*owner.resources.displayMetrics.density+.5f).toInt()
+    private fun hint(value:String)=TextView(owner).apply {
+        text=value;textSize=12f
+        setTextColor(com.floatclip.app.ui.FileUi.palette(owner).muted)
+        setLineSpacing(dp(3).toFloat(),1.04f)
+        includeFontPadding=false
+    }
+    private fun pinSection(title:String,field:EditText)=LinearLayout(owner).apply {
+        orientation=LinearLayout.VERTICAL
+        addView(TextView(owner).apply {
+            text=title;textSize=14f
+            typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+            setTextColor(com.floatclip.app.ui.FileUi.palette(owner).text)
+            includeFontPadding=false
+        },LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(8)})
+        addView(field,LinearLayout.LayoutParams(-1,dp(52)))
+    }
     private fun pinField(hintText:String)=EditText(owner).apply {
         hint=hintText;isSingleLine=true
         inputType=InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
         filters=arrayOf(InputFilter.LengthFilter(6))
         val palette=com.floatclip.app.ui.FileUi.palette(owner)
         setTextColor(palette.text);setHintTextColor(palette.muted)
-        background=com.floatclip.app.ui.FileUi.shape(owner,palette.surface,palette.border)
-        val padding=(12*resources.displayMetrics.density).toInt()
-        setPadding(padding,padding,padding,padding)
+        textSize=17f;letterSpacing=.20f;gravity=Gravity.CENTER_VERTICAL
+        setSelectAllOnFocus(false)
+        minHeight=dp(52)
+        contentDescription=hintText
+        background=com.floatclip.app.ui.FileUi.shape(owner,palette.surface,palette.border,12)
+        setPadding(dp(16),0,dp(14),0)
     }
     private fun toast(text:String)=Toast.makeText(owner,text,Toast.LENGTH_LONG).show()
     companion object { const val EXPORT=6241;const val IMPORT=6242 }

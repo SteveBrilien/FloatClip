@@ -73,7 +73,8 @@ public sealed class FileShelfView:UserControl,IDisposable
     readonly Border activity=new(){Height=126,Padding=new Thickness(0,8,0,0),BorderThickness=new Thickness(0,1,0,0)};
     readonly TextBlock activitySummary=new(){Text="暂无传输活动",FontSize=12,VerticalAlignment=VerticalAlignment.Center};
     CancellationTokenSource? batch;
-    readonly ColumnDefinition detailsColumn=new(){Width=new GridLength(300),MinWidth=0};
+    // Closed details must occupy no grid space; only the user's visible preview is resizable.
+    readonly ColumnDefinition detailsColumn=new(){Width=new GridLength(0),MinWidth=0};
     readonly GridSplitter detailsSplitter=new(){Width=6,HorizontalAlignment=HorizontalAlignment.Stretch,
         VerticalAlignment=VerticalAlignment.Stretch,ResizeDirection=GridResizeDirection.Columns,
         ResizeBehavior=GridResizeBehavior.PreviousAndNext,ShowsPreview=true,

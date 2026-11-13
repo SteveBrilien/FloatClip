@@ -3,12 +3,12 @@
   "platforms": {
     "android": {
       "version": "0.7.9",
-      "build": 49,
+      "build": 55,
       "review": "docs/ANDROID_BUILD49_RECOVERY.md"
     },
     "windows": {
       "version": "0.7.9",
-      "build": 44,
+      "build": 55,
       "review": "docs/WINDOWS_RECOVERY_BUILD44_2026-11-10.md"
     }
   }

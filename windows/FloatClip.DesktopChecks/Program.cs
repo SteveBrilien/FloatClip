@@ -194,7 +194,8 @@ static class Program
             window.Width=760;Pump();
             Call(fileView,"ShowProperties");Pump();
             var details=Field<Border>(fileView,"details");
-            Check(details.IsVisible&&Grid.GetColumn(details)==1&&window.OwnedWindows.Count==0,"selected file properties open in the right-side pane");
+            Check(details.IsVisible&&Grid.GetColumn(details)==2&&window.OwnedWindows.Count==0,"selected file properties open in the right-side pane");
+            Check(Descendants(fileView).OfType<GridSplitter>().Any(splitter=>splitter.IsVisible),"visible file details have an adjustable divider");
             Call(fileView,"SetDetails",false,false);Pump();
             Call(fileView,"SetFileLayout",true);Pump();
             Check(nativeFileList.View==null&&nativeFileList.SelectedIndex==0,"tile layout preserves file selection");

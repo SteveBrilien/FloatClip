@@ -287,7 +287,9 @@ public sealed partial class ClipboardVault
                 return snapshot;
             }
             var previous=entries.OfType<JsonObject>().FirstOrDefault(c=>Kind(c)=="image"&&c["imageSha256"]?.GetValue<string>()==hash);
-            if(previous!=null)return snapshot; // Duplicate delivery: ACK without mutation.
+            // Same bytes copied again are a new user event, not a network retry.
+            // Exact event IDs above remain idempotent. Reuse the existing image blob and
+            // protected metadata, but refresh the event ID/timestamp and recent ordering.
             JsonObject row;string imageRef;bool fresh=previous==null;
             JsonObject? evicted=null;
             if(previous!=null){row=(JsonObject)previous.DeepClone();imageRef=row["imageRef"]!.GetValue<string>();entries.Remove(previous);}

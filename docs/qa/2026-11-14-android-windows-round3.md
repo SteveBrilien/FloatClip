@@ -10,6 +10,7 @@ Source base: 0.7.9 build54 (`b9874132`), verified on vivo V2115A PD2115. Separat
 - Android migration backup: labeled PIN input groups, spacing and copy aligned with dialog system, validates six-digit PIN and requires verification before merge.
 - Windows update: no persistent 'cannot check updates' clipboard banner when network/GitHub cannot be reached; a manual button remains.
 - Windows files: drag-drop files into shelf using existing store validation, WPF resizable preview pane, Explorer shell thumbnail providers for Office documents with embedded PPTX thumbnail fallback.
+- Windows image sync: repeated copying of the same image now refreshes its event ID/ordering while preserving the existing image blob and pinned/locked/category flags. Network retries with the exact same event ID remain idempotent; native Windows CI discovered this regression.
 - Windows signing: **no self-signed trust bypass**. Signed binaries require a legitimate Authenticode signing identity and Windows trust; no change to security policy or SmartScreen settings.
 
 ## QA gaps

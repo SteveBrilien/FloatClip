@@ -103,8 +103,10 @@ class PhotoImportViewerTest {
             owner.start().resume().visible()
             val all=views(activity.findViewById(android.R.id.content))
             assertTrue(all.filterIsInstance<TextView>().any { it.text.toString()==row.text && it.isTextSelectable })
-            val copy=all.filterIsInstance<CopyFeedbackButton>().single()
-            copy.performClick();assertEquals("已复制全文",copy.text.toString())
+            val copy=all.filterIsInstance<android.widget.ImageView>().single { it.contentDescription == "复制全文" }
+            assertTrue(copy.performClick())
+            assertEquals("已复制全文",copy.contentDescription)
+            assertTrue(all.filterIsInstance<TextView>().any { it.text == "已复制" && it.visibility == View.VISIBLE })
             assertEquals(row.text,context.getSystemService(android.content.ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
         } finally {owner.pause().stop().destroy()}
     }

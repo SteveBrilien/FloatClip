@@ -1533,29 +1533,27 @@ open class MainActivity : Activity() {
             }.onFailure { Toast.makeText(this,it.message ?: "操作未完成",Toast.LENGTH_LONG).show() }
         }
         wrapper.onLongPress = {
-            com.floatclip.app.ui.FloatMenu.show(
-                wrapper,
-                listOf(if(entry.kind=="image") "查看图片" else "查看全文", "更改分类", if(entry.locked) "取消保护" else "保护", if (entry.pinned) "取消置顶" else "置顶", if(entry.kind=="image")"复制图片" else "复制", "删除"),
-            ) { which ->
-                when (which) {
-                    0 -> if(entry.kind=="image") runCatching { com.floatclip.app.clipboard.ClipViewerActivity.open(this, entry, source = sourceFilter) }.onFailure {
-                        Toast.makeText(this,it.message ?: "图片暂不可用",Toast.LENGTH_LONG).show()
-                    } else runCatching {
-                        // Full text is not a multi-thousand-line dialog message. Use the
-                        // proper bounded ScrollView viewer with selectable content.
-                        com.floatclip.app.clipboard.ClipViewerActivity.open(this,entry,source=sourceFilter)
-                    }.onFailure {
-                        Toast.makeText(this,it.message ?: "无法打开全文",Toast.LENGTH_LONG).show()
+            com.floatclip.app.ui.ClipEntryActionMenu.show(wrapper,entry,categoryStore) { action, category ->
+                when(action) {
+                    com.floatclip.app.ui.ClipEntryActionMenu.Action.OPEN ->
+                        runCatching { com.floatclip.app.clipboard.ClipViewerActivity.open(this,entry,source=sourceFilter) }
+                            .onFailure { Toast.makeText(this,it.message ?: "查看失败",Toast.LENGTH_LONG).show() }
+                    com.floatclip.app.ui.ClipEntryActionMenu.Action.COPY -> {
+                        if(entry.kind=="image")ClipboardImages.copyWithFeedback(this,clipStore,entry)
+                        else runCatching { ClipboardWrites.copyByUser(this,getSystemService(ClipboardManager::class.java),entry.text) }
+                            .onSuccess { Toast.makeText(this,"已复制",Toast.LENGTH_SHORT).show() }
+                            .onFailure { Toast.makeText(this,it.message ?: "复制失败",Toast.LENGTH_LONG).show() }
                     }
-                    1 -> showCategoryPicker(entry)
-                    2 -> { clipStore.toggleLocked(entry.id); refreshHistory(); notifyOverlayAppearanceChanged() }
-                    3 -> { clipStore.togglePinned(entry.id); refreshHistory(); notifyOverlayAppearanceChanged() }
-                    4 -> if(entry.kind=="image")ClipboardImages.copyWithFeedback(this,clipStore,entry)
-                    else runCatching {
-                        ClipboardWrites.copyByUser(this,getSystemService(ClipboardManager::class.java),entry.text)
-                        Toast.makeText(this,"已复制",Toast.LENGTH_SHORT).show()
-                    }.onFailure{Toast.makeText(this,it.message?:"复制未完成",Toast.LENGTH_LONG).show()}
-                    else -> deleteEntry(entry)
+                    com.floatclip.app.ui.ClipEntryActionMenu.Action.PIN -> {
+                        clipStore.togglePinned(entry.id);refreshHistory();notifyOverlayAppearanceChanged()
+                    }
+                    com.floatclip.app.ui.ClipEntryActionMenu.Action.LOCK -> {
+                        clipStore.toggleLocked(entry.id);refreshHistory();notifyOverlayAppearanceChanged()
+                    }
+                    com.floatclip.app.ui.ClipEntryActionMenu.Action.CATEGORY -> if(category!=null) {
+                        clipStore.updateCategory(entry.id,category);refreshHistory();notifyOverlayAppearanceChanged()
+                    }
+                    com.floatclip.app.ui.ClipEntryActionMenu.Action.DELETE -> deleteEntry(entry)
                 }
             }
         }

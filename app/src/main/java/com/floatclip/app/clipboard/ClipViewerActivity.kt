@@ -27,6 +27,7 @@ import com.floatclip.app.ui.FileUi
 class ClipViewerActivity : Activity() {
     private lateinit var store: ClipStore
     private var gallery: ClipImageViewerView? = null
+    private var textViewer: ClipTextViewerView? = null
     private var selectedId = -1L
     private var returned = false
 
@@ -52,6 +53,7 @@ class ClipViewerActivity : Activity() {
     override fun onNewIntent(value: Intent) {
         super.onNewIntent(value)
         closeGallery()
+        textViewer=null
         setIntent(value)
         returned = false
         selectedId = value.getLongExtra(EXTRA_ID, -1L)
@@ -60,11 +62,11 @@ class ClipViewerActivity : Activity() {
 
     override fun onConfigurationChanged(config: Configuration) {
         super.onConfigurationChanged(config)
-        if (gallery == null) showEntry()
+        if (gallery == null) {textViewer=null;showEntry()}
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putLong(EXTRA_ID, gallery?.currentEntryId() ?: selectedId)
+        outState.putLong(EXTRA_ID, gallery?.currentEntryId() ?: textViewer?.currentEntryId() ?: selectedId)
         super.onSaveInstanceState(outState)
     }
 
@@ -99,47 +101,23 @@ class ClipViewerActivity : Activity() {
             return
         }
 
-        val palette = FileUi.palette(this)
-        window.setBackgroundDrawable(ColorDrawable(palette.page))
-        window.statusBarColor = palette.page
-        window.navigationBarColor = palette.page
-        window.decorView.systemUiVisibility = if (Color.luminance(palette.page) > .5f)
+        val appPalette = FileUi.palette(this)
+        window.setBackgroundDrawable(ColorDrawable(appPalette.page))
+        window.statusBarColor=appPalette.page
+        window.navigationBarColor=appPalette.page
+        window.decorView.systemUiVisibility=if(Color.luminance(appPalette.page)>.5f)
             View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR else 0
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(palette.page)
-            setPadding(dp(12), dp(6), dp(12), dp(12))
-        }
-        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        header.addView(ImageView(this).apply {
-            setImageResource(R.drawable.ic_chevron_left)
-            imageTintList = ColorStateList.valueOf(palette.text)
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            contentDescription = "返回"
-            background = FileUi.action(this@ClipViewerActivity, palette)
-            setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(TextView(this).apply {
-            text = "查看全文"
-            textSize = 16f
-            setTextColor(palette.text)
-        }, LinearLayout.LayoutParams(0, dp(48), 1f))
-        root.addView(header)
-        val body = TextView(this).apply {
-            text = entry.text
-            textSize = 17f
-            setTextColor(palette.text)
-            setTextIsSelectable(true)
-            setPadding(dp(10), dp(12), dp(10), dp(20))
-            setLineSpacing(dp(4).toFloat(), 1f)
-            contentDescription = "剪贴板全文"
-        }
-        root.addView(ScrollView(this).apply { addView(body); isFillViewport = true }, LinearLayout.LayoutParams(-1, 0, 1f))
-        val copy = CopyFeedbackButton(this, "复制全文", "已复制全文") { done ->
-            done(runCatching { ClipboardWrites.copyByUser(this, getSystemService(ClipboardManager::class.java), entry.text) })
-        }
-        root.addView(copy, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(8) })
-        setContentView(root)
+        val themePalette=com.floatclip.app.theme.OverlayPalette(
+            appPalette.page,appPalette.page,appPalette.surface,appPalette.text,appPalette.muted,
+            Color.luminance(appPalette.page)<.5f
+        )
+        val source=intent.getStringExtra(EXTRA_SOURCE).orEmpty()
+        val candidates=entries.filter { it.kind=="text" &&
+            (source.isBlank() || source==it.sourceDeviceId) }
+        val viewer=ClipTextViewerView(this,store,
+            if(candidates.any { it.id==entry.id })candidates else listOf(entry),entry.id,themePalette,::finish)
+        textViewer=viewer
+        setContentView(viewer)
     }
 
     @Suppress("DEPRECATION")

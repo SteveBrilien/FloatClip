@@ -15,6 +15,7 @@ import java.util.Base64
 @ConscryptMode(ConscryptMode.Mode.OFF)
 class ShareUpdatesTest {
     private fun fixture()=javaClass.classLoader!!.getResourceAsStream("native-updates.json")!!.readBytes()
+    private fun newFixture()=javaClass.classLoader!!.getResourceAsStream("native-updates-v3-test.json")!!.readBytes()
     private fun issued(data:ByteArray):Long {
         val token=JSONObject(String(data)).getJSONObject("nativeUpdates").getString("share-preview")
         return JSONObject(String(Base64.getUrlDecoder().decode(token.split('.')[1]))).getLong("issuedAt")
@@ -46,6 +47,39 @@ class ShareUpdatesTest {
         updates.put("share-preview", development)
         rejected { verifyLegacy(json.toString().toByteArray(), issued(fixture()) + 1) }
     }
+    @Test fun newHostKeyVerifiesSignedManifestButOldPublicKeyRejectsIt() {
+        val payload=newFixture()
+        val version=ShareUpdates.verifySigned(payload,issued(payload)+1,
+            UpdateTrust.NEW_PUBLIC_KEY,UpdateTrust.NEW_KEY_ID)
+        assertEquals(43,ShareUpdates.parse(version).build)
+        rejected { ShareUpdates.verifySigned(payload,issued(payload)+1) }
+        val json=JSONObject(String(payload));val update=json.getJSONObject("nativeUpdates")
+        val fields=update.getString("share-preview").split('.').toMutableList()
+        fields[2]=(if(fields[2][0]=='A')"B" else "A")+fields[2].drop(1)
+        update.put("share-preview",fields.joinToString("."))
+        rejected { ShareUpdates.verifySigned(json.toString().toByteArray(),issued(payload)+1,
+            UpdateTrust.NEW_PUBLIC_KEY,UpdateTrust.NEW_KEY_ID) }
+    }
+
+    @Test fun newSignedFeedPrioritizesV3AndNeverFallsThroughWhenSignatureIsInvalid() {
+        var calls=0
+        val latest=ShareUpdates.checkLatest(fetcher={ url ->
+            calls++
+            when(url) {
+                ShareUpdates.NEW_FEED -> newFixture()
+                ShareUpdates.CANDIDATE_FEED -> "[]".toByteArray()
+                else -> error("New signed manifest must not use legacy fallback: $url")
+            }
+        })
+        assertEquals(43,latest.build);assertEquals(2,calls)
+        calls=0
+        rejected { ShareUpdates.checkLatest(fetcher={ url ->
+            calls++
+            if(url==ShareUpdates.NEW_FEED) altered() else fixture()
+        }) }
+        assertEquals(1,calls)
+    }
+
     @Test fun primaryFailureUsesFallbackButSignatureFailureDoesNot() {
         var calls=0
         val release=ShareUpdates.check(fetcher={calls++;if(calls==1)throw ShareUpdates.SourceUnavailable("HTTP 503");fixture()},verify={verifyLegacy(it)})
@@ -75,6 +109,8 @@ class ShareUpdatesTest {
         assertEquals(ShareUpdates.SIGNER,parsed.signerSha256)
         assertEquals("a".repeat(64),parsed.sha256)
         val fetched=ShareUpdates.checkLatest(fetcher={url->
+            if(url==ShareUpdates.NEW_FEED || url==ShareUpdates.NEW_FALLBACK_FEED)
+                throw ShareUpdates.SourceUnavailable("v3 offline")
             if(url==ShareUpdates.CANDIDATE_FEED)org.json.JSONArray().put(release).toString().toByteArray()
             else fixture()
         },verify={verifyLegacy(it)})

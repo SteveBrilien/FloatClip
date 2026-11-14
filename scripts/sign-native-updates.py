@@ -14,12 +14,15 @@ parser.add_argument('--init-key',action='store_true')
 parser.add_argument('--days',type=int,default=90)
 args=parser.parse_args()
 legacy=args.key_id=='floatclip-updates-20261023'
-if not legacy and args.key_id!='floatclip-updates-20261112-v2':
+v3=args.key_id=='floatclip-updates-20261114-v3'
+if not legacy and args.key_id not in ('floatclip-updates-20261112-v2','floatclip-updates-20261114-v3'):
     parser.error('Unknown native update key id')
-trust=root/'updates'/('native-update-public.pem' if legacy else 'native-update-v2-public.pem')
-output=args.output or root/'updates'/('native-updates.json' if legacy else 'native-updates-v2.json')
+trust=root/'updates'/('native-update-v3-public.pem' if v3 else 'native-update-public.pem' if legacy else 'native-update-v2-public.pem')
+output=args.output or root/'updates'/('native-updates-v3.json' if v3 else 'native-updates.json' if legacy else 'native-updates-v2.json')
 if not legacy and output.resolve()==(root/'updates/native-updates.json').resolve():
-    parser.error('The v2 key may not replace the legacy feed')
+    parser.error('The rotated key may not replace the legacy feed')
+if v3 and output.resolve()==(root/'updates/native-updates-v2.json').resolve():
+    parser.error('The v3 key may not replace the existing signed v2 feed')
 
 if not args.key.exists():
     if not args.init_key:raise SystemExit('Signing key missing; use the existing release key, do not rotate it implicitly')

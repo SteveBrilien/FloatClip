@@ -13,11 +13,14 @@ import javax.net.ssl.HttpsURLConnection
 
 /** One authenticated public manifest for both native clients; no account or clipboard data is sent. */
 internal object ShareUpdates {
-    const val BUILD = 56
+    const val BUILD = 57
     const val VERSION = "0.7.9"
     const val FEED = "https://raw.githubusercontent.com/SteveBrilien/FloatClip/native-updates-v2/updates/native-updates-v2.json"
     const val FALLBACK_FEED = "https://cdn.jsdelivr.net/gh/SteveBrilien/FloatClip@native-updates-v2/updates/native-updates-v2.json"
     const val CANDIDATE_FEED = "https://api.github.com/repos/SteveBrilien/FloatClip/releases?per_page=12"
+    // V3 uses a new pinned public key. Older clients continue using the untouched v2 branch.
+    const val NEW_FEED = "https://raw.githubusercontent.com/SteveBrilien/FloatClip/native-updates-v3/updates/native-updates-v3.json"
+    const val NEW_FALLBACK_FEED = "https://cdn.jsdelivr.net/gh/SteveBrilien/FloatClip@native-updates-v3/updates/native-updates-v3.json"
     private const val PUBLIC_FEED_ID = "share-preview"
     const val PACKAGE = "com.floatclip.probe"
     const val SIGNER = "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c"
@@ -57,6 +60,23 @@ internal object ShareUpdates {
         }
         throw IOException("更新源暂不可用：\n"+failures.joinToString("\n"))
     }
+    /** The host holds the v3 private key; only the public verifier is shipped in the APK. */
+    private fun checkNewSigned(
+        fetcher:((String)->ByteArray)?, cancellation:CheckCancellation,
+        onSource:(String)->Unit,
+    ):Release? {
+        for(source in listOf(NEW_FEED,NEW_FALLBACK_FEED)) {
+            cancellation.ensureActive()
+            onSource(if(source==NEW_FEED)"FloatClip 签名更新源 v3" else "FloatClip v3 CDN 备用源")
+            val body=try { fetcher?.invoke(source) ?: fetch(source,cancellation) }
+                catch(error:SourceUnavailable) { continue }
+            cancellation.ensureActive()
+            // Never conceal signature/identity failures behind the legacy or candidate feed.
+            return parse(verifySigned(body,publicKey=UpdateTrust.NEW_PUBLIC_KEY,keyId=UpdateTrust.NEW_KEY_ID))
+        }
+        return null
+    }
+
     /** Signed production feed remains authoritative. The separately labelled candidate feed
      * provides release discovery, not a replacement for native signature checks. Its APK must
      * still pass exact hash, package name and pinned installed-app signer verification.
@@ -67,8 +87,9 @@ internal object ShareUpdates {
         fetcher:((String)->ByteArray)?=null,
         verify:(ByteArray)->JSONObject={verifySigned(it)},
     ):Release {
-        val signed=try { check(fetcher,cancellation,onSource,verify) }
-            catch(error:IOException) { null } // Both signed URLs unreachable: try official repo.
+        val latestSigned=checkNewSigned(fetcher,cancellation,onSource)
+        val signed=latestSigned ?: try { check(fetcher,cancellation,onSource,verify) }
+            catch(error:IOException) { null } // Both old signed URLs unreachable: try official repo.
         cancellation.ensureActive()
         onSource("GitHub 候选发布")
         val candidate=try {

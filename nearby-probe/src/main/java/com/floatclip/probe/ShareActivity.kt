@@ -116,14 +116,19 @@ open class ShareActivity : Activity() {
 
     @Suppress("DEPRECATION") // Platform fallbacks are required on supported Android 9–14 devices.
     private fun palette() {
-        dark = when (hostTheme() ?: prefs.getString("theme", "system")) {
-            "dark" -> true; "light" -> false
+        val hostMode = hostTheme() ?: prefs.getString("theme", "system")
+        dark = when (hostMode) {
+            "dark", "klein" -> true; "light" -> false
             else -> resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         }
-        val base = ShareDesign.palette(dark)
+        val base = if(hostMode=="klein") ShareDesign.Palette(
+            Color.rgb(15,34,84),Color.rgb(23,47,100),Color.rgb(242,247,255),
+            Color.rgb(183,206,241),Color.rgb(47,78,135),Color.rgb(160,205,255),
+            Color.rgb(35,69,137),Color.rgb(160,205,255)
+        ) else ShareDesign.palette(dark)
         val accentId=getSharedPreferences("floatclip_overlay",MODE_PRIVATE).getString("accent_theme","blue")
         val accent=FloatClipAccent.color(accentId,dark)
-        p = base.copy(
+        p = if(hostMode=="klein")base else base.copy(
             blue=accent,
             primary=accent,
             tint=if(dark) Color.rgb(

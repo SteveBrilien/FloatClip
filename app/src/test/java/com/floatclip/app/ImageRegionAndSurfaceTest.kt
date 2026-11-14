@@ -56,6 +56,11 @@ class ImageRegionAndSurfaceTest {
         view.layout(0,0,1000,800)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(100))
         assertEquals(0,viewport!!.top)
+        // Portrait now initially fits completely. Zoom first, then verify drag and
+        // progressive thumbnail replacement preserve the requested original region.
+        ZoomImageView::class.java.getDeclaredMethod("zoomAt",Float::class.javaPrimitiveType,
+            Float::class.javaPrimitiveType,Float::class.javaPrimitiveType).apply{isAccessible=true}
+            .invoke(view,.65f,500f,400f)
         fun touch(action:Int,y:Float,time:Long) {
             val event=MotionEvent.obtain(0,time,action,500f,y,0)
             view.onTouchEvent(event);event.recycle()

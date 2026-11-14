@@ -19,7 +19,7 @@ class ClipboardImageProvider:ContentProvider() {
     }
     override fun getType(uri:Uri):String {
         require(reference(uri,context!!.packageName)!=null) { "图片地址无效" }
-        return "image/png"
+        return ClipStore(context!!).findImage(reference(uri,context!!.packageName)!!)?.mimeType ?: "image/png"
     }
     override fun openFile(uri:Uri,mode:String):ParcelFileDescriptor {
         if(mode!="r")throw FileNotFoundException("图片仅允许读取")
@@ -54,7 +54,7 @@ class ClipboardImageProvider:ContentProvider() {
         val ref=reference(uri,app.packageName) ?: throw FileNotFoundException("图片地址无效")
         val store=ClipStore(app)
         val bytes=store.findImage(ref)?.imageBytes ?: read(uri).size
-        return MatrixCursor(columns).apply { addRow(columns.map { if(it==OpenableColumns.DISPLAY_NAME)"FloatClip.png" else bytes }) }
+        return MatrixCursor(columns).apply { addRow(columns.map { if(it==OpenableColumns.DISPLAY_NAME)"FloatClip."+(if(store.findImage(ref)?.mimeType=="image/jpeg")"jpg" else "png") else bytes }) }
     }
     override fun insert(uri:Uri,values:ContentValues?):Uri?=throw UnsupportedOperationException("图片仅允许读取")
     override fun update(uri:Uri,values:ContentValues?,selection:String?,selectionArgs:Array<out String>?):Int=throw UnsupportedOperationException("图片仅允许读取")
@@ -63,10 +63,10 @@ class ClipboardImageProvider:ContentProvider() {
         private val descriptorHandler by lazy {
             android.os.Handler(android.os.HandlerThread("FloatClip image URI").apply { start() }.looper)
         }
-        fun uri(packageName:String,reference:String):Uri=Uri.parse("content://$packageName.clipboard-images/image/$reference.png")
+        fun uri(packageName:String,reference:String,mimeType:String="image/png"):Uri=Uri.parse("content://$packageName.clipboard-images/image/$reference.${if(mimeType=="image/jpeg")"jpg" else "png"}")
         fun reference(uri:Uri?,packageName:String):String?=uri?.takeIf {
             it.scheme=="content" && it.authority=="$packageName.clipboard-images" && it.pathSegments.size==2 &&
-                it.pathSegments[0]=="image" && it.pathSegments[1].matches(Regex("[a-f0-9]{32}(\\.png)?")) && it.query==null && it.fragment==null
-        }?.pathSegments?.get(1)?.removeSuffix(".png")
+                it.pathSegments[0]=="image" && it.pathSegments[1].matches(Regex("[a-f0-9]{32}(\\.(png|jpg))?")) && it.query==null && it.fragment==null
+        }?.pathSegments?.get(1)?.removeSuffix(".png")?.removeSuffix(".jpg")
     }
 }

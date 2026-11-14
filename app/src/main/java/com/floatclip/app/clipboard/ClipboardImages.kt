@@ -152,7 +152,7 @@ object ClipboardImages {
     }.getOrDefault(false)
 
     private fun publishCopy(context:Context,entry:ClipEntry) {
-        ClipboardWrites.writeImage(context,context.getSystemService(ClipboardManager::class.java),ClipboardImageProvider.uri(context.packageName,entry.imageRef))
+        ClipboardWrites.writeImage(context,context.getSystemService(ClipboardManager::class.java),ClipboardImageProvider.uri(context.packageName,entry.imageRef,entry.mimeType))
         // Copying a saved image is clipboard-only: never create a new sync event or move the row.
     }
     fun copy(context:Context,store:ClipStore,entry:ClipEntry) {

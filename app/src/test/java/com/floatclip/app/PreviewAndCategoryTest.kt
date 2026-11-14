@@ -100,7 +100,11 @@ class PreviewAndCategoryTest {
     @Test fun longImageStartsAtReadableWidthAndDragStaysInsideImage() {
         val view=ZoomImageView(context);view.setImageBitmap(Bitmap.createBitmap(200,1600,Bitmap.Config.ARGB_8888));view.layout(0,0,400,400)
         fun field(name:String)=ZoomImageView::class.java.getDeclaredField(name).apply{isAccessible=true}.getFloat(view)
-        assertEquals(2f,field("zoom"),.001f);assertEquals(0f,field("offsetY"),.001f)
+        assertEquals(.25f,field("zoom"),.001f);assertEquals(0f,field("offsetY"),.001f)
+        // Fit-center is now the default. Explicitly zoom before testing panning.
+        ZoomImageView::class.java.getDeclaredMethod("zoomAt",Float::class.javaPrimitiveType,
+            Float::class.javaPrimitiveType,Float::class.javaPrimitiveType).apply{isAccessible=true}
+            .invoke(view,2f,200f,200f)
         fun event(action:Int,y:Float,time:Long){val e=MotionEvent.obtain(0,time,action,100f,y,0);view.onTouchEvent(e);e.recycle()}
         event(MotionEvent.ACTION_DOWN,200f,0);event(MotionEvent.ACTION_MOVE,100f,50);assertTrue(field("offsetY")<0)
         event(MotionEvent.ACTION_MOVE,4000f,100);assertEquals(0f,field("offsetY"),.001f);event(MotionEvent.ACTION_UP,4000f,150)

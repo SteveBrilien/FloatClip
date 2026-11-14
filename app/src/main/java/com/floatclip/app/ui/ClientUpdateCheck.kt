@@ -10,12 +10,12 @@ import java.util.concurrent.Future
 /** One cancellable request per screen owner, with a real UI deadline and stale-result rejection. */
 internal class ClientUpdateCheck(
     private val read:(ShareUpdates.CheckCancellation,(String)->Unit)->ShareUpdates.Release=
-        { cancellation,source -> ShareUpdates.check(cancellation=cancellation,onSource=source) },
+        { cancellation,source -> ShareUpdates.checkLatest(cancellation=cancellation,onSource=source) },
     private val worker:ExecutorService=Executors.newSingleThreadExecutor { task ->
         Thread(task,"FloatClip updates").apply { isDaemon=true }
     },
     private val main:Handler=Handler(Looper.getMainLooper()),
-    private val timeoutMs:Long=12000L,
+    private val timeoutMs:Long=18000L,
     listener:(State)->Unit,
 ):AutoCloseable {
     enum class Phase { IDLE,CHECKING,SUCCESS,FAILED }

@@ -61,7 +61,7 @@ class ClipboardImageTest {
         it.getSharedPreferences("floatclip_store",Context.MODE_PRIVATE).edit().clear().commit()
     }
 
-    @Test fun imageBlobIsEncryptedAndSurvivesReloadProtectionClearAndUndo() {
+    @Test fun sandboxImageBlobSurvivesReloadProtectionClearAndUndo() {
         val ctx=context();val store=ClipStore(ctx,cipher)
         val image=store.addImage(png)!!
         store.togglePinned(image.id)
@@ -73,10 +73,31 @@ class ClipboardImageTest {
         val retained=reloaded.entries().first { it.kind=="image" }
         assertTrue(retained.pinned);assertEquals(1,retained.imageWidth);assertEquals(1,retained.imageHeight)
         assertArrayEquals(png,reloaded.readImage(retained))
-        val encrypted=File(ctx.filesDir,"clipboard-images/${image.imageRef}.bin").readBytes()
-        assertFalse(encrypted.take(png.size).toByteArray().contentEquals(png))
+        val stored=File(ctx.filesDir,"clipboard-images/${image.imageRef}.bin").readBytes()
+        assertArrayEquals(png,stored) // Private app directory: no extra bulk-image encryption.
         assertTrue(store.restoreAll(removed).isEmpty());assertEquals(3,store.entries().size)
         assertEquals(image.imageRef,store.addImage(png)!!.imageRef)
+    }
+
+    @Test fun jpegOriginalStoredWithoutRecompressionAndLegacyCipherStillReadable() {
+        val ctx=context();val store=ClipStore(ctx,cipher)
+        val bitmap=android.graphics.Bitmap.createBitmap(700,500,android.graphics.Bitmap.Config.ARGB_8888)
+        val output=java.io.ByteArrayOutputStream()
+        assertTrue(bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,95,output))
+        bitmap.recycle()
+        val jpeg=output.toByteArray()
+        val saved=store.addImage(jpeg)!!
+        assertEquals("image/jpeg",saved.mimeType)
+        assertArrayEquals(jpeg,store.readImage(saved))
+        val copy=ClipStore(ctx,cipher).entries().single { it.kind=="image" }
+        assertEquals("image/jpeg",copy.mimeType)
+        assertArrayEquals(jpeg,store.readImage(copy))
+        val uri=ClipboardImageProvider.uri(ctx.packageName,copy.imageRef,copy.mimeType)
+        assertEquals(copy.imageRef,ClipboardImageProvider.reference(uri,ctx.packageName))
+        val legacy=store.addImage(fixture(0))!!
+        val f=File(ctx.filesDir,"clipboard-images/${legacy.imageRef}.bin")
+        f.writeBytes(cipher.encrypt(store.readImage(legacy)))
+        assertArrayEquals(fixture(0),ClipStore(ctx,cipher).readImage(legacy))
     }
 
     @Test fun portableBackupCarriesImageBytesAndRejectsMissingOrTamperedAttachments() {
@@ -137,7 +158,7 @@ class ClipboardImageTest {
         val store=ClipStore(context(),cipher);store.addText("keep")
         val before=store.exportJson()
         val huge=png.clone();ByteBuffer.wrap(huge,16,4).putInt(20000)
-        for(bytes in listOf(byteArrayOf(1,2,3),huge,ByteArray(8*1024*1024+1))) {
+        for(bytes in listOf(byteArrayOf(1,2,3),huge,ByteArray(32*1024*1024+1))) {
             assertTrue(runCatching { store.addImage(bytes) }.isFailure)
             assertEquals(before,store.exportJson())
         }

@@ -48,9 +48,23 @@ class PhotoImportViewerTest {
         val source=png();val prepared=ClipboardPhotoImporter.prepare(source)
         assertArrayEquals(source,prepared.png);assertFalse(prepared.resized)
         val sample=ClipboardPhotoImporter.sample(12000,16000)
-        assertTrue(12000L/sample*(16000/sample)<=4_000_000L)
+        assertTrue(12000L/sample*(16000/sample)<=16_000_000L)
         assertTrue(16000/sample<=4096)
     }
+    @Test fun ordinaryCameraJpegIsKeptByteExactAndSyncFormatRemainsPng() {
+        val original=Bitmap.createBitmap(1600,1000,Bitmap.Config.ARGB_8888)
+        val stream=java.io.ByteArrayOutputStream()
+        assertTrue(original.compress(Bitmap.CompressFormat.JPEG,92,stream));original.recycle()
+        val jpeg=stream.toByteArray()
+        val prepared=ClipboardPhotoImporter.prepare(jpeg)
+        assertArrayEquals(jpeg,prepared.png)
+        assertFalse(prepared.resized)
+        val sync=ClipboardImageSyncEncoding.prepare(prepared.png)
+        assertTrue(sync.bytes.copyOfRange(0,8).contentEquals(byteArrayOf(137.toByte(),80,78,71,13,10,26,10)))
+        assertTrue(sync.bytes.size<=8*1024*1024)
+        assertEquals(1600,sync.width);assertEquals(1000,sync.height)
+    }
+
     @Test fun selectedJpegAboveOldEightMiBLimitIsAcceptedWithoutChangingSourceBytes() {
         val jpeg=javaClass.getResourceAsStream("/photos/camera-orientation6.jpg")!!.use{it.readBytes()}
         val source=jpeg.copyOf(8*1024*1024+1024)
@@ -143,7 +157,7 @@ class PhotoImportViewerTest {
         while(!done()&&System.nanoTime()<deadline) { shadowOf(Looper.getMainLooper()).idle();Thread.sleep(5) }
         assertTrue("copy callback must finish",done())
     }
-    @Test fun imageCopyValidatesOffMainAndOnlyThenChangesClipboard() {
+    @Test fun imageCopyValidatesOffMainWithoutDecryptingPlaintextSandboxPhoto() {
         java.io.File(context.filesDir,"floatclip_vault.bin").delete()
         val thread=java.util.concurrent.atomic.AtomicReference<String>()
         val store=ClipStore(context,object:VaultCipher {
@@ -157,7 +171,7 @@ class PhotoImportViewerTest {
         val request=ClipboardImages.copyAsync(context,store,row){result=it}
         assertEquals("unchanged",manager.primaryClip!!.getItemAt(0).text.toString())
         awaitCopy{result!=null}
-        assertTrue(result!!.isSuccess);assertEquals("FloatClip image copy",thread.get())
+        assertTrue(result!!.isSuccess);assertNull("new sandbox image should not require a bulk decryption call",thread.get())
         assertEquals(row.imageRef,ClipboardImageProvider.reference(manager.primaryClip!!.getItemAt(0).uri,context.packageName))
         request.close()
     }

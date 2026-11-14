@@ -76,7 +76,9 @@ class ZoomImageView(context: Context, private var fillHeight: Boolean = false) :
     /** Update only after decoding the actual original, never trust imported metadata alone. */
     fun useDecodedDimensions(sourceWidth:Int,sourceHeight:Int) {
         if(sourceWidth <= 0 || sourceHeight <= 0)return
-        fillHeight=sourceHeight>sourceWidth
+        // A portrait-orientation flag does not imply that height-fit will fit the viewport.
+        // Always select the smaller width/height scale for the initial view.
+        fillHeight=false
         originalWidth=sourceWidth;originalHeight=sourceHeight
         reset();invalidate()
     }
@@ -102,12 +104,7 @@ class ZoomImageView(context: Context, private var fillHeight: Boolean = false) :
         if (originalWidth <= 0 || originalHeight <= 0 || width <= 0 || height <= 0) return
         minimum = min(width.toFloat() / originalWidth, height.toFloat() / originalHeight)
         maximum = max(minimum * 8, 4f)
-        baseZoom = when {
-            fillHeight -> height.toFloat() / originalHeight
-            originalHeight > originalWidth * 2.2f -> (width.toFloat() / originalWidth).coerceAtMost(maximum)
-            else -> minimum
-        }
-        if (fillHeight) maximum = max(maximum, baseZoom * 3f)
+        baseZoom = minimum // fit-center, never crop either dimension by default
         zoom = baseZoom
         offsetX = (width - originalWidth * zoom) / 2
         offsetY = if (originalHeight * zoom > height) 0f else (height - originalHeight * zoom) / 2
@@ -162,7 +159,7 @@ class ZoomImageView(context: Context, private var fillHeight: Boolean = false) :
                 if (index >= 0) {
                     val px = event.getX(index); val py = event.getY(index)
                     if (!scale.isInProgress && event.pointerCount == 1) {
-                        if (!fillHeight || zoom > baseZoom * 1.03f) offsetX += px - lastX
+                        offsetX += px - lastX
                         offsetY += py - lastY; constrain(); invalidate()
                     }
                     lastX = px; lastY = py
@@ -180,7 +177,7 @@ class ZoomImageView(context: Context, private var fillHeight: Boolean = false) :
                     val x = kotlin.math.abs(dx)
                     val y = kotlin.math.abs(dy)
                     val verticalEdge = if (dy >= 0f) 1 else 2
-                    if ((fillHeight || horizontalFits) && zoom <= baseZoom * 1.03f && x >= threshold && x > y * 1.35f) {
+                    if (horizontalFits && zoom <= baseZoom * 1.03f && x >= threshold && x > y * 1.35f) {
                         onHorizontalPage?.invoke(if (dx < 0f) 1 else -1)
                     } else if (categoryEdgesAtDown and verticalEdge != 0 && y >= threshold && y > x * 1.35f) {
                         onVerticalPage?.invoke(if (dy < 0f) 1 else -1)

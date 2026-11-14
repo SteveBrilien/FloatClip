@@ -77,7 +77,7 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
             val oldest=current.filterNot { it.pinned||it.locked }.minByOrNull { it.updatedAt } ?: return@synchronized null
             current.remove(oldest)
         }
-        require(current.filter { it.kind=="image" }.sumOf { it.imageBytes.toLong() }+png.size<=ImageBlobStore.MAX_ACTIVE_BYTES) { "图片总量超过 32 MiB，请先整理普通记录" }
+        require(current.filter { it.kind=="image" }.sumOf { it.imageBytes.toLong() }+png.size<=ImageBlobStore.MAX_ACTIVE_BYTES) { "图片总量超过 128 MiB，请先整理普通记录" }
         val referenced=entries().filter { it.kind=="image" }.map { it.imageRef }.toMutableSet()
         undoImageReferences.values.forEach { referenced.addAll(it) }
         runCatching {
@@ -88,7 +88,8 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
         images.prune(referenced)
         val reference=images.write(png)
         val entry=ClipEntry(id=nextEntryId(current),text="图片",kind="image",imageRef=reference,
-            imageSha256=info.sha256,imageBytes=info.bytes,imageWidth=info.width,imageHeight=info.height)
+            imageSha256=info.sha256,imageBytes=info.bytes,imageWidth=info.width,imageHeight=info.height,
+            mimeType=info.mimeType)
         try { persist(listOf(entry)+current) } catch(e:Exception) { images.delete(reference);throw e }
         entry
     }
@@ -153,7 +154,7 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
             current.remove(oldest)
         }
         val activeImageBytes=current.filter { it.kind=="image" }.sumOf { it.imageBytes.toLong() }
-        require(activeImageBytes+png.size<=ImageBlobStore.MAX_ACTIVE_BYTES) { "图片总量超过 32 MiB，请先整理普通记录" }
+        require(activeImageBytes+png.size<=ImageBlobStore.MAX_ACTIVE_BYTES) { "图片总量超过 128 MiB，请先整理普通记录" }
         val reference=java.util.UUID.randomUUID().toString().replace("-","")
         val wasNew=true
         images.write(png,reference)
@@ -177,6 +178,7 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
             imageWidth=info.width,
             imageHeight=info.height,
             imageNote="",
+            mimeType="image/png",
         )
         try { persist(listOf(row)+current);row }
         catch(t:Throwable) { if(wasNew)images.delete(reference);throw t }
@@ -323,7 +325,7 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
                     require(encoded.length<=ImageBlobStore.MAX_IMAGE_BYTES*4/3+8) { "备份图片过大" }
                     val bytes=Base64.decode(encoded,Base64.NO_WRAP)
                     val info=images.validate(bytes)
-                    require(info.sha256==entry.imageSha256 && info.bytes==entry.imageBytes && info.width==entry.imageWidth && info.height==entry.imageHeight) { "备份图片校验失败" }
+                    require(info.sha256==entry.imageSha256 && info.bytes==entry.imageBytes && info.width==entry.imageWidth && info.height==entry.imageHeight && info.mimeType==entry.mimeType) { "备份图片校验失败" }
                     bytes
                 }
             }
@@ -389,6 +391,7 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
                     kind=o.optString("kind","text"),imageRef=o.optString("imageRef",""),imageSha256=o.optString("imageSha256",""),
                     imageBytes=o.optInt("imageBytes",0),imageWidth=o.optInt("imageWidth",0),imageHeight=o.optInt("imageHeight",0),
                     imageNote=o.optString("imageNote","").take(MAX_IMAGE_NOTE_LENGTH),
+                    mimeType=o.optString("mimeType","image/png"),
                 ))
             }
         }.onEach(::validateEntry).sortedWith(compareByDescending<ClipEntry> { it.pinned }.thenByDescending { it.createdAt })
@@ -477,6 +480,7 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
                 kind,if(kind=="image")existing!!.imageRef else "",if(kind=="image")existing!!.imageSha256 else "",
                 if(kind=="image")existing!!.imageBytes else 0,if(kind=="image")existing!!.imageWidth else 0,if(kind=="image")existing!!.imageHeight else 0,
                 if (kind == "image") o.optString("imageNote", existing!!.imageNote).take(MAX_IMAGE_NOTE_LENGTH) else "",
+                if (kind == "image") existing!!.mimeType else "image/png",
             )
         }
         persist(next)
@@ -507,11 +511,11 @@ class ClipStore(context: Context, private val crypto: com.floatclip.app.security
     private fun putImageFields(row:JSONObject,item:ClipEntry) {
         row.put("kind",item.kind)
         if(item.kind=="image")row.put("imageRef",item.imageRef).put("imageSha256",item.imageSha256)
-            .put("imageBytes",item.imageBytes).put("imageWidth",item.imageWidth).put("imageHeight",item.imageHeight).put("mimeType","image/png").put("imageNote",item.imageNote)
+            .put("imageBytes",item.imageBytes).put("imageWidth",item.imageWidth).put("imageHeight",item.imageHeight).put("mimeType",item.mimeType).put("imageNote",item.imageNote)
     }
     private fun validateEntry(entry:ClipEntry) {
         require(entry.kind in listOf("text","image")) { "记录类型无效" }
-        if(entry.kind=="image")require(entry.imageRef.matches(Regex("[a-f0-9]{32}")) && entry.imageSha256.matches(Regex("[a-f0-9]{64}")) &&
+        if(entry.kind=="image")require(entry.mimeType in listOf("image/png","image/jpeg") && entry.imageRef.matches(Regex("[a-f0-9]{32}")) && entry.imageSha256.matches(Regex("[a-f0-9]{64}")) &&
             entry.imageBytes in 45..ImageBlobStore.MAX_IMAGE_BYTES && entry.imageWidth in 1..16384 && entry.imageHeight in 1..16384 &&
             entry.imageWidth.toLong()*entry.imageHeight<=ImageBlobStore.MAX_PIXELS) { "图片记录无效" }
     }

@@ -43,6 +43,15 @@ class Round3UiTest {
         assertEquals(Rect(0,0,1600,720),lastRect)
     }
 
+    @Test fun portraitSlightlyTallerThanWideNeverCropsWhenViewIsExtraTall() {
+        val activity=Robolectric.buildActivity(Activity::class.java).setup().get()
+        val view=ZoomImageView(activity,fillHeight=true)
+        view.layout(0,0,1080,1800)
+        view.useDecodedDimensions(1000,1200)
+        val scale=ZoomImageView::class.java.getDeclaredField("zoom").apply{isAccessible=true}.getFloat(view)
+        assertEquals(1.08f,scale,0.003f) // width fit; height-fit 1.5x would crop.
+    }
+
     @Test fun kleinThemePersistsIndependentlyForAppAndFloatingPanel() {
         val app=RuntimeEnvironment.getApplication()
         app.getSharedPreferences("floatclip_overlay",Context.MODE_PRIVATE).edit().clear().commit()

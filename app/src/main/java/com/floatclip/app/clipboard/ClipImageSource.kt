@@ -12,7 +12,7 @@ import kotlin.math.ceil
 import kotlin.math.floor
 
 /**
- * One original attachment, one decoder, one visible region. The encrypted original stays on disk;
+ * One original attachment, one decoder, one visible region. The source stays in the app-private sandbox;
  * neither full-size bitmaps nor viewers enter the card thumbnail cache.
  */
 internal class ClipImageSource(

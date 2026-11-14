@@ -1,6 +1,7 @@
 package com.floatclip.probe
 
 import org.json.JSONObject
+import org.json.JSONArray
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.URL
@@ -12,14 +13,15 @@ import javax.net.ssl.HttpsURLConnection
 
 /** One authenticated public manifest for both native clients; no account or clipboard data is sent. */
 internal object ShareUpdates {
-    const val BUILD = 50
+    const val BUILD = 56
     const val VERSION = "0.7.9"
     const val FEED = "https://raw.githubusercontent.com/SteveBrilien/FloatClip/native-updates-v2/updates/native-updates-v2.json"
     const val FALLBACK_FEED = "https://cdn.jsdelivr.net/gh/SteveBrilien/FloatClip@native-updates-v2/updates/native-updates-v2.json"
+    const val CANDIDATE_FEED = "https://api.github.com/repos/SteveBrilien/FloatClip/releases?per_page=12"
     private const val PUBLIC_FEED_ID = "share-preview"
     const val PACKAGE = "com.floatclip.probe"
     const val SIGNER = "0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c"
-    data class Release(val build:Int,val version:String,val notes:String,val url:String,val sha256:String,val bytes:Long,val packageName:String,val signerSha256:String)
+    data class Release(val build:Int,val version:String,val notes:String,val url:String,val sha256:String,val bytes:Long,val packageName:String,val signerSha256:String,val candidate:Boolean=false)
     internal class SourceUnavailable(message:String,cause:Throwable?=null):IOException(message,cause)
     class CheckCancellation {
         @Volatile private var cancelled=false
@@ -55,6 +57,63 @@ internal object ShareUpdates {
         }
         throw IOException("更新源暂不可用：\n"+failures.joinToString("\n"))
     }
+    /** Signed production feed remains authoritative. The separately labelled candidate feed
+     * provides release discovery, not a replacement for native signature checks. Its APK must
+     * still pass exact hash, package name and pinned installed-app signer verification.
+     */
+    fun checkLatest(
+        cancellation:CheckCancellation=CheckCancellation(),
+        onSource:(String)->Unit={},
+        fetcher:((String)->ByteArray)?=null,
+        verify:(ByteArray)->JSONObject={verifySigned(it)},
+    ):Release {
+        val signed=try { check(fetcher,cancellation,onSource,verify) }
+            catch(error:IOException) { null } // Both signed URLs unreachable: try official repo.
+        cancellation.ensureActive()
+        onSource("GitHub 候选发布")
+        val candidate=try {
+            val bytes=fetcher?.invoke(CANDIDATE_FEED) ?: fetch(CANDIDATE_FEED,cancellation)
+            cancellation.ensureActive()
+            parseCandidateList(JSONArray(String(bytes,Charsets.UTF_8)))
+        } catch(error:SourceUnavailable) { null }
+          catch(error:IOException) { null }
+          catch(error:org.json.JSONException) { null }
+        return when {
+            candidate!=null && (signed==null || compareVersion(candidate.version,signed.version)>0 ||
+                candidate.version==signed.version&&candidate.build>signed.build) -> candidate
+            signed!=null -> signed
+            else -> throw IOException("签名更新源及 GitHub 候选发布均不可用，请检查网络")
+        }
+    }
+
+    internal fun parseCandidateList(releases:JSONArray):Release? {
+        val pattern=Regex("v([0-9]+\\.[0-9]+\\.[0-9]+)-build([0-9]+)(?:-android)?-candidate")
+        var newest:Release?=null
+        for(i in 0 until minOf(releases.length(),12)) {
+            val release=releases.optJSONObject(i)?:continue
+            if(!release.optBoolean("prerelease") || release.optBoolean("draft",true))continue
+            val tag=release.optString("tag_name")
+            val match=pattern.matchEntire(tag)?:continue
+            val version=match.groupValues[1]
+            val build=match.groupValues[2].toIntOrNull()?.takeIf { it in 1..100000 }?:continue
+            val name="FloatClip-Android-$version-build$build.apk"
+            val assets=release.optJSONArray("assets")?:continue
+            val asset=(0 until assets.length()).mapNotNull(assets::optJSONObject)
+                .firstOrNull { it.optString("name")==name }?:continue
+            val url="https://github.com/SteveBrilien/FloatClip/releases/download/$tag/$name"
+            if(asset.optString("browser_download_url")!=url)continue
+            val digest=asset.optString("digest")
+            if(!digest.matches(Regex("sha256:[a-fA-F0-9]{64}")))continue
+            val bytes=asset.optLong("size",0L)
+            if(bytes !in 1..(100L*1024*1024))continue
+            val found=Release(build,version,"GitHub 验收候选版 · 安装包仍需通过 SHA-256 和 FloatClip 原签名校验。\n"+
+                release.optString("body").take(650),url,digest.removePrefix("sha256:").lowercase(),bytes,PACKAGE,SIGNER,true)
+            if(newest==null || compareVersion(found.version,newest.version)>0 ||
+                found.version==newest.version&&found.build>newest.build)newest=found
+        }
+        return newest
+    }
+
     private fun fetch(source:String,cancellation:CheckCancellation):ByteArray {
         val connection=URL(source).openConnection() as HttpsURLConnection
         connection.connectTimeout=4000;connection.readTimeout=4000;connection.instanceFollowRedirects=false
@@ -66,7 +125,7 @@ internal object ShareUpdates {
                 val data=ByteArrayOutputStream();val buffer=ByteArray(8192);var size=input.read(buffer)
                 while(size>=0) {
                     cancellation.ensureActive()
-                    require(data.size()+size<=131072) { "更新信息过大" }
+                    require(data.size()+size<=if(source==CANDIDATE_FEED)524288 else 131072) { "更新信息过大" }
                     data.write(buffer,0,size);size=input.read(buffer)
                 }
                 data.toByteArray()

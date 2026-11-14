@@ -19,4 +19,5 @@ data class ClipEntry(
     val imageWidth: Int = 0,
     val imageHeight: Int = 0,
     val imageNote: String = "",
+    val mimeType: String = "image/png",
 )

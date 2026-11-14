@@ -63,6 +63,43 @@ class ShareUpdatesTest {
         for(field in listOf("package","signerSha256","sha256")) {val copy=JSONObject(release.toString());copy.getJSONObject("android").put(field,"wrong");rejected { ShareUpdates.parse(copy) }}
     }
     @Test fun comparesSemanticVersionsWithoutDowngrade() {assertTrue(ShareUpdates.compareVersion("0.7.1","0.7.7")<0);assertTrue(ShareUpdates.compareVersion("0.7.10","0.7.9")>0);assertEquals(0,ShareUpdates.compareVersion("0.7.7","0.7.7"))}
+    @Test fun githubCandidateRequiresExactOfficialTagAssetDigestAndNeverSkipsApkSigner() {
+        val tag="v0.7.9-build56-candidate"
+        val asset=JSONObject().put("name","FloatClip-Android-0.7.9-build56.apk")
+            .put("size",123456L).put("digest","sha256:"+"a".repeat(64))
+            .put("browser_download_url","https://github.com/SteveBrilien/FloatClip/releases/download/$tag/FloatClip-Android-0.7.9-build56.apk")
+        val release=JSONObject().put("tag_name",tag).put("prerelease",true).put("draft",false)
+            .put("body","Build56 candidate").put("assets",org.json.JSONArray().put(asset))
+        val parsed=ShareUpdates.parseCandidateList(org.json.JSONArray().put(release))!!
+        assertEquals(56,parsed.build);assertTrue(parsed.candidate)
+        assertEquals(ShareUpdates.SIGNER,parsed.signerSha256)
+        assertEquals("a".repeat(64),parsed.sha256)
+        val fetched=ShareUpdates.checkLatest(fetcher={url->
+            if(url==ShareUpdates.CANDIDATE_FEED)org.json.JSONArray().put(release).toString().toByteArray()
+            else fixture()
+        },verify={verifyLegacy(it)})
+        assertEquals(56,fetched.build)
+        assertTrue(fetched.candidate)
+        // Android-only candidates share the same cert-pinned installation path.
+        val androidTag="v0.7.9-build57-android-candidate"
+        val androidName="FloatClip-Android-0.7.9-build57.apk"
+        asset.put("name",androidName)
+        asset.put("browser_download_url","https://github.com/SteveBrilien/FloatClip/releases/download/$androidTag/$androidName")
+        release.put("tag_name",androidTag)
+        assertEquals(57,ShareUpdates.parseCandidateList(org.json.JSONArray().put(release))!!.build)
+        asset.put("name","FloatClip-Android-0.7.9-build56.apk")
+        asset.put("browser_download_url","https://github.com/SteveBrilien/FloatClip/releases/download/$tag/FloatClip-Android-0.7.9-build56.apk")
+        release.put("tag_name",tag)
+        release.put("prerelease",false)
+        assertNull(ShareUpdates.parseCandidateList(org.json.JSONArray().put(release)))
+        release.put("prerelease",true)
+        asset.put("digest","sha256:"+"f".repeat(63)+"z")
+        assertNull(ShareUpdates.parseCandidateList(org.json.JSONArray().put(release)))
+        asset.put("digest","sha256:"+"b".repeat(64))
+        asset.put("browser_download_url","https://evil.example/forged.apk")
+        assertNull(ShareUpdates.parseCandidateList(org.json.JSONArray().put(release)))
+    }
+
     @Test fun reportsBothSourceFailuresAndCancelledCheckDoesNotFetch() {
         var calls=0
         try {

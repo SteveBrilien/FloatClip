@@ -1,0 +1,98 @@
+name: Verified Android candidate
+on:
+  push:
+    branches: [codex/wpf-design-system-077]
+    paths: [updates/android-candidate.json]
+permissions:
+  contents: read
+concurrency:
+  group: verified-android-candidate
+  cancel-in-progress: false
+jobs:
+  verify-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '12266719'
+          packages: 'platforms;android-35 build-tools;35.0.1'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Verify and test the exact source version
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,pathlib,re,subprocess
+          manifest=json.loads(pathlib.Path('updates/android-candidate.json').read_text())
+          source=manifest['sourceCommit']
+          assert re.fullmatch('[0-9a-f]{40}',source)
+          subprocess.run(['git','merge-base','--is-ancestor',source,'HEAD'],check=True)
+          subprocess.run(['git','diff','--quiet',source,'HEAD','--','app','nearby-probe','share-core','windows'],check=True)
+          code=(pathlib.Path('app/build.gradle.kts').read_text())
+          assert int(re.search(r'versionCode = (\d+)',code).group(1))==manifest['build']
+          assert re.search(r'versionName = "([0-9.]+)"',code).group(1)==manifest['version']
+          PY
+          bash scripts/create-nearby-debug-key.sh
+          chmod +x ./gradlew
+          ./gradlew :app:assembleDebug :app:testDebugUnitTest --no-daemon --stacktrace
+      - name: Verify published APK digest, signing identity and version
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,subprocess,urllib.request,urllib.parse
+          m=json.loads(pathlib.Path('updates/android-candidate.json').read_text())
+          version=m['version'];build=m['build'];row=m['android']
+          assert re.fullmatch(r'\d+\.\d+\.\d+',version) and 0<build<100000
+          url=urllib.parse.urlsplit(row['url'])
+          assert url.scheme=='https' and url.hostname=='mcp.wmy-cloud.cn' and url.port in (None,443) and not url.username
+          assert re.fullmatch('[a-f0-9]{64}',row['sha256'])
+          assert 0<row['bytes']<=100*1024*1024
+          out=pathlib.Path('analysis/verified-android');out.mkdir(parents=True,exist_ok=True)
+          filename=f'FloatClip-Android-{version}-build{build}.apk'
+          apk=out/filename
+          digest=hashlib.sha256();length=0
+          with urllib.request.urlopen(row['url'],timeout=90) as response,apk.open('xb') as writer:
+              assert urllib.parse.urlsplit(response.url).hostname=='mcp.wmy-cloud.cn'
+              while chunk:=response.read(1024*1024):
+                  length+=len(chunk);assert length<=row['bytes']
+                  writer.write(chunk);digest.update(chunk)
+          assert length==row['bytes'] and digest.hexdigest()==row['sha256']
+          sdk=pathlib.Path(os.environ['ANDROID_HOME'])/'build-tools'/'35.0.1'
+          cert=subprocess.check_output([str(sdk/'apksigner'),'verify','--print-certs',str(apk)],text=True)
+          expected=json.loads(pathlib.Path('updates/android-identity.json').read_text())
+          assert re.findall(r'Signer #\d+ certificate SHA-256 digest: ([a-f0-9]+)',cert)==[expected['signerSha256']]
+          badging=subprocess.check_output([str(sdk/'aapt'),'dump','badging',str(apk)],text=True).splitlines()[0]
+          assert f"name='{expected['package']}'" in badging and f"versionCode='{build}'" in badging and f"versionName='{version}'" in badging
+          tag=f'v{version}-build{build}-android-candidate'
+          with open(os.environ['GITHUB_ENV'],'a') as f:f.write(f'CANDIDATE_TAG={tag}\n')
+          (out/'notes.md').write_text(m['notes']+'\n\n仅 Android 验收候选，Windows 仍为 build55。旧版的签名更新源尚未重新签发。切勿降级覆盖包含 JPEG 原始文件的新数据，升级前请先备份。\n')
+          print('Verified original APK signing certificate, version, package, size and SHA256')
+          PY
+      - name: Publish immutable Android prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$CANDIDATE_TAG" >/dev/null 2>&1; then
+            gh release create "$CANDIDATE_TAG" --target "$GITHUB_SHA" --prerelease --latest=false --title "FloatClip $CANDIDATE_TAG" --notes-file analysis/verified-android/notes.md
+          fi
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,subprocess
+          release=json.loads(subprocess.check_output(['gh','api',f'repos/{os.environ["GITHUB_REPOSITORY"]}/releases/tags/{os.environ["CANDIDATE_TAG"]}']))
+          assert release['prerelease'] and not release['draft']
+          asset=next((a for a in release['assets'] if a['name'].endswith('.apk')),None)
+          file=next(pathlib.Path('analysis/verified-android').glob('*.apk'))
+          hash='sha256:'+hashlib.sha256(file.read_bytes()).hexdigest()
+          if asset:assert asset['name']==file.name and asset.get('digest')==hash,'Refuse to replace immutable release APK'
+          else:subprocess.run(['gh','release','upload',os.environ['CANDIDATE_TAG'],str(file)],check=True)
+          PY

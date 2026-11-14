@@ -32,6 +32,7 @@ import com.floatclip.probe.BluetoothPairHost
 import com.floatclip.probe.LanSyncHost
 import com.floatclip.share.ClipboardSync
 import com.floatclip.share.ClipboardImageTransfer
+import com.floatclip.app.clipboard.ClipboardImageSyncEncoding
 import com.floatclip.share.ShareSession
 import com.floatclip.share.ShareWire
 import org.json.JSONObject
@@ -300,14 +301,16 @@ class ClipboardSyncService: Service() {
                 if(!imageStorageHealthy)return@runCatching
                 val peers=engine.peerViews().filter{it.enabled&&it.receive&&authorized(it.key)}.map{it.key}.toSet()
                 if(peers.isEmpty())return@runCatching
-                val bytes=library.readImage(entry)
-                ClipboardImageTransfer.validatePng(bytes,ClipboardImageTransfer.Meta(
-                    UUID.randomUUID(),entry.createdAt,entry.imageWidth,entry.imageHeight
-                ))
+                // Only the outgoing protocol requires PNG. Keep the local full-resolution
+                // JPEG immediately usable; normalize a bounded copy on the sync worker.
+                val transport=ClipboardImageSyncEncoding.prepare(library.readImage(entry))
                 val pending=ClipboardImageSyncStorage.Pending(
-                    UUID.randomUUID(),entry.imageRef,entry.imageSha256,entry.imageWidth,entry.imageHeight,
+                    UUID.randomUUID(),entry.imageRef,entry.imageSha256,transport.width,transport.height,
                     entry.createdAt,System.currentTimeMillis(),peers
                 )
+                ClipboardImageTransfer.validatePng(transport.bytes,ClipboardImageTransfer.Meta(
+                    pending.id,pending.createdAt,pending.width,pending.height
+                ))
                 persistPendingImage(pending);imageSending.clear()
                 pendingOutgoingCount=(engine.pendingPeers(System.currentTimeMillis())+peers).size
                 for(key in peers)trySendImage(key)
@@ -378,8 +381,10 @@ class ClipboardSyncService: Service() {
             }
             val expected=pending.sha256.chunked(2).map{it.toInt(16).toByte()}.toByteArray()
             check(MessageDigest.isEqual(MessageDigest.getInstance("SHA-256").digest(bytes),expected)){"待发送图片已变化"}
-            ClipboardImageTransfer.validatePng(bytes,ClipboardImageTransfer.Meta(pending.id,pending.createdAt,pending.width,pending.height))
-            path.writeBytes(bytes)
+            val transport=ClipboardImageSyncEncoding.prepare(bytes)
+            check(transport.width==pending.width&&transport.height==pending.height){"图片共享尺寸已变化"}
+            ClipboardImageTransfer.validatePng(transport.bytes,ClipboardImageTransfer.Meta(pending.id,pending.createdAt,pending.width,pending.height))
+            path.writeBytes(transport.bytes)
             check(imageSending.putIfAbsent(key,pending.id)==null)
             link.session.sendFile(path,ClipboardImageTransfer.name(pending.id,pending.createdAt,pending.width,pending.height))
         }.onFailure{imageSending.remove(key);runCatching{path.delete()}}

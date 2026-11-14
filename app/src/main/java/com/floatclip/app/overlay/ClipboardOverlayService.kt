@@ -1366,7 +1366,8 @@ class ClipboardOverlayService : Service() {
         val entries=store.entries().filter { it.kind=="text" &&
             (activeSource.isBlank() || it.sourceDeviceId==activeSource) }
         val viewer=ClipTextViewerView(this,store,
-            if(entries.any { it.id==entry.id }) entries else listOf(entry),entry.id,::closeInlineTextViewer)
+            if(entries.any { it.id==entry.id }) entries else listOf(entry),entry.id,
+            themeProvider.palette(),::closeInlineTextViewer)
         val params=WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,

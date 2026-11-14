@@ -3,7 +3,7 @@
   "platforms": {
     "android": {
       "version": "0.7.9",
-      "build": 55,
+      "build": 56,
       "review": "docs/ANDROID_BUILD49_RECOVERY.md"
     },
     "windows": {

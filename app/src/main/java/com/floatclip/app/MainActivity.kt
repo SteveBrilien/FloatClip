@@ -1540,15 +1540,12 @@ open class MainActivity : Activity() {
                 when (which) {
                     0 -> if(entry.kind=="image") runCatching { com.floatclip.app.clipboard.ClipViewerActivity.open(this, entry, source = sourceFilter) }.onFailure {
                         Toast.makeText(this,it.message ?: "图片暂不可用",Toast.LENGTH_LONG).show()
-                    } else FloatDialog.show(
-                        this,
-                        entry.sourceDeviceName,
-                        entry.text,
-                        negative="关闭",
-                        positive="复制",
-                    ) {
-                        ClipboardWrites.copyByUser(this,getSystemService(ClipboardManager::class.java),entry.text)
-                        true
+                    } else runCatching {
+                        // Full text is not a multi-thousand-line dialog message. Use the
+                        // proper bounded ScrollView viewer with selectable content.
+                        com.floatclip.app.clipboard.ClipViewerActivity.open(this,entry,source=sourceFilter)
+                    }.onFailure {
+                        Toast.makeText(this,it.message ?: "无法打开全文",Toast.LENGTH_LONG).show()
                     }
                     1 -> showCategoryPicker(entry)
                     2 -> { clipStore.toggleLocked(entry.id); refreshHistory(); notifyOverlayAppearanceChanged() }
@@ -1683,9 +1680,13 @@ open class MainActivity : Activity() {
                     prefs.saveNotified(identity)
                 }
                 showUpdateResult(
-                    if(newer)"发现 "+release.version+" · build "+release.build else "当前 "+versionName()+" · build "+build,
+                    if(newer)"发现 "+release.version+" · build "+release.build+(if(release.candidate)"（候选）" else "") else "当前 "+versionName()+" · build "+build,
                     if(newer)release.notes else if(order<0 || release.build<build)
                         "已发布 "+release.version+" · build "+release.build
+                    else if(release.build<build) {
+                        if(release.candidate)"当前版本已高于 GitHub 最新候选版 build "+release.build
+                        else "当前版本高于签名正式更新源；正式通道目前为 build "+release.build
+                    }
                     else "已是最新版本",
                     actionLabel=if(newer)"下载并安装" else null,
                     action=if(newer) { { startClientUpdateDownload(release) } } else null,

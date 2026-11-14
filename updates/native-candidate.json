@@ -1,16 +1,18 @@
 {
   "version": "0.7.9",
-  "build": 55,
-  "sourceCommit": "9412e587c5492a2797be1fea9d1185af083ecb41",
+  "build": 58,
+  "sourceCommit": "fbfbccbcd0fb9109fac1128bbf276ed6aad90114",
   "android": {
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-190eec3b1bd84cd4a73678cf3dd45dbc/FloatClip-Android-0.7.9-build55.apk?exp=0&sig=7d45a12ade439a33c0f0f6d9e6acbe33552dfd0754bfb3b4cd5b62e38cece0f3",
-    "sha256": "b4f963371c2a4c63f184ea552893a494ec47d557920838acad401732c4d44c2a",
-    "bytes": 4233666
+    "build": 58,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-520db218e89d4c9eba48beb3469be6f7/FloatClip-Android-0.7.9-build58.apk?exp=0&sig=41e25e7501680259724cb0981851df1e8c820c3e28f9b374c65d90bb861258ab",
+    "sha256": "2bee398b99361ff4c0a92aaba086224c92679fe82291717f3b338974599da934",
+    "bytes": 4467562
   },
   "windows": {
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-f97c243e23a64ab0b7f4173369fa2100/FloatClip-Windows-0.7.9-build55.zip?exp=0&sig=c80461172f0924abc5c50b3a72e4e0ebaf718a478a5898759cc286dacbd668b9",
-    "sha256": "43010ea8597789b66ced68cbfbf90a322c82c17138f955794cf3fc32e3d15c57",
-    "bytes": 79079656
+    "build": 56,
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-3d6d4d05500d4cee8f38a2f4ec58871d/FloatClip-Windows-0.7.9-build56.zip?exp=0&sig=64bf18b00710a7d52afbf94760fb2afcaa538738d8c4ef191f131f980bbdc787",
+    "sha256": "2529ea793022eb9698af28d369e9fef747f53aaf683344b1edc0c83f085db06c",
+    "bytes": 79078396
   },
-  "notes": "FloatClip 0.7.9 build55 · 2026-11-14 验收候选版\n\nAndroid：按原始解码尺寸适配横图；支持记忆文件默认下载文件夹；新增克莱因蓝 #0F2254FF（应用与悬浮剪贴板/悬浮球主题）；长按全文采用沉浸式悬浮预览；修复深色透明背景选中分类的对比度和分类栏左侧错位；优化备份迁移 PIN 窗口与输入框。\n\nWindows：更新源暂时不可达不再显示失败横幅；文件支持拖放导入、可拖动预览宽度；Office 文件优先使用系统资源管理器缩略图，PPTX 可退回文档内嵌缩略图；修复重复复制同一张图片后未刷新最近记录。\n\n验证：Android 129 项单元测试通过，APK 与原应用同签名；Windows GitHub CI 成功、共享契约验证通过，Java ↔ C# 传输及重连回环测试通过。\n\n注意：Windows 文件页面需要安装相应预览处理器才能提供视觉缩略图，不是完整 PowerPoint 编辑/逐页渲染。Windows 构建未添加受信任代码签名，SmartScreen 仍可能提示。当前手机保留 build54，build55 未覆盖安装。正式签名更新清单尚未发布，暂请从 GitHub Releases 手动下载安装。"
+  "notes": "FloatClip Android build58 + Windows build56 · 2026-11-15 验收候选版\n\nAndroid：悬浮剪贴板长按菜单去除粘贴项、取消导致色差的黑色遮罩，固定状态下点击面板外可退出菜单；新增“分享图片到…”系统分享面板，针对输入框不支持图片粘贴的应用提供发送附件替代入口；图片查看使用状态栏/导航栏区域并避开操作按钮的安全边距（悬浮窗仍受系统栏覆盖限制）；已授权且可读取的多次文字复制新增独立 AES-GCM 加密 FIFO 发送队列，按 ACK 顺序发给设备，最多 96 条；Android 11 的系统后台剪贴板访问限制仍存在：默认输入法或用户主动启用并激活既有 ADB shell 辅助才可支持其它应用后台连续复制，后者重启后可能需要重新激活。\n\nWindows：新增独立克莱因蓝主题（#0F2254），调整图片缓存预算（剪贴板8MiB，文件预览16MiB），隐藏窗口释放内存中的剪贴板缩略图，并在设置内新增无需强制 GC 的按需内存诊断。\n\n校验：Android 143 项单元测试通过（0 失败、0 错误）；原 Android 包名及安装签名指纹不变；Windows 桌面端 GitHub Windows CI 已验证；源码与文件 SHA-256、WPF 文件包完整性在发布阶段再次核查。\n\n限制：不保证任何第三方输入框支持图片粘贴；Windows 200–400MB 问题的具体组成需用真实 Windows 工作集测量，当前 Windows Remote 离线；手机 ADB 中途断开，未覆盖安装或清空数据。新文字队列基于旧版单条同步协议，在恶劣网络或崩溃边界中仍可能重复投递同一文字，需真机压力测试。\n\n该版本为测试候选版，升级前请先在应用内导出迁移备份，覆盖安装勿卸载；包含 JPEG 原图存储格式，切勿直接降级。"
 }

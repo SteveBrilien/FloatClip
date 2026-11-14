@@ -1,0 +1,11 @@
+{
+  "version": "0.7.9",
+  "build": 56,
+  "sourceCommit": "9453e3339b25728f24d6ba87db953194089c9b5d",
+  "android": {
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-ab8eaf81bf3a4917bb84b2c1fb1de0fd/FloatClip-Android-0.7.9-build56.apk?exp=0&sig=7988b06d1357019ccf718d529d01a6d44ef07180f9066c0c981639937f407344",
+    "sha256": "cce9f2f1da96ce369101458a1045ecf3f9c8fa43ed24a9a9ae0662405e88dbbc",
+    "bytes": 4634934
+  },
+  "notes": "FloatClip 0.7.9 build56 Android 验收候选版 · 2026-11-14\n\n修复：检查更新可识别 GitHub 候选发布（正式 JWS 更新源仍保持原签名与独立身份）；应用内查看全文使用专用可滚动阅读页；悬浮层全文查看跟随剪贴板主题，支持同分类左右滑动切换记录、内容边缘上下滑动切换分类，并保留长文原生滚动与文字选取；设备页面适配克莱因蓝；所有方向的图片默认完整适配可见画布，不再按图片比例强制高度裁切；普通手机 JPEG 原压缩字节直接存入应用私有目录，节省原始照片导入时的完整解码与 PNG 重压缩，支持局部高清图片解码；跨设备发送单独生成有尺寸上限的 PNG 兼容副本，Windows build55 无需同步改协议。\n\n安全与兼容：原应用包名 com.floatclip.probe、升级证书保持不变。正式签名更新清单当前仍指向 build50，因为原 Windows 签发私钥未上线；旧版软件不能仅靠检查更新发现 build56，需手动从此 Release 覆盖更新。新导入 JPEG 与未加密的 app-private 图片 blob 不能被旧版直接读取，务必在升级前导出完整备份；升级后不要直接降级。\n\n验证：Android Kotlin APK 构建成功，133 项测试中的 132 项首轮通过；唯一的文件共享并发测试独立重跑通过。正式 GitHub Actions 回归作为本次 Release 的附加发布门槛；实际 Android 11 vivo 手机 ADB 当前离线，尚未覆盖安装或验证照片导入耗时。"
+}

@@ -6,6 +6,7 @@ import android.content.Context
 import com.floatclip.app.clipboard.ClipStore
 import com.floatclip.app.clipboard.ClipboardWrites
 import com.floatclip.app.sync.ClipboardSyncService
+import com.floatclip.app.sync.ClipboardTextOutbox
 import com.floatclip.app.sync.SyncPreferences
 import com.floatclip.app.sync.SyncRuntime
 import com.floatclip.share.ClipboardSync
@@ -60,8 +61,14 @@ class SyncCaptureTest {
         val library=ClipStore(context,codec)
         val original=ClipboardSync.Entry(UUID.randomUUID(),ClipboardSync.Device(UUID.randomUUID(),"pc history","windows"),1,System.currentTimeMillis(),"remote row")
         library.receiveShared(original)
+        // The service is constructed without onCreate. Inject its separate encrypted
+        // queue and an authorized trusted peer, just as the actual service would have.
+        val trust=context.getSharedPreferences("share-pairs",Context.MODE_PRIVATE)
+        trust.edit().putBoolean("peer-"+key,true).commit()
+        java.io.File(context.filesDir,"clipboard_text_queue_v1.bin").delete()
         set(service,"prefs",prefs);set(service,"engine",local);set(service,"library",library)
-        set(service,"trust",context.getSharedPreferences("share-pairs",Context.MODE_PRIVATE))
+        set(service,"trust",trust)
+        set(service,"textOutbox",ClipboardTextOutbox(context,codec))
         SyncRuntime.attach(service)
         try {
             val manager=context.getSystemService(ClipboardManager::class.java)
@@ -76,7 +83,16 @@ class SyncCaptureTest {
             manager.setPrimaryClip(ClipData.newPlainText("Other app","remote row"))
             SyncRuntime.observe(context,manager.primaryClip!!)
             actor.submit{}.get(3,TimeUnit.SECONDS)
-            assertEquals("external copy of identical text is a new event",2,frames.count{it.type==ClipboardSync.CLIP})
+            assertEquals("second copy must wait for first ACK",1,frames.count{it.type==ClipboardSync.CLIP})
+            val first=frames.single{it.type==ClipboardSync.CLIP}
+            val ack=ShareWire.Frame(ClipboardSync.ACK,first.id,ShareWire.digest(first.data))
+            actor.submit {
+                local.accept(key,ack,System.currentTimeMillis())
+                service.javaClass.getDeclaredMethod("drainTextQueue",UUID::class.java)
+                    .apply{isAccessible=true}.invoke(service,first.id)
+            }.get(3,TimeUnit.SECONDS)
+            assertEquals("external copy of identical text must be sent after ACK",2,
+                frames.count{it.type==ClipboardSync.CLIP})
         } finally {
             SyncRuntime.detach(service);set(service,"closing",true);actor.shutdownNow()
         }

@@ -29,7 +29,7 @@ sealed class FilePreviewThumbnailService:IDisposable
     readonly LinkedList<string> lru=new();
     long memoryBytes;
     bool disposed;
-    const long MemoryBudget=24L*1024*1024;
+    const long MemoryBudget=16L*1024*1024;
 
     public FilePreviewThumbnailService(string preferencesRoot)
     {

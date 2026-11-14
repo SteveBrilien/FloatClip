@@ -12,6 +12,8 @@ import android.os.Looper
 import android.text.InputFilter
 import android.text.TextUtils
 import android.view.Gravity
+import android.os.Build
+import android.view.WindowInsets
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -97,11 +99,10 @@ class ClipImageViewerView(
         topChrome.addView(action(R.drawable.ic_close, "关闭图片") {
             if (!cancelNoteEdit()) onCloseRequested()
         }, LayoutParams(dp(48), dp(48), Gravity.TOP or Gravity.END))
-        addView(topChrome, LayoutParams(-1, dp(52), Gravity.TOP).apply {
-            topMargin = dp(4)
-            marginStart = dp(8)
-            marginEnd = dp(8)
-        })
+        val topParams=LayoutParams(-1,dp(52),Gravity.TOP).apply {
+            topMargin=dp(4);marginStart=dp(8);marginEnd=dp(8)
+        }
+        addView(topChrome,topParams)
 
         noteLabel.apply {
             textSize = 14f
@@ -141,12 +142,24 @@ class ClipImageViewerView(
         actions.addView(View(context), LinearLayout.LayoutParams(0, 0, 1f))
         actions.addView(copyButton, LinearLayout.LayoutParams(dp(48), dp(48)))
         bottomChrome.addView(actions, LinearLayout.LayoutParams(-1, dp(50)))
-        addView(bottomChrome, LayoutParams(-1, -2, Gravity.BOTTOM).apply {
-            marginStart = dp(12)
-            marginEnd = dp(12)
-            val id = resources.getIdentifier("navigation_bar_height", "dimen", "android")
-            bottomMargin = (if (id != 0) resources.getDimensionPixelSize(id) else 0) + dp(8)
-        })
+        val bottomParams=LayoutParams(-1,-2,Gravity.BOTTOM).apply {
+            marginStart=dp(12);marginEnd=dp(12);bottomMargin=dp(8)
+        }
+        addView(bottomChrome,bottomParams)
+        // Chrome follows cutout/gesture safe areas; imageHost itself always fills the
+        // full viewer. A floating overlay is subject to OS bar-layer restrictions.
+        setOnApplyWindowInsetsListener { _, insets ->
+            if(Build.VERSION.SDK_INT>=30) {
+                val bars=insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+                val gestures=insets.getInsets(WindowInsets.Type.systemGestures())
+                topParams.topMargin=maxOf(dp(4),bars.top+dp(4))
+                bottomParams.bottomMargin=maxOf(dp(8),gestures.bottom+dp(4),bars.bottom+dp(4))
+                topChrome.layoutParams=topParams
+                bottomChrome.layoutParams=bottomParams
+            }
+            insets
+        }
+        requestApplyInsets()
         if (images.isNotEmpty()) show() else {
             imageHost.addView(TextView(context).apply {
                 text = "图片暂不可用"

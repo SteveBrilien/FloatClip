@@ -3,6 +3,7 @@ package com.floatclip.app.clipboard
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -150,6 +151,29 @@ object ClipboardImages {
         val clip = clipboard.primaryClip ?: return@runCatching false
         clip.itemCount > 0 && ClipboardImageProvider.reference(clip.getItemAt(0).uri, context.packageName) == entry.imageRef
     }.getOrDefault(false)
+
+    /** Share target is a user-selected app, not a clipboard paste receiver.
+     * A third-party editor may support image attachment without supporting paste. */
+    internal fun imageShareIntent(context:Context,entry:ClipEntry):Intent {
+        require(entry.kind=="image" && entry.imageRef.isNotBlank()) { "不是图片记录" }
+        require(entry.mimeType=="image/png" || entry.mimeType=="image/jpeg") { "图片格式暂不支持分享" }
+        val uri=ClipboardImageProvider.uri(context.packageName,entry.imageRef,entry.mimeType)
+        return Intent(Intent.ACTION_SEND).apply {
+            type=entry.mimeType
+            putExtra(Intent.EXTRA_STREAM,uri)
+            clipData=ClipData.newUri(context.contentResolver,"FloatClip 图片",uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    }
+    fun shareWithChooser(context:Context,store:ClipStore,entry:ClipEntry) {
+        runCatching {
+            // Verify the source is still present before opening an external share target.
+            store.readImage(entry)
+            val chooser=Intent.createChooser(imageShareIntent(context,entry),"分享图片到…")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            context.startActivity(chooser)
+        }.onFailure { android.widget.Toast.makeText(context,it.message?:"图片无法分享",android.widget.Toast.LENGTH_LONG).show() }
+    }
 
     private fun publishCopy(context:Context,entry:ClipEntry) {
         ClipboardWrites.writeImage(context,context.getSystemService(ClipboardManager::class.java),ClipboardImageProvider.uri(context.packageName,entry.imageRef,entry.mimeType))

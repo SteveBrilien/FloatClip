@@ -122,8 +122,15 @@ class ClipViewerActivity : Activity() {
 
     @Suppress("DEPRECATION")
     private fun setImageBars(editing: Boolean) {
-        window.decorView.systemUiVisibility = if (editing) 0 else
-            View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        // Keep the image laid out edge-to-edge even when swipe reveals system bars.
+        // Note editing uses the normal navigation bar so the keyboard can resize the view.
+        window.decorView.systemUiVisibility = if (editing) 0 else (
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        )
+        window.statusBarColor=Color.TRANSPARENT
+        window.navigationBarColor=Color.TRANSPARENT
     }
 
     @Deprecated("Android 11 back handling")

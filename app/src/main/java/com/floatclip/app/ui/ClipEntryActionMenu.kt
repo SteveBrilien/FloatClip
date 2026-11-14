@@ -22,7 +22,7 @@ import com.floatclip.app.prefs.CategoryStore
 
 /** Same compact, icon-led single-column action hierarchy as the floating clipboard. */
 object ClipEntryActionMenu {
-    enum class Action { OPEN, COPY, PIN, LOCK, CATEGORY, DELETE }
+    enum class Action { OPEN, COPY, SHARE, PIN, LOCK, CATEGORY, DELETE }
 
     fun show(anchor: View, entry: ClipEntry, categories: CategoryStore, onAction: (Action, String?) -> Unit): PopupWindow {
         val context=anchor.context
@@ -98,6 +98,7 @@ object ClipEntryActionMenu {
                     add(if(entry.kind=="image")"全屏查看图片" else "查看全文",
                         if(entry.kind=="image")R.drawable.ic_image else R.drawable.ic_document) {done(Action.OPEN)}
                     add(if(entry.kind=="image")"复制图片" else "复制",R.drawable.ic_copy_paste){done(Action.COPY)}
+                    if(entry.kind=="image") add("分享图片到…",R.drawable.ic_share){done(Action.SHARE)}
                     add(if(entry.pinned)"取消置顶" else "置顶",R.drawable.ic_pin){done(Action.PIN)}
                     add(if(entry.locked)"取消保护" else "保护",R.drawable.ic_lock){done(Action.LOCK)}
                     add("更改分类",R.drawable.ic_category){render(1)}

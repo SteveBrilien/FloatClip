@@ -13,7 +13,7 @@ import javax.net.ssl.HttpsURLConnection
 
 /** One authenticated public manifest for both native clients; no account or clipboard data is sent. */
 internal object ShareUpdates {
-    const val BUILD = 57
+    const val BUILD = 58
     const val VERSION = "0.7.9"
     const val FEED = "https://raw.githubusercontent.com/SteveBrilien/FloatClip/native-updates-v2/updates/native-updates-v2.json"
     const val FALLBACK_FEED = "https://cdn.jsdelivr.net/gh/SteveBrilien/FloatClip@native-updates-v2/updates/native-updates-v2.json"

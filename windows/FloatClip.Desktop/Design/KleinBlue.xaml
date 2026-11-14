@@ -1,0 +1,12 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <SolidColorBrush x:Key="FloatClip.Background" Color="#0F2254"/><SolidColorBrush x:Key="FloatClip.Surface" Color="#172F64"/>
+  <SolidColorBrush x:Key="FloatClip.TextPrimary" Color="#F2F7FF"/><SolidColorBrush x:Key="FloatClip.TextSecondary" Color="#B7CEF1"/>
+  <SolidColorBrush x:Key="FloatClip.Border" Color="#31538E"/><SolidColorBrush x:Key="FloatClip.Accent" Color="#A0CDFF"/><SolidColorBrush x:Key="FloatClip.OnAccent" Color="#0B2350"/>
+  <SolidColorBrush x:Key="FloatClip.AccentHover" Color="#B9DCFF"/><SolidColorBrush x:Key="FloatClip.AccentPressed" Color="#84B3ED"/><SolidColorBrush x:Key="FloatClip.OnFileIcon" Color="#FFFFFF"/>
+  <SolidColorBrush x:Key="FloatClip.Hover" Color="#274A84"/><SolidColorBrush x:Key="FloatClip.Pressed" Color="#375B98"/><SolidColorBrush x:Key="FloatClip.Selected" Color="#2C579B"/><SolidColorBrush x:Key="FloatClip.SelectedHover" Color="#3D67A4"/>
+  <SolidColorBrush x:Key="FloatClip.DisabledText" Color="#A4BCE3"/><SolidColorBrush x:Key="FloatClip.DisabledSurface" Color="#1E396D"/>
+  <SolidColorBrush x:Key="FloatClip.Danger" Color="#FFBDC9"/><SolidColorBrush x:Key="FloatClip.Success" Color="#8BDFC8"/>
+  <SolidColorBrush x:Key="FloatClip.Source.Windows" Color="#B3D1FF"/><SolidColorBrush x:Key="FloatClip.Source.Android" Color="#8BDFC8"/><SolidColorBrush x:Key="FloatClip.Source.Tablet" Color="#D6BCFA"/>
+  <SolidColorBrush x:Key="FloatClip.File.Pdf" Color="#C43E55"/><SolidColorBrush x:Key="FloatClip.File.Word" Color="#2863B9"/><SolidColorBrush x:Key="FloatClip.File.Excel" Color="#24754F"/><SolidColorBrush x:Key="FloatClip.File.Presentation" Color="#BC5538"/><SolidColorBrush x:Key="FloatClip.File.Image" Color="#7852AB"/><SolidColorBrush x:Key="FloatClip.File.Archive" Color="#906521"/><SolidColorBrush x:Key="FloatClip.File.Default" Color="#6784AF"/>
+  <SolidColorBrush x:Key="FloatClip.Category.Blue" Color="#B3D1FF"/><SolidColorBrush x:Key="FloatClip.Category.Teal" Color="#8BDFC8"/><SolidColorBrush x:Key="FloatClip.Category.Purple" Color="#D6BCFA"/><SolidColorBrush x:Key="FloatClip.Category.Orange" Color="#F0C691"/><SolidColorBrush x:Key="FloatClip.Category.Red" Color="#FFBDC9"/>
+<SolidColorBrush x:Key="FloatClip.DangerSurface" Color="#20FFB5C2"/><SolidColorBrush x:Key="FloatClip.DangerPressed" Color="#BE5A72"/></ResourceDictionary>

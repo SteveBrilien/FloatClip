@@ -23,8 +23,17 @@ class BorderDragFrameLayout(context: Context) : FrameLayout(context) {
 
     var interactionBlocked = false
     var dragEnabled = true
-    override fun dispatchTouchEvent(event: MotionEvent): Boolean =
-        if (interactionBlocked) true else super.dispatchTouchEvent(event)
+    /** A pinned overlay does not own touch outside its window. Receive ACTION_OUTSIDE only
+     * while a modal-in-panel menu is visible; never intercept the underlying app's click. */
+    var onOutsideTouch: (() -> Unit)? = null
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) {
+            val dismiss=onOutsideTouch
+            dismiss?.invoke()
+            return dismiss != null
+        }
+        return if (interactionBlocked) true else super.dispatchTouchEvent(event)
+    }
 
     var borderDragPx: Int = 0
     var topDragHeightPx: Int = 0

@@ -22,8 +22,8 @@ public static class DesignTheme
 {
     public static bool Apply(string mode)
     {
-        bool dark=mode is "dark" or "tokyo-night"||mode=="system"&&(int?)Registry.GetValue("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize","AppsUseLightTheme",1)==0;
-        var palette=new ResourceDictionary{Source=new Uri("pack://application:,,,/FloatClip;component/Design/"+(dark?"TokyoNight":"Light")+".xaml")};
+        bool dark=mode is "dark" or "tokyo-night" or "klein-blue"||mode=="system"&&(int?)Registry.GetValue("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize","AppsUseLightTheme",1)==0;
+        var palette=new ResourceDictionary{Source=new Uri("pack://application:,,,/FloatClip;component/Design/"+(mode=="klein-blue"?"KleinBlue":dark?"TokyoNight":"Light")+".xaml")};
         SolidColorBrush B(string name)=>(SolidColorBrush)palette["FloatClip."+name];
         DesktopFluent.Apply(dark,B("Background"),B("Surface"),B("TextPrimary"),B("TextSecondary"),B("Border"),B("Hover"),B("Accent"));
         var resources=Application.Current.Resources;foreach(object key in palette.Keys)resources[key]=palette[key];

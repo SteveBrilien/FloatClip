@@ -59,6 +59,9 @@ class ClipboardSyncService: Service() {
     private lateinit var engine: ClipboardSync
     private lateinit var library: ClipStore
     private lateinit var imageStorage: ClipboardImageSyncStorage
+    private lateinit var textOutbox: ClipboardTextOutbox
+    private val textQueue=ArrayDeque<ClipboardTextOutbox.Item>()
+    private var textOutboxHealthy=true
     private var pendingImage: ClipboardImageSyncStorage.Pending?=null
     private var imageStorageHealthy=true
     private val imageSending=ConcurrentHashMap<String,UUID>()
@@ -167,9 +170,14 @@ class ClipboardSyncService: Service() {
         SyncRuntime.attach(this)
         library=ClipStore(this)
         imageStorage=ClipboardImageSyncStorage(this)
+        textOutbox=ClipboardTextOutbox(this)
         networkManager=getSystemService(ConnectivityManager::class.java)
         actor.execute {
             runCatching {
+                runCatching {textQueue.addAll(textOutbox.load())}.onFailure {
+                    textOutboxHealthy=false
+                    setStatus("待同步文字队列无法读取，原文件已保留；暂停新的文字发送")
+                }
                 pendingImage=runCatching{imageStorage.load()}.getOrElse{
                     imageStorageHealthy=false
                     setStatus("图片同步状态暂时无法读取，文字共享仍可使用")
@@ -238,8 +246,9 @@ class ClipboardSyncService: Service() {
         if (!closing && !paused && prefs.enabled() && ::engine.isInitialized) runCatching {
             configureEngine()
             val now = System.currentTimeMillis()
+            drainTextQueue()
             val pending = engine.pendingPeers(now) + currentImagePeers(now)
-            pendingOutgoingCount = pending.size
+            pendingOutgoingCount = pending.size+textQueue.size
             if (!prefs.connectionsPaused()) {
                 pendingWork = pending.isNotEmpty()
                 for (key in links.keys) {
@@ -276,8 +285,24 @@ class ClipboardSyncService: Service() {
                     configureEngine();refreshBluetooth();val p=prefs.policy();val mayShare=!excluded&&!prefs.connectionsPaused()&&SyncPolicy.mayShare(p,shareGeneration)
                     if(!excluded&&recordHistory)library.addText(text)
                     clearPendingImage(abortInFlight=true)
-                    engine.copied(text,System.currentTimeMillis(),!mayShare)
-                    pendingOutgoingCount=engine.pendingPeers(System.currentTimeMillis()).size
+                    // The engine's legacy outbox stores only one frame. Queue individual
+                    // foreground/authorized-ADB captures before invoking it, one ACK at a time.
+                    // Never send old frames after consent changes or sensitive clipboard writes.
+                    if(!mayShare) {
+                        clearTextQueue()
+                        engine.copied("",System.currentTimeMillis(),true)
+                    } else {
+                        engine.invalidateApplications()
+                        if(textOutboxHealthy && textQueue.none{it.stamp==event}) {
+                            check(textQueue.size<ClipboardTextOutbox.MAX_ITEMS) {
+                                "发送队列已满；这条内容仍保留在本机剪贴板历史"
+                            }
+                            updateTextQueue(textQueue.toList()+ClipboardTextOutbox.Item(
+                                event,text,System.currentTimeMillis(),p.sendGeneration))
+                        }
+                        drainTextQueue()
+                    }
+                    pendingOutgoingCount=engine.pendingPeers(System.currentTimeMillis()).size+textQueue.size
                     lastCapture=event
                     if(!excluded&&recordHistory)historyChanged()
                     if(mayShare) { bluetooth?.nudge(); retrySoon() }
@@ -285,6 +310,49 @@ class ClipboardSyncService: Service() {
             }
         }
     }
+    private fun updateTextQueue(items:List<ClipboardTextOutbox.Item>) {
+        if(!textOutboxHealthy)return
+        // Commit the encrypted file before mutating in-memory journal state.
+        textOutbox.save(items)
+        textQueue.clear();textQueue.addAll(items)
+    }
+    private fun clearTextQueue() {
+        if(textOutboxHealthy && textQueue.isNotEmpty())updateTextQueue(emptyList())
+    }
+    private fun drainTextQueue(ackedId:UUID?=null) {
+        if(!textOutboxHealthy||closing||paused||prefs.connectionsPaused()||!prefs.enabled()||!prefs.sending())return
+        val policy=prefs.policy()
+        // The receiver's consent and identity must be fully negotiated before we
+        // allocate a new core event: otherwise a queued item might be acknowledged by nobody.
+        val readyPeers=engine.peerViews().any { it.enabled && it.receive && authorized(it.key) }
+        if(!readyPeers)return
+        for(i in 0..1) {
+            val head=textQueue.firstOrNull()?:return
+            if(head.sendGeneration!=policy.sendGeneration) {
+                clearTextQueue();return
+            }
+            if(engine.pendingPeers(System.currentTimeMillis()).isNotEmpty())return
+            if(head.dispatched) {
+                if(ackedId?.toString()==head.syncId) {
+                    // Retire only after the receiver(s) have committed history and
+                    // acknowledged the exact frame. Expiry must not look like an ACK.
+                    updateTextQueue(textQueue.drop(1))
+                    continue
+                }
+                // The existing core can expire its single pending entry after 5 min.
+                // The encrypted journal never drops unacknowledged content: retry
+                // that head as a fresh, idempotent-by-content event when eligible.
+                if(System.currentTimeMillis()-head.lastSentAt < ClipboardSync.RETRY_TTL)return
+            }
+            val now=System.currentTimeMillis()
+            val sent=engine.copied(head.text,now,false) ?: return
+            updateTextQueue(textQueue.toList().mapIndexed{index,item ->
+                if(index==0)item.copy(dispatched=true,syncId=sent.id.toString(),lastSentAt=now) else item
+            })
+            return
+        }
+    }
+
     fun copiedImage(entry:ClipEntry) {
         if(closing||paused||prefs.connectionsPaused()||!prefs.enabled()||!prefs.imageSharing()||entry.kind!="image"||entry.sourceDeviceId!="local")return
         actor.execute {
@@ -294,6 +362,7 @@ class ClipboardSyncService: Service() {
                 val policy=prefs.policy()
                 if(!policy.sending)return@runCatching
                 clearPendingImage(abortInFlight=true)
+                clearTextQueue() // image is the new head; stale text must not replay afterwards
                 // A local image is the newest clipboard event. Invalidate any older text outbox
                 // before transferring the image bytes, preserving latest-value ordering.
                 engine.copied("",System.currentTimeMillis(),true)
@@ -531,7 +600,10 @@ class ClipboardSyncService: Service() {
                 runCatching{configureEngine();engine.connected(peer);setStatus("${links.size} 台设备已连接 · 加密共享")}.onFailure{links.remove(peer)?.close();setStatus("设备授权状态未保存")}
             }}
             override fun sync(frame: ShareWire.Frame){if(!closing)actor.execute{if(!closing&&!paused&&prefs.enabled()&&!prefs.connectionsPaused()&&(frame.type!=ClipboardSync.CLIP||prefs.receiving())&&authorized(peer)&&connectionTokens[peer]==token)runCatching{
-                configureEngine();engine.accept(peer,frame,System.currentTimeMillis());pendingOutgoingCount=engine.pendingPeers(System.currentTimeMillis()).size
+                configureEngine();engine.accept(peer,frame,System.currentTimeMillis())
+                if(frame.type==ClipboardSync.ACK || frame.type==ClipboardSync.HELLO)
+                    drainTextQueue(if(frame.type==ClipboardSync.ACK)frame.id else null)
+                pendingOutgoingCount=engine.pendingPeers(System.currentTimeMillis()).size+textQueue.size
                 if(frame.type==ClipboardSync.HELLO) {
                     engine.peerViews().firstOrNull{it.key==peer}?.let{credentials.rememberDevice(peer,it.device)}
                     FileRuntime.get(this@ClipboardSyncService).publish()
@@ -610,6 +682,7 @@ class ClipboardSyncService: Service() {
     override fun dump(fd:java.io.FileDescriptor,writer:java.io.PrintWriter,args:Array<out String>?) {
         writer.println("FloatClip sync: enabled=${prefs.enabled()} connectedPeers=${links.size} pendingOutgoing=$pendingOutgoingCount")
         writer.println("File catalog: peers=${FileRuntime.get(this).connectedFilePeers()} local=${FileRuntime.get(this).snapshot().count{it.peer=="local"}} remote=${FileRuntime.get(this).snapshot().count{it.peer!="local"}}")
+        writer.println("Text outbox: queued=${textQueue.size} healthy=$textOutboxHealthy")
         writer.println("ADB capture: enabled=${prefs.backgroundCapture()} connected=${backgroundCaptureConnected}")
         writer.println("ADB capture frames=${backgroundCapture?.receivedFrames?:0} lastFrameAt=${backgroundCapture?.lastFrameAt?:0}")
     }

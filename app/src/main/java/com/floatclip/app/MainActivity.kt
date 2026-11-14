@@ -1544,6 +1544,8 @@ open class MainActivity : Activity() {
                             .onSuccess { Toast.makeText(this,"已复制",Toast.LENGTH_SHORT).show() }
                             .onFailure { Toast.makeText(this,it.message ?: "复制失败",Toast.LENGTH_LONG).show() }
                     }
+                    com.floatclip.app.ui.ClipEntryActionMenu.Action.SHARE ->
+                        if(entry.kind=="image")ClipboardImages.shareWithChooser(this,clipStore,entry)
                     com.floatclip.app.ui.ClipEntryActionMenu.Action.PIN -> {
                         clipStore.togglePinned(entry.id);refreshHistory();notifyOverlayAppearanceChanged()
                     }

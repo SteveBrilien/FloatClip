@@ -1212,9 +1212,10 @@ class ClipboardOverlayService : Service() {
         dismissEntryActionLayer(animated = false)
         panel.dragEnabled = false
         val palette = themeProvider.palette()
+        // The menu should not recolor the original clipboard cards under it.
         val layer = FrameLayout(this).apply {
             isClickable = true
-            setBackgroundColor(Color.argb(35, 0, 0, 0))
+            setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener { dismissEntryActionLayer() }
         }
         val sheet = LinearLayout(this).apply {
@@ -1232,7 +1233,7 @@ class ClipboardOverlayService : Service() {
                 label == "全屏查看图片" || label == "查看图片" -> R.drawable.ic_image
                 label == "查看全文" -> R.drawable.ic_document
                 label == "复制" || label == "复制图片" -> R.drawable.ic_copy_paste
-                label == "粘贴" -> R.drawable.ic_paste
+                label == "分享图片到…" -> R.drawable.ic_share
                 label.contains("置顶") -> R.drawable.ic_pin
                 label.contains("保护") -> R.drawable.ic_lock
                 label == "更改分类" -> R.drawable.ic_category
@@ -1298,9 +1299,9 @@ class ClipboardOverlayService : Service() {
                     .onFailure { Toast.makeText(this,it.message ?: "复制未完成",Toast.LENGTH_LONG).show() }
                 dismissEntryActionLayer()
             }
-            if (entry.kind=="text" && PasteAccessibilityService.isConnected()) row("粘贴") {
-                dismissEntryActionLayer(animated = false)
-                pasteEntry(entry)
+            if(entry.kind=="image") row("分享图片到…") {
+                dismissEntryActionLayer(animated=false)
+                ClipboardImages.shareWithChooser(this,store,entry)
             }
             row(if (entry.pinned) "取消置顶" else "置顶") {
                 store.togglePinned(entry.id)
@@ -1344,6 +1345,7 @@ class ClipboardOverlayService : Service() {
         })
         panel.addView(layer, FrameLayout.LayoutParams(-1, -1))
         entryActionLayer = layer
+        updateMenuOutsideWatch(true)
     }
 
     private fun openEntryViewer(entry:ClipEntry) {
@@ -1426,10 +1428,22 @@ class ClipboardOverlayService : Service() {
         if(panelOpen) renderEntries(false)
     }
 
+    /** Receive one outside tap even while the panel is pinned/nonfocusable.
+     * FLAG_NOT_TOUCH_MODAL ensures the tap still reaches the underlying app. */
+    private fun updateMenuOutsideWatch(visible:Boolean) {
+        val panel=panelView?:return
+        val params=panelParams?:return
+        panel.onOutsideTouch=if(visible) ({ dismissEntryActionLayer(animated=false) }) else null
+        val wanted=if(visible)params.flags or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+            else params.flags and WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH.inv()
+        if(wanted!=params.flags){params.flags=wanted;overlayWindows.update(panel,params)}
+    }
+
     private fun dismissEntryActionLayer(animated: Boolean = true) {
         val layer = entryActionLayer ?: return
         entryActionLayer = null
         panelView?.dragEnabled = true
+        updateMenuOutsideWatch(false)
         layer.animate().cancel()
         if (!animated) {
             (layer.parent as? ViewGroup)?.removeView(layer)

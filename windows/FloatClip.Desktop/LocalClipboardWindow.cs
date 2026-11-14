@@ -135,7 +135,9 @@ public sealed partial class LocalClipboardWindow:Window
             closeSwipe=null;
             list.Children.Clear();
             copyIndicators.Clear();
-            TrimThumbnailCache(3L*1024*1024,12);
+            // The preview thumbnails are persisted to disk; no bitmap needs to stay
+            // rooted in memory while the clipboard panel is closed or minimized.
+            TrimThumbnailCache(0,0);
         }
         IsVisibleChanged+=(_,_)=>UpdateHistoryPresentation();
         StateChanged+=(_,_)=>UpdateHistoryPresentation();
@@ -494,11 +496,30 @@ public sealed partial class LocalClipboardWindow:Window
         Dispatcher.BeginInvoke(new Action(()=>{backgroundReopenQueued=false;if((designPreferences.ClipboardBackground=="transparent")!=AllowsTransparency)Guard(()=>host.RecreatePopup(this));}));
     }
     public void OpenSettings()=>Navigate(typeof(SettingsPage));
+    private string MemorySnapshot() {
+        // On-demand only. Sampling does not trigger GC and never reads clipboard text.
+        using var process=System.Diagnostics.Process.GetCurrentProcess();
+        process.Refresh();
+        double MiB(long value)=>Math.Round(value/1048576d,1);
+        var heap=GC.GetGCMemoryInfo();
+        long cacheBytes;int cached;
+        lock(thumbnailLock){cacheBytes=thumbnailBytes;cached=thumbnails.Count;}
+        long managed=GC.GetTotalMemory(false);
+        return $"工作集：{MiB(process.WorkingSet64)} MiB\n"+
+            $"私有提交内存：{MiB(process.PrivateMemorySize64)} MiB\n"+
+            $"托管对象估算：{MiB(managed)} MiB；GC 堆：{MiB(heap.HeapSizeBytes)} MiB\n"+
+            $"剪贴板缩略图缓存：{MiB(cacheBytes)} MiB / {cached} 张\n"+
+            $"预览缓存上限：16 MiB；剪贴板缩略图缓存上限：8 MiB\n"+
+            $"窗口：{Application.Current.Windows.Count}；历史条目：{historySnapshot?.Count??0}\n\n"+
+            "工作集包含 WPF/DirectX、字体/Emoji、图像和运行时等原生内存，"+
+            "不能将私有提交减去托管堆直接视为某个组件的精确占用。";
+    }
+
     FrameworkElement BuildSettingsPage()
     {
         var panel=new StackPanel{Margin=(Thickness)Application.Current.FindResource("FloatClip.Padding.Page")};
         panel.Children.Add(new TextBlock{Text="设置",FontSize=DesignTokens.Number("Font.Title"),FontWeight=FontWeights.Medium,Margin=new(0,4,0,16)});
-        panel.Children.Add(MutedLabel("外观",new(0,0,0,8)));var modes=new ComboBox{ItemsSource=new[]{"跟随系统","浅色","深色"},SelectedIndex=mode=="light"?1:mode is "dark" or "tokyo-night"?2:0,MinWidth=132};StyleInput(modes);System.Windows.Automation.AutomationProperties.SetAutomationId(modes,"ThemeMode");modes.SelectionChanged+=(_,_)=>Guard(()=>{mode=modes.SelectedIndex switch{1=>"light",2=>"tokyo-night",_=>"system"};SavePreferences();ApplyPalette();BuildHeader();Refresh();});panel.Children.Add(SettingRow("应用主题","",modes));
+        panel.Children.Add(MutedLabel("外观",new(0,0,0,8)));var modes=new ComboBox{ItemsSource=new[]{"跟随系统","浅色","东京夜色","克莱因蓝"},SelectedIndex=mode=="light"?1:mode=="klein-blue"?3:mode is "dark" or "tokyo-night"?2:0,MinWidth=132};StyleInput(modes);System.Windows.Automation.AutomationProperties.SetAutomationId(modes,"ThemeMode");modes.SelectionChanged+=(_,_)=>Guard(()=>{mode=modes.SelectedIndex switch{1=>"light",2=>"tokyo-night",3=>"klein-blue",_=>"system"};SavePreferences();ApplyPalette();BuildHeader();Refresh();});panel.Children.Add(SettingRow("应用主题","",modes));
         void Option(string label,bool selected,Action<bool> change)=>panel.Children.Add(ToggleSetting(label,"",selected,change));
         Option("展开导航文字",expandedNavigation,v=>{expandedNavigation=v;UpdateNavigation();});
         Option("减少动画",designPreferences.ReduceMotion,v=>{designPreferences.ReduceMotion=v;designPreferences.Save(prefsRoot);});
@@ -534,6 +555,9 @@ public sealed partial class LocalClipboardWindow:Window
         }
         panel.Children.Add(SettingRow("剪贴板图片缓存",host.Storage.ImageCachePath,Button("更改…",()=>PickFolder("选择剪贴板图片缓存目录",host.Storage.ImageCachePath,host.SetImageCachePath))));
         panel.Children.Add(SettingRow("文件默认保存位置",host.Storage.DefaultSavePath,Button("更改…",()=>PickFolder("选择文件默认保存目录",host.Storage.DefaultSavePath,host.SetDefaultSavePath))));
+        panel.Children.Add(SettingRow("内存诊断","按需读取，不记录剪贴板内容",
+            Button("查看内存占用",()=>System.Windows.MessageBox.Show(this,MemorySnapshot(),"FloatClip · 内存诊断",
+                MessageBoxButton.OK,MessageBoxImage.Information))));
         var windowModes=new ComboBox{ItemsSource=new[]{"弹出模式","桌面驻留","始终置顶"},SelectedIndex=host.WindowMode=="desktop"?1:host.WindowMode=="pinned"?2:0,MinWidth=DesignTokens.Number("Setting.ControlWidth")};StyleInput(windowModes);
         windowModes.SelectionChanged+=(_,_)=>Guard(()=>host.SetWindowMode(windowModes.SelectedIndex switch{1=>"desktop",2=>"pinned",_=>"popup"}));
         panel.Children.Add(SettingRow("窗口驻留方式","桌面驻留可被其他窗口遮挡，但不会因快捷键再次触发而自动收起",windowModes));

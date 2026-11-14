@@ -285,6 +285,19 @@ static class Program
                 Check(Field<string>(reloaded,"mode")=="tokyo-night"&&((SolidColorBrush)reloaded.Background).Color==((SolidColorBrush)window.Background).Color,"Tokyo Night restored from disk when a new window opens");
                 reloadedHost.Dispose();reloaded.Close();
             }
+            themePicker.SelectedIndex=3;Pump();
+            Check(File.ReadAllText(Path.Combine(dataRoot,"theme.txt"))=="klein-blue"&&Field<bool>(window,"dark"),"Klein Blue persists as a distinct dark theme");
+            Check(((SolidColorBrush)window.Background).Color==Color.FromRgb(15,34,84)&&
+                  ((SolidColorBrush)app.Resources["FloatClip.Surface"]).Color==Color.FromRgb(23,47,100),
+                  "Klein Blue matches the Android background and card palette");
+            Check(((SolidColorBrush)app.Resources["FloatClip.Accent"]).Color==Color.FromRgb(160,205,255),
+                  "Klein Blue keeps an accessible accent separate from its background");
+            foreach(var child in window.OwnedWindows.Cast<Window>())
+                Check(((SolidColorBrush)child.Background).Color==((SolidColorBrush)window.Background).Color,"open child follows Klein Blue: "+child.Title);
+            var diagnostic=(string)Call(window,"MemorySnapshot")!;
+            Check(diagnostic.Contains("工作集")&&diagnostic.Contains("托管对象")&&diagnostic.Contains("缩略图缓存"),
+                "on-demand memory breakdown reports managed and image cache without clipboard contents");
+            Snapshot(window,"clipboard-klein-blue");
             Call(window,"ClearUnprotectedHistory");Check(vault.Load()["entries"]!.AsArray().Count==2,"clear keeps pinned and locked only");
             var undo=Field<Border>(window,"undo");Check(undo.Visibility==Visibility.Collapsed&&Field<System.Collections.Generic.List<JsonObject>?>(window,"deleted")==null,"bulk clear has no undo action or retained deleted snapshot");
             Call(window,"ClearUnprotectedHistory");Check(undo.Visibility==Visibility.Collapsed&&vault.Load()["entries"]!.AsArray().Count==2,"repeated empty clear keeps protected records without stale undo");vault.AddImage(png,2,2);Call(window,"Refresh",true);

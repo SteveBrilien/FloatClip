@@ -24,7 +24,7 @@ public sealed partial class LocalClipboardWindow
     readonly System.Threading.SemaphoreSlim thumbnailWorkers=new(2);
     readonly object thumbnailLock=new();
     long thumbnailBytes;
-    const long ThumbnailMemoryBudget=12L*1024*1024;
+    const long ThumbnailMemoryBudget=8L*1024*1024;
 
     bool TryThumbnail(string key,out System.Windows.Media.Imaging.BitmapSource? bitmap)
     {

@@ -151,7 +151,11 @@ class FileRepository(private val context:Context):AutoCloseable {
                 return result
             }
         }
-        return downloadConnected(row)
+        // Catalog refresh replaces the canonical SharedFile. UI rows may still
+        // carry the former offline flag even when the same file is online again.
+        // Use the current version-matched row for the final permission check.
+        val current=synchronized(lock){rows[row.key]?.takeIf{it.version==row.version}}?:row
+        return downloadConnected(current)
     }
     private fun downloadConnected(row:SharedFile):CompletableFuture<File>{val link:Link;val pending=Pending(row)
         synchronized(lock){link=links[row.peer]?:return failure("来源设备连接已结束，请重试");if(!link.allowed()||!row.online)return failure("设备共享已暂停或文件已撤回");if(link.pending!=null)return failure("请等待该设备当前下载完成");link.pending=pending;row.done=0;row.error=""}

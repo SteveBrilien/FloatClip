@@ -62,4 +62,17 @@ class FloatDialogThemeTest {
             controller.pause().stop().destroy()
         }
     }
+    @Test fun longUpdateBodyIsScrollableWhileActionsRemainOutsideScroller() {
+        val activity=Robolectric.buildActivity(Activity::class.java).setup().get()
+        val handle=FloatDialog.show(activity,"发现更新","更新说明 ".repeat(300),negative="关闭",positive="下载并安装",scrollBody=true)
+        val descendants=(0 until handle.body.childCount).map{handle.body.getChildAt(it)}
+        assertTrue(descendants.any{it is android.widget.ScrollView})
+        val scroller=descendants.filterIsInstance<android.widget.ScrollView>().single()
+        assertNotNull(handle.message)
+        assertTrue(handle.message!!.parent.parent===scroller)
+        assertNotNull(handle.primary)
+        assertFalse(handle.primary!!.parent===scroller)
+        handle.dialog.dismiss()
+    }
+
 }

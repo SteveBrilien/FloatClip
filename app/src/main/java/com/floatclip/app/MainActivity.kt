@@ -1630,7 +1630,7 @@ open class MainActivity : Activity() {
             versionName()+" · build "+build,
             custom=progress,negative="取消",positive="下载并安装",
             onNegative={ updateCheck?.cancel() },onCancel={ updateCheck?.cancel() },
-            positiveInitiallyVisible=false)
+            positiveInitiallyVisible=false,scrollBody=true)
     }
 
     private fun showUpdateResult(title: String, message: String, actionLabel: String? = null, action: (() -> Unit)? = null) {
@@ -1639,6 +1639,7 @@ open class MainActivity : Activity() {
         val current = updateDialog?.takeIf { progress != null && it.dialog.isShowing }
         if (current == null) {
             updateDialog = FloatDialog.show(this, title, message, negative = "关闭", positive = actionLabel,
+                scrollBody = true,
                 onPositive = action?.let { callback -> { handle -> handle.dialog.dismiss(); callback(); true } })
             return
         }

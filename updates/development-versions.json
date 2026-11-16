@@ -3,8 +3,8 @@
   "platforms": {
     "android": {
       "version": "0.7.9",
-      "build": 58,
-      "review": "docs/ANDROID_BUILD49_RECOVERY.md"
+      "build": 59,
+      "review": "docs/qa/2026-11-17-build59-ui.md"
     },
     "windows": {
       "version": "0.7.9",

@@ -88,6 +88,19 @@ class FileShelfTest {
             }finally{session.close()}
         }
     }
+    @Test fun fileShelfUsesTypeSpecificGlyphs() {
+        assertEquals(R.drawable.ic_image,com.floatclip.app.ui.FileUi.fileGlyph("photo.jpeg"))
+        assertEquals(R.drawable.ic_file_pdf,com.floatclip.app.ui.FileUi.fileGlyph("paper.PDF"))
+        assertEquals(R.drawable.ic_file_video,com.floatclip.app.ui.FileUi.fileGlyph("demo.mp4"))
+        assertEquals(R.drawable.ic_file_audio,com.floatclip.app.ui.FileUi.fileGlyph("voice.flac"))
+        assertEquals(R.drawable.ic_file_archive,com.floatclip.app.ui.FileUi.fileGlyph("backup.7z"))
+        assertEquals(R.drawable.ic_file_sheet,com.floatclip.app.ui.FileUi.fileGlyph("data.xlsx"))
+        assertEquals(R.drawable.ic_file_presentation,com.floatclip.app.ui.FileUi.fileGlyph("slides.pptx"))
+        assertEquals(R.drawable.ic_code,com.floatclip.app.ui.FileUi.fileGlyph("Main.kt"))
+        assertEquals(R.drawable.ic_file_app,com.floatclip.app.ui.FileUi.fileGlyph("release.apk"))
+        assertEquals(R.drawable.ic_document,com.floatclip.app.ui.FileUi.fileGlyph("unknown.bin"))
+    }
+
     @Test fun nativeCardUsesTwelveDpCornersAndCentersItsIcons(){
         val controller=Robolectric.buildActivity(FileActivity::class.java).create().start().resume();val activity=controller.get();val density=activity.resources.displayMetrics.density
         try{val file=SharedFile("test","1".repeat(32),"a".repeat(64),"会议纪要与下一步安排.docx",62000,0,0,1,online=true);val method=FileActivity::class.java.getDeclaredMethod("card",SharedFile::class.java).apply{isAccessible=true};val view=method.invoke(activity,file) as ViewGroup

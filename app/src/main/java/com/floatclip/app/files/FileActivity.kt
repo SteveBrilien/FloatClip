@@ -187,7 +187,7 @@ class FileActivity:Activity(),SyncRuntime.Observer {
             file.online -> "可下载"
             else -> "来源离线"
         }
-        val glyph=if(SharedFileProvider.mime(file.name).startsWith("image/"))R.drawable.ic_image else R.drawable.ic_document
+        val glyph=FileUi.fileGlyph(file.name)
         val front=row().apply {
             background=shape(if(checked)tint else card,if(checked)accent else line)
             minimumHeight=dp(80)

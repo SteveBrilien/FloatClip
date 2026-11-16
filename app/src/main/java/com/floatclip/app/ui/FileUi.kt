@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
+import com.floatclip.app.R
 import com.floatclip.app.prefs.OverlayPreferences
 
 /** Shared file surfaces and action states. Dimensions are dp, text remains sp. */
@@ -30,6 +31,22 @@ object FileUi {
         setColor(fill);cornerRadius=radius*density;setStroke(density.toInt().coerceAtLeast(1),border)
     }
     fun action(context:Context,p:Palette,filled:Boolean=false)=RippleDrawable(ColorStateList.valueOf(p.selected),shape(context,if(filled)p.selected else Color.TRANSPARENT,radius=CONTROL_RADIUS),shape(context,Color.WHITE,radius=CONTROL_RADIUS))
+    fun fileGlyph(name:String):Int {
+        val ext=name.substringAfterLast('.', "").lowercase()
+        return when(ext) {
+            "jpg","jpeg","png","gif","webp","bmp","heic","heif","avif","svg" -> R.drawable.ic_image
+            "mp4","mkv","mov","avi","webm","m4v","3gp","ts","mpeg","mpg" -> R.drawable.ic_file_video
+            "mp3","wav","flac","aac","m4a","ogg","opus","amr","wma" -> R.drawable.ic_file_audio
+            "pdf" -> R.drawable.ic_file_pdf
+            "zip","rar","7z","tar","gz","tgz","bz2","xz","zst" -> R.drawable.ic_file_archive
+            "xls","xlsx","xlsm","ods","csv","tsv" -> R.drawable.ic_file_sheet
+            "ppt","pptx","pps","ppsx","odp","key" -> R.drawable.ic_file_presentation
+            "txt","rtf","log","ini","cfg","conf" -> R.drawable.ic_file_text
+            "kt","kts","java","c","cc","cpp","h","hpp","py","js","jsx","ts","tsx","html","htm","css","scss","xml","json","yaml","yml","toml","sh","ps1","sql","md" -> R.drawable.ic_code
+            "apk","aab","apks","exe","msi","dmg","pkg","deb","rpm" -> R.drawable.ic_file_app
+            else -> R.drawable.ic_document
+        }
+    }
     fun size(bytes:Long):String=when {
         bytes==0L->"0 KB";bytes<1024->"< 1 KB"
         bytes<1024L*1024->"%.1f KB".format(bytes/1024.0)

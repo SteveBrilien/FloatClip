@@ -23,6 +23,13 @@ import com.floatclip.probe.FloatClipAccent
 
 /** FloatClip-owned modal surface. Avoids OEM AlertDialog geometry/colors on Android 11. */
 object FloatDialog {
+    private class BoundedScrollView(context:Context,private val maxHeightPx:Int):ScrollView(context) {
+        override fun onMeasure(widthMeasureSpec:Int,heightMeasureSpec:Int) {
+            val bounded=View.MeasureSpec.makeMeasureSpec(maxHeightPx,View.MeasureSpec.AT_MOST)
+            super.onMeasure(widthMeasureSpec,bounded)
+        }
+    }
+
     data class Handle(
         val dialog: Dialog,
         val primary: TextView?,
@@ -85,6 +92,7 @@ object FloatDialog {
         onNegative:(()->Unit)?=null,
         onCancel:(()->Unit)?=null,
         positiveInitiallyVisible: Boolean = true,
+        scrollBody:Boolean = false,
         onPositive:((Handle)->Boolean)?=null,
     ):Handle {
         val p=palette(context)
@@ -105,13 +113,31 @@ object FloatDialog {
             includeFontPadding=false
         }
         shell.addView(titleView, LinearLayout.LayoutParams(-1, -2))
+        val body=LinearLayout(context).apply { orientation=LinearLayout.VERTICAL }
         val messageView = message?.takeUnless { it.isBlank() }?.let { value ->
             TextView(context).apply {
                 text=value;textSize=13f;setTextColor(p.muted);includeFontPadding=false
                 setLineSpacing(dp(3).toFloat(),1.08f);setPadding(0,dp(12),0,0)
-            }.also { shell.addView(it, LinearLayout.LayoutParams(-1, -2)) }
+            }.also { body.addView(it, LinearLayout.LayoutParams(-1, -2)) }
         }
-        if(custom!=null) shell.addView(custom,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(16) })
+        if(custom!=null) body.addView(custom,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(16) })
+        if(body.childCount>0) {
+            if(scrollBody) {
+                val maxBody=(context.resources.displayMetrics.heightPixels-dp(220)).coerceAtLeast(dp(120))
+                shell.addView(BoundedScrollView(context,maxBody).apply {
+                    isFillViewport=false
+                    isVerticalScrollBarEnabled=true
+                    overScrollMode=View.OVER_SCROLL_IF_CONTENT_SCROLLS
+                    addView(body,ViewGroup.LayoutParams(-1,-2))
+                },LinearLayout.LayoutParams(-1,-2))
+            } else {
+                while(body.childCount>0) {
+                    val child=body.getChildAt(0)
+                    body.removeViewAt(0)
+                    shell.addView(child,child.layoutParams)
+                }
+            }
+        }
 
         val actions=LinearLayout(context).apply {
             orientation=LinearLayout.HORIZONTAL;gravity=Gravity.END;setPadding(0,dp(16),0,0)

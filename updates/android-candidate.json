@@ -1,11 +1,11 @@
 {
   "version": "0.7.9",
-  "build": 57,
-  "sourceCommit": "0cd693c13096e38e6d1755429166701cd96e98c8",
+  "build": 59,
+  "sourceCommit": "268525a1d6da74f1cb18f5183aec1fe480620fbb",
   "android": {
-    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-19886cb0ce3b428e81511f6a5bce5360/FloatClip-Android-0.7.9-build57.apk?exp=0&sig=5b49268899461fc2bd396a204c2375d58b55ba130a72279b350407caeb6abecc",
-    "sha256": "4392579916848479a5ef3846171ed85bd71e8713d65c39ed10bdda5c25025510",
-    "bytes": 4414906
+    "url": "https://mcp.wmy-cloud.cn/artifacts/pub-1a58c98cdf774eb59f0b09c0b00cc135/FloatClip-Android-0.7.9-build59.apk?exp=0&sig=de3dac7c513785efd7fafa6f07279975beb06eb8de4ccea911b852922f700f47",
+    "sha256": "10dc2df8ee8a23cf7b9979545642486731237cb6ca6d097eb6c0cc91bfd91d2d",
+    "bytes": 4267946
   },
-  "notes": "FloatClip Android 0.7.9 build57 · 2026-11-14 验收候选版\n\n应用内长按菜单与悬浮剪贴板统一单列 Fluent 图标布局及删除二次确认；应用内全文查看改为共用悬浮全文查看器，同步支持长文本滚动、选择、左右翻词条及分类切换；底部操作栏改用同样的 48dp 图标槽位，复制按钮加入缩小/涟漪/触觉反馈、已复制文字和绿色状态提示。\n\n更新：Orange Pi 已生成 RSA-3072 私钥，新版本内置 v3 公钥且保留 v2 公钥。v3 清单须在 APK 上线后另行签发并放至独立公开更新源；旧版不会自动信任新密钥，首次需手动覆盖安装。原 Android APK 包名与安装签名证书保持不变。\n\n修复断线恢复时下载任务读取过时文件目录条目导致误报共享暂停。\n\n验证：137 项 Android 单元测试通过，JWS v3 实际签名、旧公钥拒绝、篡改拒绝测试通过。本机和 Windows remote 暂不可用，尚未真机验收。请升级前导出迁移备份，勿卸载或直接降级。"
+  "notes": "FloatClip Android 0.7.9 build59 · 2026-11-17 验收候选版\n\n修复更新页在发布说明较长时无法下滑到“下载并安装”按钮的问题：标题与底部操作栏保持固定，更新说明独立滚动，小屏 Android 11 设备也能始终访问关闭和安装操作。\n\n文件页不再把所有非图片文件显示成同一个通用文档图标；新增并按扩展名区分 PDF、视频、音频、压缩包、表格、演示文稿、文本、代码、安装包/应用以及通用文档等 Fluent 风格图标，未知类型仍安全回退为通用文档。\n\n验证：145 项 Android 单元测试通过，0 失败、0 错误；APK 包名 com.floatclip.probe、versionCode 59、versionName 0.7.9，安装签名 SHA-256 保持 0368593f82ab885737b99d78c939111a1ec8ea3d88e8a67b2c3c9a4bd90c3f2c，可覆盖当前同签名版本。手机 ADB 当前离线，因此 OriginOS 真机触摸/滚动手感仍需安装后验收。"
 }
